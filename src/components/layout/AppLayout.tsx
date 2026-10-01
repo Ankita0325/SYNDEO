@@ -25,6 +25,7 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
 
   const isLanding = currentPath === '/';
   const isAuth = currentPath === '/auth';
+  const isChat = currentPath === '/chat';
 
   const navItems: { path: RoutePath; label: string; icon: React.FC<{ className?: string }>; desc: string }[] = [
     { path: '/chat', label: 'AI Memory Chat', icon: Bot, desc: 'Zero-Knowledge Conversational Retrieval' },
@@ -56,7 +57,11 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
   };
 
   return (
-    <div className="min-h-screen bg-white dark:bg-black text-[#09090b] dark:text-[#f4f4f6] flex flex-col selection:bg-[#5a25eb]/40 selection:text-[#cbbeff] transition-colors duration-200 overflow-x-hidden">
+    <div
+      className={`bg-white dark:bg-black text-[#09090b] dark:text-[#f4f4f6] flex flex-col selection:bg-[#5a25eb]/40 selection:text-[#cbbeff] transition-colors duration-200 ${
+        isChat ? 'h-screen h-[100dvh] overflow-hidden' : 'min-h-screen overflow-x-hidden'
+      }`}
+    >
       {/* 1. STANDALONE AUTH MODE: Zero headers, zero footers */}
       {isAuth ? (
         <main className="flex-1 flex flex-col min-h-screen">{children}</main>
@@ -156,7 +161,7 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
         </>
       ) : (
         /* 3. APP / WORKSPACE MODE: Clean top bar with right-side hamburger menu (No bottom navbar) */
-        <div className="flex-1 flex flex-col min-h-screen relative">
+        <div className={`flex-1 flex flex-col relative min-h-0 ${isChat ? 'h-full overflow-hidden' : 'min-h-screen'}`}>
           {/* Top Workspace Header */}
           <header className="sticky top-0 z-40 bg-white/90 dark:bg-black/90 backdrop-blur-xl border-b border-zinc-200 dark:border-[#1c1c28] px-3.5 sm:px-6 lg:px-8 py-2.5 flex items-center justify-between transition-all">
             {/* Left: Logo & Current Section */}

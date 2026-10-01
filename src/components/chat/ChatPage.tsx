@@ -75,18 +75,20 @@ export const ChatPage: React.FC = () => {
     return () => clearInterval(interval);
   }, [isTyping, isStreaming, thinkingSteps.length]);
 
-  const scrollToBottom = () => {
-    if (messagesContainerRef.current) {
+  const scrollToBottom = (instant = false) => {
+    if (messagesContainerRef.current && messages.length > 0) {
       messagesContainerRef.current.scrollTo({
         top: messagesContainerRef.current.scrollHeight,
-        behavior: 'smooth',
+        behavior: instant ? 'auto' : 'smooth',
       });
     }
   };
 
   useEffect(() => {
-    scrollToBottom();
-  }, [messages, isTyping, streamingText, thinkingStepIndex]);
+    if (messages.length > 0 || isStreaming) {
+      scrollToBottom();
+    }
+  }, [messages.length, isTyping, isStreaming]);
 
   useEffect(() => {
     return () => {
