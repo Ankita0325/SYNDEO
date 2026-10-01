@@ -491,17 +491,17 @@ export const ChatPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-[calc(100dvh-3.5rem)] md:h-[calc(100vh-3.5rem)] flex flex-col bg-zinc-50 dark:bg-[#000000] text-zinc-900 dark:text-[#f4f4f6] transition-colors duration-200">
-      <div className="max-w-3xl w-full mx-auto flex-1 flex flex-col h-full px-3 sm:px-6">
+    <div className="h-full flex-1 flex flex-col min-h-0 bg-zinc-50 dark:bg-[#000000] text-zinc-900 dark:text-[#f4f4f6] transition-colors duration-200 overflow-hidden">
+      <div className="max-w-3xl w-full mx-auto flex-1 flex flex-col h-full min-h-0 px-2.5 sm:px-6">
         
-        {/* Minimal Header */}
-        <div className="py-2.5 px-3.5 my-1.5 rounded-2xl bg-white/85 dark:bg-[#0a0a10]/85 backdrop-blur-md border border-zinc-200/80 dark:border-[#1c1c28] flex items-center justify-between shadow-2xs shrink-0">
-          <div className="flex items-center gap-2.5">
+        {/* Minimal ChatGPT-Style Header */}
+        <div className="py-2 px-3 my-1 rounded-2xl bg-white/80 dark:bg-[#0a0a10]/80 backdrop-blur-md border border-zinc-200/80 dark:border-[#1c1c28] flex items-center justify-between shadow-2xs shrink-0">
+          <div className="flex items-center gap-2">
             <div className="relative flex items-center justify-center">
-              <div className="w-8 h-8 rounded-full bg-[#5a25eb]/10 dark:bg-[#5a25eb]/20 border border-[#5a25eb]/30 flex items-center justify-center shadow-xs overflow-hidden">
-                <AILoaderOrb state={currentOrbState} variant="avatar" size={24} />
+              <div className="w-7 h-7 rounded-full bg-[#5a25eb]/10 dark:bg-[#5a25eb]/20 border border-[#5a25eb]/30 flex items-center justify-center shadow-xs overflow-hidden">
+                <AILoaderOrb state={currentOrbState} variant="avatar" size={20} />
               </div>
-              <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-black" />
+              <span className="absolute -bottom-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-black" />
             </div>
 
             <div>
@@ -513,18 +513,14 @@ export const ChatPage: React.FC = () => {
                   Vault
                 </span>
               </div>
-              <p className="text-[10px] text-zinc-400 dark:text-[#71717a] hidden sm:block">
-                Zero-Knowledge Personal Records
-              </p>
             </div>
           </div>
 
           {/* Right Actions */}
           <div className="flex items-center gap-1.5">
-
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-zinc-100 dark:bg-[#12121a] border border-zinc-200 dark:border-[#222230] text-[10px] text-zinc-600 dark:text-[#a1a1aa]">
-              <span className="w-2 h-2 rounded-full bg-[#5a25eb] dark:bg-[#cbbeff] animate-pulse" />
-              <span className="capitalize font-mono font-bold">
+            <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-[#12121a] border border-zinc-200 dark:border-[#222230] text-[10px] text-zinc-600 dark:text-[#a1a1aa]">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#5a25eb] dark:bg-[#cbbeff] animate-pulse" />
+              <span className="capitalize font-mono font-bold text-[10px]">
                 {currentOrbState}
               </span>
             </div>
@@ -532,7 +528,7 @@ export const ChatPage: React.FC = () => {
             {isSpeakingVoice && (
               <button
                 onClick={stopAudio}
-                className="p-1 rounded-lg text-red-500 hover:bg-red-500/10 transition-colors cursor-pointer"
+                className="p-1.5 rounded-lg text-red-500 hover:bg-red-500/10 transition-colors cursor-pointer"
                 title="Stop Audio"
               >
                 <VolumeX className="w-3.5 h-3.5" />
@@ -541,7 +537,7 @@ export const ChatPage: React.FC = () => {
 
             <button
               onClick={handleResetChat}
-              className="p-1 rounded-lg text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors cursor-pointer"
+              className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors cursor-pointer"
               title="Reset Chat"
             >
               <RotateCcw className="w-3.5 h-3.5" />
@@ -549,8 +545,8 @@ export const ChatPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Messages Stream */}
-        <div ref={messagesContainerRef} className="flex-1 overflow-y-auto px-1 sm:px-2 py-2 space-y-3.5 scrollbar-thin flex flex-col justify-start">
+        {/* Messages Stream (ChatGPT Layout) */}
+        <div ref={messagesContainerRef} className="flex-1 min-h-0 overflow-y-auto px-1 sm:px-2 py-2.5 space-y-3.5 scrollbar-thin flex flex-col justify-start">
           {/* Minimal Welcome Hero */}
           {messages.length === 0 && (
             <motion.div
@@ -562,7 +558,7 @@ export const ChatPage: React.FC = () => {
                 <AILoaderOrb
                   state={currentOrbState}
                   text={currentOrbText}
-                  size={160}
+                  size={150}
                   variant="hero"
                 />
               </div>
@@ -728,10 +724,10 @@ export const ChatPage: React.FC = () => {
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Bottom Minimal Input Bar */}
-        <div className="pt-2 pb-24 md:pb-3 bg-transparent shrink-0 space-y-2">
+        {/* Bottom ChatGPT-Style Input Bar (No excess padding on mobile) */}
+        <div className="pt-1.5 pb-2 sm:pb-3 bg-transparent shrink-0 space-y-1.5">
           {/* Scrollable Mode Chips */}
-          <div className="flex items-center justify-between gap-2 px-1">
+          <div className="flex items-center justify-between gap-2 px-0.5">
             <div className="flex items-center gap-1 p-0.5 rounded-full bg-zinc-100 dark:bg-[#12121c] border border-zinc-200 dark:border-[#222230] overflow-x-auto scrollbar-none max-w-full shrink-0">
               <button
                 type="button"
@@ -779,7 +775,7 @@ export const ChatPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Input Box */}
+          {/* ChatGPT-Style Capsule Input Box */}
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -825,6 +821,10 @@ export const ChatPage: React.FC = () => {
               <ArrowUp className="w-3.5 h-3.5 stroke-[2.5]" />
             </button>
           </form>
+
+          <p className="text-[10px] text-center text-zinc-400 dark:text-zinc-600">
+            SYNDEO AI • Zero-knowledge cryptographic personal records
+          </p>
         </div>
 
       </div>

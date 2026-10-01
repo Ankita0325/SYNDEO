@@ -259,7 +259,7 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
           </header>
 
           {/* Main Workspace Body */}
-          <main className="flex-1 flex flex-col">{children}</main>
+          <main className="flex-1 flex flex-col min-h-0 overflow-hidden">{children}</main>
         </div>
       )}
 
