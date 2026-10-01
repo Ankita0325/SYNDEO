@@ -604,8 +604,8 @@ export const ChatPage: React.FC = () => {
     <div className="h-full flex-1 flex flex-col min-h-0 bg-zinc-50 dark:bg-[#000000] text-zinc-900 dark:text-[#f4f4f6] transition-colors duration-200 overflow-hidden">
       <div className="max-w-3xl w-full mx-auto flex-1 flex flex-col h-full min-h-0 px-2.5 sm:px-6">
         
-        {/* Minimal ChatGPT-Style Header */}
-        <div className="py-2 px-3 my-1 rounded-2xl bg-white/80 dark:bg-[#0a0a10]/80 backdrop-blur-md border border-zinc-200/80 dark:border-[#1c1c28] flex items-center justify-between shadow-2xs shrink-0">
+        {/* Minimal Subheader (Desktop only - mobile uses clean single topbar) */}
+        <div className="hidden sm:flex py-2 px-3 my-1 rounded-2xl bg-white/80 dark:bg-[#0a0a10]/80 backdrop-blur-md border border-zinc-200/80 dark:border-[#1c1c28] items-center justify-between shadow-2xs shrink-0">
           <div className="flex items-center gap-2">
             <div className="relative flex items-center justify-center">
               <div className="w-7 h-7 rounded-full bg-[#5a25eb]/10 dark:bg-[#5a25eb]/20 border border-[#5a25eb]/30 flex items-center justify-center shadow-xs overflow-hidden">
