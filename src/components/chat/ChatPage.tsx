@@ -19,6 +19,9 @@ import {
   ArrowUp,
   ShieldCheck,
   Sparkles,
+  GraduationCap,
+  Globe,
+  ExternalLink,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -294,11 +297,37 @@ export const ChatPage: React.FC = () => {
           sourceNote: 'Selective Disclosure Grant',
           evidenceDoc: 'Scope_Access_Envelope.json',
         };
-      } else if (lower.includes('college') || lower.includes('slrtce') || lower.includes('degree') || lower.includes('engineering') || lower.includes('university')) {
+      } else if (
+        lower.includes('social') ||
+        lower.includes('github') ||
+        lower.includes('linkedin') ||
+        lower.includes('discord') ||
+        lower.includes('link') ||
+        lower.includes('profile')
+      ) {
         botResponse = {
           id: `m-bot-${Date.now()}`,
           sender: 'assistant',
-          content: `You completed your **B.E. in Computer Science** from **SLRTCE** with a **8.45 / 10.0 CGPA** in 2024. Collaborated with **Divya** on your capstone project.`,
+          content: `Here are all your verified **Social & Developer Links**:\n\n- **GitHub**: https://github.com/indresh404/SYNDEO\n- **LinkedIn**: https://linkedin.com/in/indresh-suresh-093646399\n- **Discord**: **@indresh404** (SYNDEO Network)\n\nAll cryptographic signatures and repository links are verified on the network.`,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          sourceType: 'evidence-backed',
+          sourceNote: 'Cryptographic Developer Credentials & Social Identity',
+          evidenceDoc: 'Developer_Social_Proofs.json',
+        };
+      } else if (
+        lower.includes('education') ||
+        lower.includes('college') ||
+        lower.includes('slrtce') ||
+        lower.includes('degree') ||
+        lower.includes('engineering') ||
+        lower.includes('university') ||
+        lower.includes('cgpa') ||
+        lower.includes('study')
+      ) {
+        botResponse = {
+          id: `m-bot-${Date.now()}`,
+          sender: 'assistant',
+          content: `Your verified **Education Status**:\n\n- **Degree**: **B.E. in Computer Science & Engineering**\n- **Institution**: **SLRTCE (University of Mumbai)**\n- **CGPA**: **8.45 / 10.0** (First Class with Distinction)\n- **Batch**: **2020 – 2024**\n- **Capstone Collaborator**: **Divya**\n- **Evidence**: Verified by SLRTCE Academic Registry envelope.`,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           sourceType: 'evidence-backed',
           sourceNote: 'SLRTCE Degree Certificate & Transcript',
@@ -367,10 +396,18 @@ export const ChatPage: React.FC = () => {
   };
 
   const quickPrompts = [
-    { title: 'College Degree & CGPA', text: 'What is my college degree and SLRTCE CGPA?' },
-    { title: 'Job & Peer Verification', text: 'Show my Veritas role and Monish details' },
-    { title: 'Health & Proxy Contact', text: 'What is my blood group and Ankita contact?' },
-    { title: 'Credit Score & PAN Info', text: 'What is my credit score and PAN number?' },
+    {
+      title: "What's my education status?",
+      subtitle: 'SLRTCE B.E. Degree & CGPA',
+      text: "What's my education status?",
+      icon: GraduationCap,
+    },
+    {
+      title: 'Show all social links',
+      subtitle: 'GitHub, LinkedIn & Discord',
+      text: 'Show all my social links',
+      icon: Globe,
+    },
   ];
 
   const currentOrbState: OrbStateMode = isSpeakingVoice
@@ -428,9 +465,9 @@ export const ChatPage: React.FC = () => {
           const isBullet = trimmed.startsWith('- ') || trimmed.startsWith('• ');
           const rawText = isBullet ? trimmed.substring(2) : line;
 
-          // Parse inline **bold**, `code`, and *italic*
+          // Parse inline **bold**, `code`, *italic*, and https:// URLs
           const parts: React.ReactNode[] = [];
-          const regex = /(\*\*.*?\*\*|`.*?`|\*.*?\*)/g;
+          const regex = /(\*\*.*?\*\*|`.*?`|\*.*?\*|https?:\/\/[^\s]+)/g;
           let lastIndex = 0;
           let match;
 
@@ -467,6 +504,23 @@ export const ChatPage: React.FC = () => {
                 <em key={match.index} className="italic opacity-90">
                   {matchedStr.slice(1, -1)}
                 </em>
+              );
+            } else if (matchedStr.startsWith('http://') || matchedStr.startsWith('https://')) {
+              parts.push(
+                <a
+                  key={match.index}
+                  href={matchedStr}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={
+                    isUserMessage
+                      ? 'underline text-white font-semibold'
+                      : 'text-[#5a25eb] dark:text-[#cbbeff] underline hover:opacity-80 font-medium break-all inline-flex items-center gap-0.5'
+                  }
+                >
+                  <span>{matchedStr}</span>
+                  <ExternalLink className="w-2.5 h-2.5 inline opacity-70" />
+                </a>
               );
             }
 
@@ -570,22 +624,37 @@ export const ChatPage: React.FC = () => {
                   How can SYNDEO AI help, {userName}?
                 </h2>
                 <p className="text-xs text-zinc-500 dark:text-[#8c879a] max-w-sm mx-auto mt-1">
-                  Ask verified questions about your identity, SLRTCE degree, Veritas career, or healthcare records.
+                  Ask verified questions about your education, social & developer links, or personal records.
                 </p>
               </div>
 
-              {/* Minimal Quick Chips */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-w-md mx-auto pt-2">
-                {quickPrompts.map((p, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => handleSendMessage(p.text)}
-                    className="p-3 rounded-2xl bg-zinc-50 dark:bg-[#12121a] border border-zinc-200 dark:border-[#222230] hover:border-[#5a25eb] hover:bg-[#5a25eb]/5 text-left text-xs text-zinc-700 dark:text-zinc-300 hover:text-[#5a25eb] dark:hover:text-[#cbbeff] transition-all cursor-pointer flex items-center justify-between group"
-                  >
-                    <span className="font-medium truncate block">{p.title}</span>
-                    <Sparkles className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity text-[#5a25eb] shrink-0 ml-1" />
-                  </button>
-                ))}
+              {/* Minimal Quick Chips (2 Boxes Only) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-w-lg mx-auto pt-2">
+                {quickPrompts.map((p, idx) => {
+                  const Icon = p.icon;
+                  return (
+                    <button
+                      key={idx}
+                      onClick={() => handleSendMessage(p.text)}
+                      className="p-3.5 rounded-2xl bg-zinc-50/80 dark:bg-[#12121a]/90 border border-zinc-200 dark:border-[#222230] hover:border-[#5a25eb] hover:bg-[#5a25eb]/5 text-left text-xs transition-all cursor-pointer flex items-center justify-between group shadow-2xs"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                        <div className="w-8 h-8 rounded-xl bg-[#5a25eb]/10 dark:bg-[#5a25eb]/20 border border-[#5a25eb]/30 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                          <Icon className="w-4 h-4 text-[#5a25eb] dark:text-[#cbbeff]" />
+                        </div>
+                        <div className="min-w-0">
+                          <span className="font-semibold text-zinc-800 dark:text-zinc-200 group-hover:text-[#5a25eb] dark:group-hover:text-[#cbbeff] truncate block">
+                            {p.title}
+                          </span>
+                          <span className="text-[11px] text-zinc-400 dark:text-zinc-500 truncate block">
+                            {p.subtitle}
+                          </span>
+                        </div>
+                      </div>
+                      <Sparkles className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity text-[#5a25eb] shrink-0" />
+                    </button>
+                  );
+                })}
               </div>
             </motion.div>
           )}

@@ -50,6 +50,34 @@ export const initialRecords: RecordField[] = [
     lastUpdated: '20 Aug 2024',
     confidence: 'evidence-backed',
   },
+  {
+    id: 'id-6',
+    category: 'identity',
+    fieldName: 'GitHub Profile',
+    value: 'https://github.com/indresh404/SYNDEO',
+    source: 'Extracted from document',
+    evidenceDocName: 'GitHub_GPG_Key_Signature.asc',
+    lastUpdated: '01 Oct 2024',
+    confidence: 'evidence-backed',
+  },
+  {
+    id: 'id-7',
+    category: 'identity',
+    fieldName: 'LinkedIn Profile',
+    value: 'https://linkedin.com/in/indresh-suresh-093646399',
+    source: 'Confirmed by you',
+    lastUpdated: '01 Oct 2024',
+    confidence: 'evidence-backed',
+  },
+  {
+    id: 'id-8',
+    category: 'identity',
+    fieldName: 'Discord Handle',
+    value: '@indresh404',
+    source: 'Confirmed by you',
+    lastUpdated: '01 Oct 2024',
+    confidence: 'user-confirmed',
+  },
 
   // Education
   {
