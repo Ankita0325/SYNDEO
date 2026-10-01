@@ -1,0 +1,833 @@
+import React, { useState, useRef, useEffect } from 'react';
+import type { ChatMessage } from '../../types';
+import { AILoaderOrb, type OrbStateMode } from '../ui/ai-loader';
+import { ThinkingOrb, type OrbState } from '../ui/thinking-orbs';
+import { useNavigation } from '../../context/NavigationContext';
+import {
+  FileCheck,
+  UserCheck,
+  Mic,
+  MicOff,
+  Save,
+  Share2,
+  HelpCircle as QuestionIcon,
+  RotateCcw,
+  Volume2,
+  VolumeX,
+  Copy,
+  Check,
+  ArrowUp,
+  ShieldCheck,
+  Sparkles,
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+
+const NORMAL_THINKING_STEPS: Array<{ text: string; state: OrbState }> = [
+  { text: 'Thinking...', state: 'searching' },
+  { text: 'Searching memory graph...', state: 'connecting' },
+  { text: 'Consulting cryptographic vault...', state: 'solving' },
+  { text: 'Synthesizing timeline records...', state: 'weaving' },
+  { text: 'Composing verified response...', state: 'composing' },
+];
+
+const SAVE_THINKING_STEPS: Array<{ text: string; state: OrbState }> = [
+  { text: 'Memorizing...', state: 'working' },
+  { text: 'Encrypting record payload...', state: 'shaping' },
+  { text: 'Linking life-stage node...', state: 'connecting' },
+  { text: 'Securing zero-knowledge vault...', state: 'solving' },
+];
+
+type ChatMode = 'normal' | 'save' | 'share';
+type VoiceState = 'idle' | 'listening' | 'thinking' | 'speaking';
+
+export const ChatPage: React.FC = () => {
+  const { userName } = useNavigation();
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [inputText, setInputText] = useState<string>('');
+  const [isTyping, setIsTyping] = useState<boolean>(false);
+  const [chatMode, setChatMode] = useState<ChatMode>('normal');
+  const [orbState, setOrbState] = useState<OrbStateMode>('idle');
+  const [voiceState, setVoiceState] = useState<VoiceState>('idle');
+  const [isSpeakingVoice, setIsSpeakingVoice] = useState<boolean>(false);
+  const [streamingText, setStreamingText] = useState<string>('');
+  const [isStreaming, setIsStreaming] = useState<boolean>(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const recognitionRef = useRef<any>(null);
+  const streamIntervalRef = useRef<any>(null);
+  const timeoutsRef = useRef<any[]>([]);
+
+  const [thinkingStepIndex, setThinkingStepIndex] = useState<number>(0);
+
+  const thinkingSteps = chatMode === 'save' ? SAVE_THINKING_STEPS : NORMAL_THINKING_STEPS;
+  const currentThinkingStep = thinkingSteps[thinkingStepIndex % thinkingSteps.length];
+
+  useEffect(() => {
+    if (!isTyping || isStreaming) {
+      setThinkingStepIndex(0);
+      return;
+    }
+    const interval = setInterval(() => {
+      setThinkingStepIndex((prev) => (prev + 1) % thinkingSteps.length);
+    }, 1200);
+    return () => clearInterval(interval);
+  }, [isTyping, isStreaming, thinkingSteps.length]);
+
+  const scrollToBottom = () => {
+    if (messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTo({
+        top: messagesContainerRef.current.scrollHeight,
+        behavior: 'smooth',
+      });
+    }
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, isTyping, streamingText, thinkingStepIndex]);
+
+  useEffect(() => {
+    return () => {
+      timeoutsRef.current.forEach((t) => clearTimeout(t));
+      if (streamIntervalRef.current) clearInterval(streamIntervalRef.current);
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, []);
+
+  // Web Speech API
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const SpeechRecognition =
+        (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (SpeechRecognition) {
+        const recognition = new SpeechRecognition();
+        recognition.continuous = false;
+        recognition.interimResults = true;
+        recognition.lang = 'en-US';
+
+        recognition.onstart = () => {
+          setVoiceState('listening');
+          setOrbState('listening');
+        };
+
+        recognition.onresult = (event: any) => {
+          const transcript = Array.from(event.results)
+            .map((result: any) => (result as any)[0].transcript)
+            .join('');
+          setInputText(transcript);
+        };
+
+        recognition.onerror = () => {
+          setVoiceState('idle');
+          setOrbState('idle');
+        };
+
+        recognition.onend = () => {
+          setVoiceState('idle');
+          setOrbState('idle');
+        };
+
+        recognitionRef.current = recognition;
+      }
+    }
+  }, []);
+
+  const speakText = (text: string, onComplete?: () => void) => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+      if (onComplete) onComplete();
+      return;
+    }
+
+    window.speechSynthesis.cancel();
+    const cleanText = text.replace(/[*_#[\]()]/g, '');
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    utterance.rate = 1.05;
+    utterance.pitch = 1.0;
+    utterance.lang = 'en-US';
+
+    utterance.onstart = () => {
+      setIsSpeakingVoice(true);
+      setVoiceState('speaking');
+      setOrbState('speaking');
+    };
+
+    utterance.onend = () => {
+      setIsSpeakingVoice(false);
+      setVoiceState('idle');
+      setOrbState('idle');
+      if (onComplete) onComplete();
+    };
+
+    utterance.onerror = () => {
+      setIsSpeakingVoice(false);
+      setVoiceState('idle');
+      setOrbState('idle');
+      if (onComplete) onComplete();
+    };
+
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const stopAudio = () => {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+    setIsSpeakingVoice(false);
+    setIsStreaming(false);
+    setVoiceState('idle');
+    setOrbState('idle');
+  };
+
+  const toggleVoiceInput = () => {
+    if (!recognitionRef.current) {
+      alert('Speech recognition is not supported in this browser.');
+      return;
+    }
+
+    if (voiceState === 'listening') {
+      recognitionRef.current.stop();
+      setVoiceState('idle');
+      setOrbState('idle');
+    } else {
+      stopAudio();
+      try {
+        recognitionRef.current.start();
+      } catch {
+        recognitionRef.current.stop();
+      }
+    }
+  };
+
+  const handleCopy = (id: string, text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 1800);
+  };
+
+  const streamAIResponse = (fullResponse: ChatMessage) => {
+    setIsStreaming(true);
+    setStreamingText('');
+    setVoiceState('speaking');
+    setOrbState('speaking');
+
+    speakText(fullResponse.content);
+
+    let index = 0;
+    const words = fullResponse.content.split(' ');
+
+    if (streamIntervalRef.current) clearInterval(streamIntervalRef.current);
+
+    streamIntervalRef.current = setInterval(() => {
+      if (index < words.length) {
+        const currentSlice = words.slice(0, index + 1).join(' ');
+        setStreamingText(currentSlice);
+        index++;
+      } else {
+        if (streamIntervalRef.current) clearInterval(streamIntervalRef.current);
+        streamIntervalRef.current = null;
+        setIsStreaming(false);
+        setMessages((prev) => [...prev, fullResponse]);
+        setStreamingText('');
+        setIsTyping(false);
+        setOrbState('idle');
+      }
+    }, 60);
+  };
+
+  const handleSendMessage = (textToSend?: string) => {
+    const messageContent = textToSend || inputText;
+    if (!messageContent.trim() || isTyping || isStreaming) return;
+
+    if (voiceState === 'listening' && recognitionRef.current) {
+      recognitionRef.current.stop();
+    }
+    stopAudio();
+
+    const userMsg: ChatMessage = {
+      id: `m-user-${Date.now()}`,
+      sender: 'user',
+      content:
+        chatMode === 'save'
+          ? `[SAVE INFO]: ${messageContent}`
+          : chatMode === 'share'
+          ? `[SHARE REQUEST]: ${messageContent}`
+          : messageContent,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    };
+
+    setMessages((prev) => [...prev, userMsg]);
+    setInputText('');
+    setIsTyping(true);
+    setVoiceState('thinking');
+    setOrbState('thinking');
+
+    const t1 = setTimeout(() => {
+      setOrbState('generating');
+    }, 1500);
+
+    const t2 = setTimeout(() => {
+      let botResponse: ChatMessage;
+      const lower = messageContent.toLowerCase();
+
+      if (chatMode === 'save') {
+        botResponse = {
+          id: `m-bot-${Date.now()}`,
+          sender: 'assistant',
+          content: `✅ **Saved to Personal Memory Store**\n\nI have encrypted "${messageContent}" into your private vault envelope.`,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          sourceType: 'user-confirmed',
+          sourceNote: 'Committed self-assertion',
+        };
+      } else if (chatMode === 'share') {
+        botResponse = {
+          id: `m-bot-${Date.now()}`,
+          sender: 'assistant',
+          content: `🔗 **Selective Share Link Generated**\n\n- **Recipient**: 24h Scoped Access Link\n- **Fields**: ${messageContent}\n- **Proof**: zk-SNARK Verified`,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          sourceType: 'evidence-backed',
+          sourceNote: 'Selective Disclosure Grant',
+          evidenceDoc: 'Scope_Access_Envelope.json',
+        };
+      } else if (lower.includes('college') || lower.includes('slrtce') || lower.includes('degree') || lower.includes('engineering') || lower.includes('university')) {
+        botResponse = {
+          id: `m-bot-${Date.now()}`,
+          sender: 'assistant',
+          content: `You completed your **B.E. in Computer Science** from **SLRTCE** with a **8.45 / 10.0 CGPA** in 2024. Collaborated with **Divya** on your capstone project.`,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          sourceType: 'evidence-backed',
+          sourceNote: 'SLRTCE Degree Certificate & Transcript',
+          evidenceDoc: 'Degree_Certificate_SLRTCE_2024.pdf',
+        };
+      } else if (lower.includes('work') || lower.includes('company') || lower.includes('job') || lower.includes('veritas') || lower.includes('role')) {
+        botResponse = {
+          id: `m-bot-${Date.now()}`,
+          sender: 'assistant',
+          content: `You are currently employed at **Veritas Technologies** as a **Systems & Cloud Engineer**. Your peer reviewer is **Monish**.`,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          sourceType: 'evidence-backed',
+          sourceNote: 'Employment Offer Letter & Peer Confirmation',
+          evidenceDoc: 'Employment_Offer_Letter_Veritas.pdf',
+        };
+      } else if (lower.includes('blood') || lower.includes('medical') || lower.includes('health') || lower.includes('ankita')) {
+        botResponse = {
+          id: `m-bot-${Date.now()}`,
+          sender: 'assistant',
+          content: `Your blood group is **O-Positive (O+)**. Emergency kin and health proxy: **Ankita** (Sister, +91 98202 55910). Verified by CityCare Diagnostics.`,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          sourceType: 'evidence-backed',
+          sourceNote: 'Annual Health Checkup & Family Proxy Declaration',
+          evidenceDoc: 'Medical_Summary_2024.pdf',
+        };
+      } else if (lower.includes('credit') || lower.includes('bank') || lower.includes('tax') || lower.includes('pan') || lower.includes('score')) {
+        botResponse = {
+          id: `m-bot-${Date.now()}`,
+          sender: 'assistant',
+          content: `Your verified **CIBIL Score is 785**. PAN: **ABCDE1234F**, Primary Bank: **HDFC Bank**.`,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          sourceType: 'evidence-backed',
+          sourceNote: 'ITR-V Acknowledgement & Experian Credit Report',
+          evidenceDoc: 'ITR_Acknowledgement_AY2024.pdf',
+        };
+      } else {
+        botResponse = {
+          id: `m-bot-${Date.now()}`,
+          sender: 'assistant',
+          content: `I retrieved your records for "${messageContent}". Your verified vault confirms your identity as **${userName}** across Identity, Education (SLRTCE), Employment (Veritas), and Healthcare.`,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          sourceType: 'user-confirmed',
+          sourceNote: 'Personal vault query response',
+        };
+      }
+
+      streamAIResponse(botResponse);
+    }, 3500);
+
+    timeoutsRef.current.push(t1, t2);
+  };
+
+  const handleResetChat = () => {
+    stopAudio();
+    if (streamIntervalRef.current) {
+      clearInterval(streamIntervalRef.current);
+      streamIntervalRef.current = null;
+    }
+    timeoutsRef.current.forEach((t) => clearTimeout(t));
+    timeoutsRef.current = [];
+    setIsTyping(false);
+    setIsStreaming(false);
+    setStreamingText('');
+    setOrbState('idle');
+    setMessages([]);
+  };
+
+  const quickPrompts = [
+    { title: 'College Degree & CGPA', text: 'What is my college degree and SLRTCE CGPA?' },
+    { title: 'Job & Peer Verification', text: 'Show my Veritas role and Monish details' },
+    { title: 'Health & Proxy Contact', text: 'What is my blood group and Ankita contact?' },
+    { title: 'Credit Score & PAN Info', text: 'What is my credit score and PAN number?' },
+  ];
+
+  const currentOrbState: OrbStateMode = isSpeakingVoice
+    ? 'speaking'
+    : voiceState === 'listening'
+    ? 'listening'
+    : isTyping || isStreaming
+    ? (orbState !== 'idle' ? orbState : 'generating')
+    : orbState;
+
+  const currentOrbText =
+    isSpeakingVoice
+      ? 'Speaking...'
+      : voiceState === 'listening'
+      ? 'Listening...'
+      : isTyping || isStreaming
+      ? 'Thinking...'
+      : 'Ready...';
+  const renderFormattedContent = (content: string, isUserMessage = false) => {
+    if (!content) return null;
+
+    // Check for special prefix tags on user messages
+    let displayContent = content;
+    let prefixBadge = null;
+
+    if (content.startsWith('[SAVE INFO]: ')) {
+      displayContent = content.replace('[SAVE INFO]: ', '');
+      prefixBadge = (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 mb-1.5 rounded text-[10px] font-bold bg-white/20 text-white border border-white/30">
+          <Save className="w-3 h-3" />
+          <span>Save Memory</span>
+        </span>
+      );
+    } else if (content.startsWith('[SHARE REQUEST]: ')) {
+      displayContent = content.replace('[SHARE REQUEST]: ', '');
+      prefixBadge = (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 mb-1.5 rounded text-[10px] font-bold bg-white/20 text-white border border-white/30">
+          <Share2 className="w-3 h-3" />
+          <span>Selective Share</span>
+        </span>
+      );
+    }
+
+    const lines = displayContent.split('\n');
+
+    return (
+      <div className="space-y-1.5 leading-relaxed">
+        {prefixBadge && <div>{prefixBadge}</div>}
+        {lines.map((line, lineIdx) => {
+          const trimmed = line.trim();
+          if (!trimmed) {
+            return <div key={lineIdx} className="h-1" />;
+          }
+
+          const isBullet = trimmed.startsWith('- ') || trimmed.startsWith('• ');
+          const rawText = isBullet ? trimmed.substring(2) : line;
+
+          // Parse inline **bold**, `code`, and *italic*
+          const parts: React.ReactNode[] = [];
+          const regex = /(\*\*.*?\*\*|`.*?`|\*.*?\*)/g;
+          let lastIndex = 0;
+          let match;
+
+          while ((match = regex.exec(rawText)) !== null) {
+            if (match.index > lastIndex) {
+              parts.push(rawText.substring(lastIndex, match.index));
+            }
+
+            const matchedStr = match[0];
+            if (matchedStr.startsWith('**') && matchedStr.endsWith('**')) {
+              parts.push(
+                <strong
+                  key={match.index}
+                  className={isUserMessage ? 'font-black underline decoration-white/30' : 'font-black text-zinc-950 dark:text-white'}
+                >
+                  {matchedStr.slice(2, -2)}
+                </strong>
+              );
+            } else if (matchedStr.startsWith('`') && matchedStr.endsWith('`')) {
+              parts.push(
+                <code
+                  key={match.index}
+                  className={`px-1.5 py-0.5 rounded font-mono text-[11px] ${
+                    isUserMessage
+                      ? 'bg-white/20 text-white'
+                      : 'bg-zinc-100 dark:bg-white/10 text-[#5a25eb] dark:text-[#cbbeff] border border-zinc-200 dark:border-white/10'
+                  }`}
+                >
+                  {matchedStr.slice(1, -1)}
+                </code>
+              );
+            } else if (matchedStr.startsWith('*') && matchedStr.endsWith('*')) {
+              parts.push(
+                <em key={match.index} className="italic opacity-90">
+                  {matchedStr.slice(1, -1)}
+                </em>
+              );
+            }
+
+            lastIndex = regex.lastIndex;
+          }
+
+          if (lastIndex < rawText.length) {
+            parts.push(rawText.substring(lastIndex));
+          }
+
+          if (isBullet) {
+            return (
+              <div key={lineIdx} className="flex items-start gap-2 pl-0.5">
+                <span className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${isUserMessage ? 'bg-white' : 'bg-[#5a25eb] dark:bg-[#cbbeff]'}`} />
+                <div className="flex-1">{parts}</div>
+              </div>
+            );
+          }
+
+          return <div key={lineIdx}>{parts}</div>;
+        })}
+      </div>
+    );
+  };
+
+  return (
+    <div className="min-h-[calc(100dvh-3.5rem)] md:h-[calc(100vh-3.5rem)] flex flex-col bg-zinc-50 dark:bg-[#000000] text-zinc-900 dark:text-[#f4f4f6] transition-colors duration-200">
+      <div className="max-w-3xl w-full mx-auto flex-1 flex flex-col h-full px-3 sm:px-6">
+        
+        {/* Minimal Header */}
+        <div className="py-2.5 px-3.5 my-1.5 rounded-2xl bg-white/85 dark:bg-[#0a0a10]/85 backdrop-blur-md border border-zinc-200/80 dark:border-[#1c1c28] flex items-center justify-between shadow-2xs shrink-0">
+          <div className="flex items-center gap-2.5">
+            <div className="relative flex items-center justify-center">
+              <div className="w-8 h-8 rounded-full bg-[#5a25eb]/10 dark:bg-[#5a25eb]/20 border border-[#5a25eb]/30 flex items-center justify-center shadow-xs overflow-hidden">
+                <AILoaderOrb state={currentOrbState} variant="avatar" size={24} />
+              </div>
+              <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-black" />
+            </div>
+
+            <div>
+              <div className="flex items-center gap-1.5">
+                <h1 className="text-xs sm:text-sm font-bold tracking-tight text-zinc-900 dark:text-white">
+                  SYNDEO AI
+                </h1>
+                <span className="px-1.5 py-0.2 rounded text-[9px] font-mono font-medium bg-[#5a25eb]/10 dark:bg-[#5a25eb]/20 text-[#5a25eb] dark:text-[#cbbeff]">
+                  Vault
+                </span>
+              </div>
+              <p className="text-[10px] text-zinc-400 dark:text-[#71717a] hidden sm:block">
+                Zero-Knowledge Personal Records
+              </p>
+            </div>
+          </div>
+
+          {/* Right Actions */}
+          <div className="flex items-center gap-1.5">
+
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-zinc-100 dark:bg-[#12121a] border border-zinc-200 dark:border-[#222230] text-[10px] text-zinc-600 dark:text-[#a1a1aa]">
+              <span className="w-2 h-2 rounded-full bg-[#5a25eb] dark:bg-[#cbbeff] animate-pulse" />
+              <span className="capitalize font-mono font-bold">
+                {currentOrbState}
+              </span>
+            </div>
+
+            {isSpeakingVoice && (
+              <button
+                onClick={stopAudio}
+                className="p-1 rounded-lg text-red-500 hover:bg-red-500/10 transition-colors cursor-pointer"
+                title="Stop Audio"
+              >
+                <VolumeX className="w-3.5 h-3.5" />
+              </button>
+            )}
+
+            <button
+              onClick={handleResetChat}
+              className="p-1 rounded-lg text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors cursor-pointer"
+              title="Reset Chat"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+
+        {/* Messages Stream */}
+        <div ref={messagesContainerRef} className="flex-1 overflow-y-auto px-1 sm:px-2 py-2 space-y-3.5 scrollbar-thin flex flex-col justify-start">
+          {/* Minimal Welcome Hero */}
+          {messages.length === 0 && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.97 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="my-auto py-6 sm:py-8 px-4 sm:px-6 rounded-3xl bg-white dark:bg-[#0a0a10] border border-zinc-200 dark:border-[#1c1c28] text-center space-y-4 shadow-sm relative overflow-hidden"
+            >
+              <div className="flex items-center justify-center my-2">
+                <AILoaderOrb
+                  state={currentOrbState}
+                  text={currentOrbText}
+                  size={160}
+                  variant="hero"
+                />
+              </div>
+
+              <div>
+                <h2 className="text-base sm:text-lg font-bold text-zinc-900 dark:text-white">
+                  How can SYNDEO AI help, {userName}?
+                </h2>
+                <p className="text-xs text-zinc-500 dark:text-[#8c879a] max-w-sm mx-auto mt-1">
+                  Ask verified questions about your identity, SLRTCE degree, Veritas career, or healthcare records.
+                </p>
+              </div>
+
+              {/* Minimal Quick Chips */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-w-md mx-auto pt-2">
+                {quickPrompts.map((p, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => handleSendMessage(p.text)}
+                    className="p-3 rounded-2xl bg-zinc-50 dark:bg-[#12121a] border border-zinc-200 dark:border-[#222230] hover:border-[#5a25eb] hover:bg-[#5a25eb]/5 text-left text-xs text-zinc-700 dark:text-zinc-300 hover:text-[#5a25eb] dark:hover:text-[#cbbeff] transition-all cursor-pointer flex items-center justify-between group"
+                  >
+                    <span className="font-medium truncate block">{p.title}</span>
+                    <Sparkles className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity text-[#5a25eb] shrink-0 ml-1" />
+                  </button>
+                ))}
+              </div>
+            </motion.div>
+          )}
+
+          {/* Messages */}
+          {messages.map((msg) => {
+            const isUser = msg.sender === 'user';
+            return (
+              <motion.div
+                key={msg.id}
+                initial={{ opacity: 0, y: 5 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.12 }}
+                className={`flex gap-2.5 max-w-2xl ${isUser ? 'ml-auto justify-end' : 'mr-auto justify-start'}`}
+              >
+                {!isUser && (
+                  <div className="w-7 h-7 rounded-full bg-zinc-100 dark:bg-[#12121c] border border-zinc-200 dark:border-[#222230] flex items-center justify-center shrink-0 shadow-2xs mt-0.5 overflow-hidden">
+                    <AILoaderOrb state={isSpeakingVoice ? 'speaking' : 'idle'} variant="avatar" size={22} />
+                  </div>
+                )}
+
+                <div className={`space-y-1 ${isUser ? 'items-end' : 'items-start'}`}>
+                  <div
+                    className={`p-3.5 rounded-2xl text-xs sm:text-sm leading-relaxed ${
+                      isUser
+                        ? 'bg-[#5a25eb] text-white rounded-br-xs shadow-xs font-medium'
+                        : 'bg-white dark:bg-[#0c0c12] border border-zinc-200 dark:border-[#1c1c28] text-zinc-900 dark:text-[#e4e1e8] rounded-bl-xs shadow-2xs'
+                    }`}
+                  >
+                    <div>{renderFormattedContent(msg.content, isUser)}</div>
+
+                    {!isUser && (
+                      <div className="mt-2.5 pt-2 border-t border-zinc-100 dark:border-white/10 flex items-center justify-between text-[10px] text-zinc-400">
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => speakText(msg.content)}
+                            className="flex items-center gap-1 text-[#5a25eb] dark:text-[#cbbeff] hover:underline font-semibold cursor-pointer"
+                          >
+                            <Volume2 className="w-3 h-3" />
+                            <span>Listen</span>
+                          </button>
+                          <span>•</span>
+                          <button
+                            onClick={() => handleCopy(msg.id, msg.content)}
+                            className="flex items-center gap-1 hover:text-zinc-900 dark:hover:text-white cursor-pointer"
+                          >
+                            {copiedId === msg.id ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                            <span>{copiedId === msg.id ? 'Copied' : 'Copy'}</span>
+                          </button>
+                        </div>
+                        <span className="font-mono text-[9px]">{msg.timestamp}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {!isUser && msg.sourceType && (
+                    <div className="flex flex-wrap items-center gap-1 pt-0.5">
+                      {msg.sourceType === 'evidence-backed' && (
+                        <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] bg-emerald-500/10 border border-emerald-500/25 text-emerald-600 dark:text-emerald-400 font-medium">
+                          <FileCheck className="w-3 h-3" />
+                          <span className="font-mono text-[9px] truncate max-w-[180px]">
+                            {msg.evidenceDoc || 'Degree_Certificate_SLRTCE_2024.pdf'}
+                          </span>
+                        </div>
+                      )}
+                      {msg.sourceType === 'user-confirmed' && (
+                        <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] bg-[#5a25eb]/10 border border-[#5a25eb]/25 text-[#5a25eb] dark:text-[#cbbeff]">
+                          <UserCheck className="w-3 h-3" />
+                          <span>{msg.sourceNote || 'Self-asserted'}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {isUser && (
+                    <div className="text-right text-[9px] text-zinc-400">
+                      {msg.timestamp}
+                    </div>
+                  )}
+                </div>
+
+                {isUser && (
+                  <div className="w-7 h-7 rounded-full bg-[#5a25eb]/15 border border-[#5a25eb]/30 flex items-center justify-center shrink-0 font-bold text-[10px] text-[#5a25eb] dark:text-[#cbbeff] mt-0.5">
+                    {userName.slice(0, 2).toUpperCase()}
+                  </div>
+                )}
+              </motion.div>
+            );
+          })}
+
+          {isStreaming && streamingText && (
+            <motion.div
+              initial={{ opacity: 0, y: 5 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex gap-2.5 max-w-2xl mr-auto justify-start"
+            >
+              <div className="w-7 h-7 rounded-full bg-[#5a25eb]/15 border border-[#5a25eb]/30 flex items-center justify-center shrink-0 shadow-xs mt-0.5 overflow-hidden">
+                <AILoaderOrb state={isSpeakingVoice ? 'speaking' : 'generating'} variant="avatar" size={22} />
+              </div>
+              <div className="p-3.5 rounded-2xl text-xs sm:text-sm bg-white dark:bg-[#0c0c12] border-2 border-[#5a25eb] text-zinc-900 dark:text-white shadow-xs">
+                <div className="leading-relaxed">
+                  {renderFormattedContent(streamingText, false)}
+                  <span className="inline-block w-1.5 h-3.5 bg-[#5a25eb] ml-1 animate-pulse align-middle" />
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {/* Thinking State with Dot Animation ThinkingOrb & Dynamic Cycling Status */}
+          {isTyping && !isStreaming && (
+            <motion.div
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex items-center gap-2.5 py-1.5"
+            >
+              <div className="inline-flex h-9 items-center gap-2.5 rounded-full pl-2.5 pr-4 bg-white dark:bg-[#0c0c12] border border-zinc-200 dark:border-[#222230] shadow-xs">
+                <ThinkingOrb
+                  state={currentThinkingStep.state}
+                  size={20}
+                  theme="auto"
+                />
+                <AnimatePresence mode="wait">
+                  <motion.span
+                    key={currentThinkingStep.text}
+                    initial={{ opacity: 0, y: 3 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -3 }}
+                    transition={{ duration: 0.22 }}
+                    className="whitespace-nowrap text-xs font-medium text-zinc-700 dark:text-zinc-200"
+                  >
+                    {currentThinkingStep.text}
+                  </motion.span>
+                </AnimatePresence>
+              </div>
+            </motion.div>
+          )}
+
+          <div ref={messagesEndRef} />
+        </div>
+
+        {/* Bottom Minimal Input Bar */}
+        <div className="pt-2 pb-24 md:pb-3 bg-transparent shrink-0 space-y-2">
+          {/* Scrollable Mode Chips */}
+          <div className="flex items-center justify-between gap-2 px-1">
+            <div className="flex items-center gap-1 p-0.5 rounded-full bg-zinc-100 dark:bg-[#12121c] border border-zinc-200 dark:border-[#222230] overflow-x-auto scrollbar-none max-w-full shrink-0">
+              <button
+                type="button"
+                onClick={() => setChatMode('normal')}
+                className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer shrink-0 ${
+                  chatMode === 'normal'
+                    ? 'bg-[#5a25eb] text-white shadow-xs'
+                    : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
+                }`}
+              >
+                <QuestionIcon className="w-3 h-3" />
+                <span>Normal</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setChatMode('save')}
+                className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer shrink-0 ${
+                  chatMode === 'save'
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
+                }`}
+              >
+                <Save className="w-3 h-3" />
+                <span>Save</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setChatMode('share')}
+                className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer shrink-0 ${
+                  chatMode === 'share'
+                    ? 'bg-[#8a54ff] text-white shadow-xs'
+                    : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
+                }`}
+              >
+                <Share2 className="w-3 h-3" />
+                <span>Share</span>
+              </button>
+            </div>
+
+            <div className="hidden sm:flex items-center gap-1 text-[10px] text-zinc-400">
+              <ShieldCheck className="w-3 h-3 text-emerald-500" />
+              <span>Encrypted</span>
+            </div>
+          </div>
+
+          {/* Input Box */}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSendMessage();
+            }}
+            className="relative flex items-center p-1 rounded-full bg-white dark:bg-[#0c0c12] border border-zinc-300 dark:border-[#202030] focus-within:border-[#5a25eb] focus-within:ring-2 focus-within:ring-[#5a25eb]/20 shadow-xs transition-all"
+          >
+            <input
+              type="text"
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+              placeholder={
+                voiceState === 'listening'
+                  ? 'Listening...'
+                  : chatMode === 'save'
+                  ? 'Save record (e.g. "Passport: Z8921098")...'
+                  : chatMode === 'share'
+                  ? 'Share fields (e.g. "Degree with Acme")...'
+                  : 'Ask SYNDEO AI...'
+              }
+              className="flex-1 bg-transparent px-3.5 py-2 text-xs sm:text-sm text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none"
+            />
+
+            <button
+              type="button"
+              onClick={toggleVoiceInput}
+              className={`p-2 rounded-full transition-all cursor-pointer mr-1 ${
+                voiceState === 'listening'
+                  ? 'bg-red-500 text-white animate-pulse'
+                  : 'text-zinc-400 hover:text-[#5a25eb] dark:hover:text-white'
+              }`}
+              title="Voice Input"
+            >
+              {voiceState === 'listening' ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
+            </button>
+
+            <button
+              type="submit"
+              disabled={!inputText.trim() || isTyping || isStreaming}
+              className="p-2 rounded-full bg-[#5a25eb] hover:bg-[#6b37fa] text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-xs cursor-pointer"
+              aria-label="Send"
+            >
+              <ArrowUp className="w-3.5 h-3.5 stroke-[2.5]" />
+            </button>
+          </form>
+        </div>
+
+      </div>
+    </div>
+  );
+};
