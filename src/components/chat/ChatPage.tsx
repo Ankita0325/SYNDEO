@@ -22,6 +22,9 @@ import {
   GraduationCap,
   Globe,
   ExternalLink,
+  Paperclip,
+  FileText,
+  X,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -55,6 +58,34 @@ export const ChatPage: React.FC = () => {
   const [streamingText, setStreamingText] = useState<string>('');
   const [isStreaming, setIsStreaming] = useState<boolean>(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  interface AttachedFile {
+    name: string;
+    size: number;
+    formattedSize: string;
+    type: string;
+  }
+  const [attachedFile, setAttachedFile] = useState<AttachedFile | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setAttachedFile({
+        name: file.name,
+        size: file.size,
+        formattedSize: formatFileSize(file.size),
+        type: file.type,
+      });
+    }
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
 
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -244,24 +275,34 @@ export const ChatPage: React.FC = () => {
   };
 
   const handleSendMessage = (textToSend?: string) => {
-    const messageContent = textToSend || inputText;
-    if (!messageContent.trim() || isTyping || isStreaming) return;
+    const messageContent = textToSend !== undefined ? textToSend : inputText;
+    if ((!messageContent.trim() && !attachedFile) || isTyping || isStreaming) return;
 
     if (voiceState === 'listening' && recognitionRef.current) {
       recognitionRef.current.stop();
     }
     stopAudio();
 
+    const currentAttached = attachedFile;
+    setAttachedFile(null);
+
     const userMsg: ChatMessage = {
       id: `m-user-${Date.now()}`,
       sender: 'user',
       content:
         chatMode === 'save'
-          ? `[SAVE INFO]: ${messageContent}`
+          ? `[SAVE INFO]: ${messageContent || (currentAttached ? `Upload & Index ${currentAttached.name}` : '')}`
           : chatMode === 'share'
           ? `[SHARE REQUEST]: ${messageContent}`
-          : messageContent,
+          : messageContent || (currentAttached ? `Analyze attached document: ${currentAttached.name}` : ''),
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      attachment: currentAttached
+        ? {
+            name: currentAttached.name,
+            size: currentAttached.formattedSize,
+            type: currentAttached.type,
+          }
+        : undefined,
     };
 
     setMessages((prev) => [...prev, userMsg]);
@@ -278,7 +319,20 @@ export const ChatPage: React.FC = () => {
       let botResponse: ChatMessage;
       const lower = messageContent.toLowerCase();
 
-      if (chatMode === 'save') {
+      if (currentAttached) {
+        botResponse = {
+          id: `m-bot-${Date.now()}`,
+          sender: 'assistant',
+          content:
+            chatMode === 'save'
+              ? `📄 **Document Verified & Encrypted**\n\nI have processed and indexed **${currentAttached.name}** (${currentAttached.formattedSize}) into your zero-knowledge vault.\n- **Extracted Records**: Evidence-backed Credentials\n- **Vault Security**: AES-256-GCM Envelope Sealed\n- **Graph Indexing**: Attached to your personal life-stage network.`
+              : `📄 **Attached Document Analyzed**\n\nI have parsed **${currentAttached.name}** (${currentAttached.formattedSize}). All cryptographic signatures and metadata match your verified records.`,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          sourceType: 'evidence-backed',
+          sourceNote: 'Uploaded Evidence Document Verification',
+          evidenceDoc: currentAttached.name,
+        };
+      } else if (chatMode === 'save') {
         botResponse = {
           id: `m-bot-${Date.now()}`,
           sender: 'assistant',
@@ -684,6 +738,18 @@ export const ChatPage: React.FC = () => {
                         : 'bg-white dark:bg-[#0c0c12] border border-zinc-200 dark:border-[#1c1c28] text-zinc-900 dark:text-[#e4e1e8] rounded-bl-xs shadow-2xs'
                     }`}
                   >
+                    {isUser && msg.attachment && (
+                      <div className="mb-2 p-2 rounded-xl bg-white/15 border border-white/25 flex items-center gap-2 text-white">
+                        <div className="p-1.5 rounded-lg bg-white/20 shrink-0">
+                          <FileText className="w-3.5 h-3.5 text-white" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-semibold truncate leading-tight">{msg.attachment.name}</p>
+                          <p className="text-[10px] text-white/75 font-mono">{msg.attachment.size}</p>
+                        </div>
+                      </div>
+                    )}
+
                     <div>{renderFormattedContent(msg.content, isUser)}</div>
 
                     {!isUser && (
@@ -846,7 +912,35 @@ export const ChatPage: React.FC = () => {
             </div>
           </div>
 
-          {/* ChatGPT-Style Capsule Input Box */}
+          {/* Floating Attached File Preview Pill */}
+          <AnimatePresence>
+            {attachedFile && (
+              <motion.div
+                initial={{ opacity: 0, y: 6, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 4, scale: 0.95 }}
+                className="flex items-center gap-2 p-1.5 pl-2.5 pr-2 rounded-xl bg-white dark:bg-[#12121c] border border-zinc-200 dark:border-[#272738] shadow-xs max-w-sm"
+              >
+                <div className="p-1 rounded-md bg-[#5a25eb]/10 dark:bg-[#5a25eb]/20 text-[#5a25eb] dark:text-[#cbbeff] shrink-0">
+                  <FileText className="w-3.5 h-3.5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold text-zinc-900 dark:text-zinc-100 truncate">{attachedFile.name}</p>
+                  <p className="text-[10px] text-zinc-500 dark:text-zinc-400 font-mono">{attachedFile.formattedSize}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setAttachedFile(null)}
+                  className="p-1 rounded-md text-zinc-400 hover:text-zinc-700 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                  title="Remove attachment"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* ChatGPT-Style Capsule Input Box with Attachment Button */}
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -854,6 +948,26 @@ export const ChatPage: React.FC = () => {
             }}
             className="relative flex items-center p-1 rounded-full bg-white dark:bg-[#0c0c12] border border-zinc-300 dark:border-[#202030] focus-within:border-[#5a25eb] focus-within:ring-2 focus-within:ring-[#5a25eb]/20 shadow-xs transition-all"
           >
+            {/* Hidden File Input */}
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileChange}
+              className="hidden"
+              accept=".pdf,.png,.jpg,.jpeg,.doc,.docx,.txt,.json,.csv"
+            />
+
+            {/* Paperclip File Upload Button */}
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="p-2 rounded-full text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/10 transition-colors cursor-pointer ml-0.5"
+              title="Attach document or image"
+              aria-label="Attach file"
+            >
+              <Paperclip className="w-4 h-4" />
+            </button>
+
             <input
               type="text"
               value={inputText}
@@ -861,13 +975,15 @@ export const ChatPage: React.FC = () => {
               placeholder={
                 voiceState === 'listening'
                   ? 'Listening...'
+                  : attachedFile
+                  ? `Message with ${attachedFile.name}...`
                   : chatMode === 'save'
                   ? 'Save record (e.g. "Passport: Z8921098")...'
                   : chatMode === 'share'
                   ? 'Share fields (e.g. "Degree with Acme")...'
                   : 'Ask SYNDEO AI...'
               }
-              className="flex-1 bg-transparent px-3.5 py-2 text-xs sm:text-sm text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none"
+              className="flex-1 bg-transparent px-2.5 py-2 text-xs sm:text-sm text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none"
             />
 
             <button
@@ -885,7 +1001,7 @@ export const ChatPage: React.FC = () => {
 
             <button
               type="submit"
-              disabled={!inputText.trim() || isTyping || isStreaming}
+              disabled={(!inputText.trim() && !attachedFile) || isTyping || isStreaming}
               className="p-2 rounded-full bg-[#5a25eb] hover:bg-[#6b37fa] text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-xs cursor-pointer"
               aria-label="Send"
             >

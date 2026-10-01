@@ -33,6 +33,11 @@ export interface ChatMessage {
   sourceType?: 'evidence-backed' | 'user-confirmed' | 'unknown';
   sourceNote?: string;
   evidenceDoc?: string;
+  attachment?: {
+    name: string;
+    size: string;
+    type: string;
+  };
 }
 
 export interface Conversation {
