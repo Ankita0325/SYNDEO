@@ -157,7 +157,7 @@ export const ObsidianGraphView: React.FC<ObsidianGraphViewProps> = ({
       'finance',
       'healthcare',
     ];
-    const catOrbitRadius = 180;
+    const catOrbitRadius = 125;
 
     catKeys.forEach((catKey, idx) => {
       const angle = (idx * (2 * Math.PI)) / catKeys.length - Math.PI / 2;
@@ -174,7 +174,7 @@ export const ObsidianGraphView: React.FC<ObsidianGraphViewProps> = ({
         y: catY,
         vx: 0,
         vy: 0,
-        radius: 25,
+        radius: 22,
         color: CATEGORY_CONFIG[catKey].color,
       };
       calculatedNodes.push(catNode);
@@ -185,13 +185,13 @@ export const ObsidianGraphView: React.FC<ObsidianGraphViewProps> = ({
         target: `cat-${catKey}`,
         type: 'root-to-cat',
         color: CATEGORY_CONFIG[catKey].color,
-        length: 160,
+        length: 110,
       });
 
       // 3. Records Nodes in outer orbit
       const catRecords = records.filter((r) => r.category === catKey);
-      const recRadius = 130;
-      const arcSpread = Math.PI * 0.85;
+      const recRadius = 75;
+      const arcSpread = Math.PI * 0.75;
 
       catRecords.forEach((rec, recIdx) => {
         const offset =
@@ -215,7 +215,7 @@ export const ObsidianGraphView: React.FC<ObsidianGraphViewProps> = ({
           y: recY,
           vx: 0,
           vy: 0,
-          radius: 17,
+          radius: 15,
           color: CATEGORY_CONFIG[catKey].color,
         };
         calculatedNodes.push(recNode);
@@ -226,15 +226,15 @@ export const ObsidianGraphView: React.FC<ObsidianGraphViewProps> = ({
           target: rec.id,
           type: 'cat-to-rec',
           color: CATEGORY_CONFIG[catKey].color,
-          length: 110,
+          length: 70,
         });
 
         // 4. Evidence Documents
         if (showDocuments && rec.evidenceDocName) {
           const docId = `doc-${rec.id}`;
-          const docAngle = recAngle + 0.25;
-          const docX = recX + Math.cos(docAngle) * 65;
-          const docY = recY + Math.sin(docAngle) * 65;
+          const docAngle = recAngle + 0.3;
+          const docX = recX + Math.cos(docAngle) * 42;
+          const docY = recY + Math.sin(docAngle) * 42;
 
           const docNode: GraphNode = {
             id: docId,
@@ -247,7 +247,7 @@ export const ObsidianGraphView: React.FC<ObsidianGraphViewProps> = ({
             y: docY,
             vx: 0,
             vy: 0,
-            radius: 13,
+            radius: 12,
             color: '#10b981',
           };
           calculatedNodes.push(docNode);
@@ -258,7 +258,7 @@ export const ObsidianGraphView: React.FC<ObsidianGraphViewProps> = ({
             target: docId,
             type: 'doc-to-rec',
             color: '#10b981',
-            length: 60,
+            length: 42,
           });
         }
       });
@@ -303,14 +303,15 @@ export const ObsidianGraphView: React.FC<ObsidianGraphViewProps> = ({
 
       const centerX = 500;
       const centerY = 360;
-      const repulsionStrength = 1800;
-      const springStrength = 0.04;
-      const gravityStrength = 0.012;
-      const damping = 0.84;
+      const repulsionStrength = 420;
+      const springStrength = 0.075;
+      const gravityStrength = 0.035;
+      const damping = 0.82;
+      const maxRadius = 310;
 
       const nodeArr = Array.from(nodeMap.values());
 
-      // 1. Coulomb Charge Repulsion between all node pairs
+      // 1. Coulomb Charge Repulsion between node pairs (with distance cutoff)
       for (let i = 0; i < nodeArr.length; i++) {
         for (let j = i + 1; j < nodeArr.length; j++) {
           const n1 = nodeArr[i];
@@ -318,20 +319,22 @@ export const ObsidianGraphView: React.FC<ObsidianGraphViewProps> = ({
 
           const dx = n2.x - n1.x;
           const dy = n2.y - n1.y;
-          const distSq = dx * dx + dy * dy + 100; // prevent division by zero
+          const distSq = dx * dx + dy * dy + 80;
           const dist = Math.sqrt(distSq);
 
-          const force = repulsionStrength / distSq;
-          const fx = (dx / dist) * force;
-          const fy = (dy / dist) * force;
+          if (dist < 250) {
+            const force = repulsionStrength / distSq;
+            const fx = (dx / dist) * force;
+            const fy = (dy / dist) * force;
 
-          if (!n1.fixed && n1.id !== draggedNodeId) {
-            n1.vx -= fx;
-            n1.vy -= fy;
-          }
-          if (!n2.fixed && n2.id !== draggedNodeId) {
-            n2.vx += fx;
-            n2.vy += fy;
+            if (!n1.fixed && n1.id !== draggedNodeId) {
+              n1.vx -= fx;
+              n1.vy -= fy;
+            }
+            if (!n2.fixed && n2.id !== draggedNodeId) {
+              n2.vx += fx;
+              n2.vy += fy;
+            }
           }
         }
       }
@@ -361,7 +364,7 @@ export const ObsidianGraphView: React.FC<ObsidianGraphViewProps> = ({
         }
       });
 
-      // 3. Center Gravitational Pull & Velocity Integration
+      // 3. Center Gravitational Pull, Velocity Integration & Bounding Clamping
       nodeArr.forEach((n) => {
         if (n.fixed || n.id === draggedNodeId) return;
 
@@ -376,7 +379,7 @@ export const ObsidianGraphView: React.FC<ObsidianGraphViewProps> = ({
 
         // Limit maximum speed
         const speed = Math.sqrt(n.vx * n.vx + n.vy * n.vy);
-        const maxSpeed = 12;
+        const maxSpeed = 8;
         if (speed > maxSpeed) {
           n.vx = (n.vx / speed) * maxSpeed;
           n.vy = (n.vy / speed) * maxSpeed;
@@ -384,6 +387,17 @@ export const ObsidianGraphView: React.FC<ObsidianGraphViewProps> = ({
 
         n.x += n.vx;
         n.y += n.vy;
+
+        // Radial bounding box around center to keep entire graph within center frame
+        const cdx = n.x - centerX;
+        const cdy = n.y - centerY;
+        const cDist = Math.sqrt(cdx * cdx + cdy * cdy);
+        if (cDist > maxRadius) {
+          n.x = centerX + (cdx / cDist) * maxRadius;
+          n.y = centerY + (cdy / cDist) * maxRadius;
+          n.vx *= 0.3;
+          n.vy *= 0.3;
+        }
       });
 
       return nodeArr;
