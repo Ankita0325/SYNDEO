@@ -602,7 +602,7 @@ export const ChatPage: React.FC = () => {
         </div>
 
         {/* Messages Stream (ChatGPT Layout) */}
-        <div ref={messagesContainerRef} className="flex-1 min-h-0 overflow-y-auto px-1 sm:px-2 py-2.5 space-y-3.5 scrollbar-thin flex flex-col justify-start">
+        <div ref={messagesContainerRef} className="flex-1 min-h-0 overflow-y-auto px-1 sm:px-2 py-2.5 space-y-3.5 scrollbar-none no-scrollbar flex flex-col justify-start">
           {/* Minimal Welcome Hero */}
           {messages.length === 0 && (
             <motion.div
