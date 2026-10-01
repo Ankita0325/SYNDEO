@@ -1,4 +1,6 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import type { User } from '@supabase/supabase-js';
+import { isSupabaseConfigured, supabase } from '../lib/supabase';
 
 export type RoutePath = '/' | '/auth' | '/chat' | '/memory' | '/share' | '/settings';
 
@@ -6,9 +8,13 @@ interface NavigationContextType {
   currentPath: RoutePath;
   navigate: (path: RoutePath) => void;
   isAuthenticated: boolean;
-  setIsAuthenticated: (val: boolean) => void;
+  authLoading: boolean;
+  needsProfile: boolean;
+  authError: string | null;
   userName: string;
   userEmail: string;
+  signInWithGoogle: () => Promise<void>;
+  createProfile: (fullName: string) => Promise<void>;
 }
 
 const NavigationContext = createContext<NavigationContextType | undefined>(undefined);
@@ -30,9 +36,101 @@ export const NavigationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const [currentPath, setCurrentPath] = useState<RoutePath>(getInitialPath);
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(true);
-  const [userName] = useState<string>('Indresh');
-  const [userEmail] = useState<string>('indresh@example.com');
+  const [authUser, setAuthUser] = useState<User | null>(null);
+  const [sessionReady, setSessionReady] = useState(false);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileExists, setProfileExists] = useState<boolean | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [userName, setUserName] = useState('');
+  const [authError, setAuthError] = useState<string | null>(
+    isSupabaseConfigured ? null : 'Supabase is not configured. Add your Supabase URL and anon key to .env.',
+  );
+
+  const userEmail = authUser?.email ?? '';
+
+  const navigate = useCallback((path: RoutePath) => {
+    setCurrentPath(path);
+    if (typeof window !== 'undefined') {
+      window.history.pushState({}, '', path);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!supabase) {
+      setSessionReady(true);
+      return;
+    }
+
+    let active = true;
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!active) return;
+      setAuthUser(session?.user ?? null);
+      setSessionReady(true);
+    });
+
+    void supabase.auth.getSession().then(({ data, error }) => {
+      if (!active) return;
+      if (error) setAuthError(error.message);
+      setAuthUser(data.session?.user ?? null);
+      setSessionReady(true);
+    });
+
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!sessionReady) return;
+    if (!supabase || !authUser) {
+      setProfileExists(null);
+      setIsAuthenticated(false);
+      setUserName('');
+      setProfileLoading(false);
+      return;
+    }
+
+    let active = true;
+    setProfileLoading(true);
+    setAuthError(null);
+
+    void supabase
+      .from('profiles')
+      .select('full_name')
+      .eq('auth_user_id', authUser.id)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (!active) return;
+        if (error) {
+          setAuthError(`Could not load your profile: ${error.message}`);
+          setProfileExists(null);
+          setIsAuthenticated(false);
+        } else if (data) {
+          setUserName(data.full_name);
+          setProfileExists(true);
+          setIsAuthenticated(true);
+        } else {
+          setProfileExists(false);
+          setIsAuthenticated(false);
+        }
+        setProfileLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [authUser, sessionReady]);
+
+  useEffect(() => {
+    if (!sessionReady || profileLoading || !authUser || profileExists === null) return;
+    if (profileExists) {
+      if (currentPath === '/auth') navigate('/memory');
+    } else if (currentPath !== '/auth') {
+      navigate('/auth');
+    }
+  }, [authUser, currentPath, navigate, profileExists, profileLoading, sessionReady]);
 
   useEffect(() => {
     const handlePopState = () => {
@@ -45,12 +143,37 @@ export const NavigationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  const navigate = (path: RoutePath) => {
-    setCurrentPath(path);
-    if (typeof window !== 'undefined') {
-      window.history.pushState({}, '', path);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
+  const signInWithGoogle = async () => {
+    if (!supabase) throw new Error('Supabase is not configured. Add your Supabase URL and anon key to .env.');
+
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: `${window.location.origin}/auth` },
+    });
+    if (error) throw error;
+  };
+
+  const createProfile = async (fullName: string) => {
+    if (!supabase || !authUser) throw new Error('Sign in with Google before creating your profile.');
+    const normalizedName = fullName.trim();
+    if (!normalizedName) throw new Error('Enter your full name.');
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .insert({
+        auth_user_id: authUser.id,
+        full_name: normalizedName,
+        profile_code: `SYN-${crypto.randomUUID().replaceAll('-', '').toUpperCase()}`,
+        neo4j_person_id: crypto.randomUUID(),
+      })
+      .select('full_name')
+      .single();
+
+    if (error) throw error;
+    setUserName(data.full_name);
+    setProfileExists(true);
+    setIsAuthenticated(true);
+    navigate('/memory');
   };
 
   return (
@@ -59,9 +182,13 @@ export const NavigationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         currentPath,
         navigate,
         isAuthenticated,
-        setIsAuthenticated,
+        authLoading: !sessionReady || (Boolean(authUser) && profileLoading),
+        needsProfile: Boolean(authUser) && profileExists === false && !profileLoading,
+        authError,
         userName,
         userEmail,
+        signInWithGoogle,
+        createProfile,
       }}
     >
       {children}
