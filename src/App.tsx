@@ -10,24 +10,9 @@ import { SharePage } from './components/share/SharePage';
 import { SettingsPage } from './components/settings/SettingsPage';
 
 import { SharedLinkViewer } from './components/share/SharedLinkViewer';
-import { UniversalPageSkeleton } from './components/ui/SkeletonLoader';
 
 const AppContent: React.FC = () => {
   const { currentPath, navigate } = useNavigation();
-  const [isRouteLoading, setIsRouteLoading] = React.useState<boolean>(false);
-  const previousPathRef = React.useRef(currentPath);
-
-  React.useEffect(() => {
-    if (previousPathRef.current !== currentPath && currentPath !== '/' && currentPath !== '/auth') {
-      setIsRouteLoading(true);
-      const timer = setTimeout(() => {
-        setIsRouteLoading(false);
-      }, 2000);
-      previousPathRef.current = currentPath;
-      return () => clearTimeout(timer);
-    }
-    previousPathRef.current = currentPath;
-  }, [currentPath]);
 
   const [shareParamToken, setShareParamToken] = React.useState<string | null>(() => {
     if (typeof window !== 'undefined') {
@@ -63,9 +48,6 @@ const AppContent: React.FC = () => {
       );
     }
 
-    if (isRouteLoading && currentPath !== '/') {
-      return <UniversalPageSkeleton route={currentPath} />;
-    }
 
     switch (currentPath) {
       case '/':

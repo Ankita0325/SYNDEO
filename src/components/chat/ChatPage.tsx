@@ -3,6 +3,7 @@ import type { ChatMessage } from '../../types';
 import { AILoaderOrb, type OrbStateMode } from '../ui/ai-loader';
 import { ThinkingOrb, type OrbState } from '../ui/thinking-orbs';
 import { useNavigation } from '../../context/NavigationContext';
+import { useTheme } from '../../context/ThemeContext';
 import {
   FileCheck,
   UserCheck,
@@ -50,6 +51,7 @@ type VoiceState = 'idle' | 'listening' | 'thinking' | 'speaking';
 
 export const ChatPage: React.FC = () => {
   const { userName } = useNavigation();
+  const { theme } = useTheme();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState<string>('');
   const [isTyping, setIsTyping] = useState<boolean>(false);
@@ -652,62 +654,69 @@ export const ChatPage: React.FC = () => {
   };
 
   return (
-    <div className="w-full max-w-5xl xl:max-w-6xl 2xl:max-w-7xl mx-auto flex-1 flex flex-col min-h-0 relative z-10 px-2 sm:px-4">
-      {/* Translucent Glass Workspace Container */}
-      <div
-        className="relative flex-1 flex flex-col min-h-0 rounded-[2rem] sm:rounded-[2.5rem]
-                   bg-white/35 dark:bg-[#0c0c18]/45
-                   backdrop-blur-[30px]
-                   border border-white/60 dark:border-white/10
-                   shadow-[0_8px_40px_-10px_rgba(90,37,235,0.08),inset_0_1px_0_0_rgba(255,255,255,0.8)]
-                   dark:shadow-[0_0_40px_rgba(90,37,235,0.12),inset_0_1px_0_0_rgba(255,255,255,0.05)]"
-      >
-        {/* Subtle Glass Top Highlight */}
-        <div className="absolute top-0 left-0 right-0 h-24 bg-gradient-to-b from-white/40 to-transparent dark:from-white/[0.02] pointer-events-none rounded-t-[2rem] sm:rounded-t-[2.5rem]" />
+    <div className="w-full max-w-5xl xl:max-w-6xl 2xl:max-w-7xl mx-auto flex-1 flex flex-col h-full min-h-0 relative z-10 px-2 sm:px-4">
+      {/* Full-Screen Immersive Voice Overlay */}
+      <AnimatePresence>
+        {isVoiceModalOpen && (
+          <InChatVoiceStage
+            voiceState={voiceState}
+            isMuted={isMuted}
+            onToggleMute={toggleMute}
+            transcript={voiceTranscript}
+            assistantResponse={assistantVoiceResponse}
+            onStartListening={startVoiceListening}
+            onStopListening={stopVoiceListening}
+            onClose={closeVoiceModal}
+            userName={userName}
+          />
+        )}
+      </AnimatePresence>
 
-        {/* === MESSAGES / VOICE STREAM === */}
+      {/* Seamless Workspace Area */}
+      <div className="relative flex-1 flex flex-col min-h-0 h-full">
+
+        {/* === MESSAGES CONTAINER === */}
         <div
           ref={messagesContainerRef}
-          className="flex-1 min-h-0 overflow-y-auto px-2 sm:px-4 py-4 space-y-4 scrollbar-none no-scrollbar flex flex-col justify-start relative z-10"
+          className={`flex-1 min-h-0 px-2 sm:px-4 py-2 sm:py-3 space-y-4 scrollbar-none no-scrollbar flex flex-col justify-start relative z-10 ${
+            messages.length > 0 ? 'overflow-y-auto' : 'overflow-visible my-auto'
+          }`}
         >
-          {isVoiceModalOpen ? (
-            <InChatVoiceStage
-              voiceState={voiceState}
-              isMuted={isMuted}
-              onToggleMute={toggleMute}
-              transcript={voiceTranscript}
-              assistantResponse={assistantVoiceResponse}
-              onSendMessage={(text) => handleSendMessage(text)}
-              onStartListening={startVoiceListening}
-              onStopListening={stopVoiceListening}
-              onClose={closeVoiceModal}
-              userName={userName}
-            />
-          ) : (
-            <>
-              {/* Welcome Hero (Centered Composition) */}
-              {messages.length === 0 && (
+          {/* Welcome Hero (Centered Composition) */}
+          {messages.length === 0 && (
             <motion.div
               initial={{ opacity: 0, scale: 0.98 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.3 }}
-              className="my-auto py-4 sm:py-8 px-4 text-center space-y-5 flex flex-col items-center justify-center min-h-[420px]"
+              className="my-auto py-2 sm:py-4 px-4 text-center space-y-4 sm:space-y-6 flex flex-col items-center justify-center overflow-visible"
             >
               {/* Unclipped AI Orb with Subtle Breathing Motion */}
               <motion.div
                 animate={{ scale: [1, 1.025, 1] }}
                 transition={{ duration: 4.5, repeat: Infinity, ease: 'easeInOut' }}
-                className="relative flex items-center justify-center my-2 select-none"
+                className="relative flex items-center justify-center my-2 sm:my-3 select-none overflow-visible isolate"
               >
-                {/* Soft Ambient Glow Aura (Non-clipped) */}
-                <div className="absolute w-64 h-64 sm:w-80 sm:h-80 rounded-full bg-gradient-to-tr from-[#5a25eb]/25 to-[#38bdf8]/20 blur-3xl pointer-events-none" />
-
-                <AILoaderOrb
-                  state={currentOrbState}
-                  text={currentOrbText}
-                  size={175}
-                  variant="hero"
+                {/* Dedicated Soft Radial Atmosphere Glow (420px x 420px, dissolving gradually) */}
+                <motion.div
+                  animate={{ opacity: [0.75, 1, 0.75] }}
+                  transition={{ duration: 5.5, repeat: Infinity, ease: 'easeInOut' }}
+                  className="absolute w-[360px] h-[360px] sm:w-[440px] sm:h-[440px] -translate-x-1/2 -translate-y-1/2 left-1/2 top-1/2 rounded-full blur-[28px] pointer-events-none z-0"
+                  style={{
+                    background:
+                      theme === 'dark'
+                        ? 'radial-gradient(circle, rgba(56, 189, 248, 0.36) 0%, rgba(90, 37, 235, 0.22) 28%, rgba(139, 92, 246, 0.12) 48%, transparent 72%)'
+                        : 'radial-gradient(circle, rgba(70, 130, 255, 0.34) 0%, rgba(80, 100, 255, 0.20) 28%, rgba(120, 90, 255, 0.10) 48%, transparent 72%)',
+                  }}
                 />
+
+                <div className="relative z-10">
+                  <AILoaderOrb
+                    state={currentOrbState}
+                    text={currentOrbText}
+                    size={190}
+                    variant="hero"
+                  />
+                </div>
               </motion.div>
 
               {/* Typography Hierarchy */}
@@ -718,31 +727,31 @@ export const ChatPage: React.FC = () => {
                 <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-zinc-950 dark:text-white tracking-tight">
                   How can I help today?
                 </h1>
-                <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 pt-1">
+                <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 pt-0.5">
                   I'm here to help — from quick answers<br className="hidden sm:inline" /> to smart recommendations.
                 </p>
               </div>
 
               {/* Quick Prompts */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 max-w-2xl mx-auto pt-3 w-full">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-2xl mx-auto pt-1 sm:pt-2 w-full">
                 {quickPrompts.map((p, idx) => {
                   const Icon = p.icon;
                   return (
                     <button
                       key={idx}
                       onClick={() => handleSendMessage(p.text)}
-                      className="p-4 rounded-2xl
-                                 bg-white/60 dark:bg-[#12121e]/70
+                      className="p-3.5 sm:p-4 rounded-2xl
+                                 bg-white/55 dark:bg-[#121222]/60
                                  backdrop-blur-md
-                                 border border-blue-200/50 dark:border-white/10
-                                 hover:border-[#5a25eb]/50 dark:hover:border-[#5a25eb]/50
-                                 hover:bg-white/90 dark:hover:bg-[#5a25eb]/10
+                                 border border-[#96aaff]/20 dark:border-white/10
+                                 hover:border-[#5a25eb]/40 dark:hover:border-[#5a25eb]/50
+                                 hover:bg-white/80 dark:hover:bg-[#18182e]/80
                                  text-left transition-all cursor-pointer flex items-start gap-3 group
-                                 shadow-[0_4px_20px_-8px_rgba(90,37,235,0.12)]
-                                 dark:shadow-lg dark:shadow-black/20 hover:scale-[1.01]"
+                                 shadow-[0_6px_20px_rgba(100,100,180,0.04)]
+                                 dark:shadow-md hover:-translate-y-0.5"
                     >
-                      <div className="w-9 h-9 rounded-xl bg-[#5a25eb]/10 dark:bg-[#5a25eb]/20 border border-[#5a25eb]/20 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform mt-0.5">
-                        <Icon className="w-4.5 h-4.5 text-[#5a25eb] dark:text-[#cbbeff]" />
+                      <div className="w-8.5 h-8.5 rounded-xl bg-[#5a25eb]/10 dark:bg-[#5a25eb]/20 border border-[#5a25eb]/20 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform mt-0.5">
+                        <Icon className="w-4 h-4 text-[#5a25eb] dark:text-[#cbbeff]" />
                       </div>
                       <div className="min-w-0 flex-1">
                         <span className="font-semibold text-zinc-800 dark:text-zinc-200 group-hover:text-zinc-950 dark:group-hover:text-white truncate block text-sm">
@@ -759,457 +768,452 @@ export const ChatPage: React.FC = () => {
             </motion.div>
           )}
 
-            {/* Messages */}
-            {messages.map((msg) => {
-              const isUser = msg.sender === 'user';
-              return (
-                <motion.div
-                  key={msg.id}
-                  initial={{ opacity: 0, y: 5 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.12 }}
-                  className={`flex gap-3 max-w-3xl lg:max-w-4xl ${isUser ? 'ml-auto justify-end' : 'mr-auto justify-start'}`}
-                >
-                  {!isUser && (
-                    <div className="w-7 h-7 rounded-full bg-white/80 dark:bg-[#12121c] border border-blue-200 dark:border-[#222230] flex items-center justify-center shrink-0 shadow-2xs mt-0.5 overflow-hidden">
-                      <AILoaderOrb state={isSpeakingVoice ? 'speaking' : 'idle'} variant="avatar" size={22} />
-                    </div>
-                  )}
-
-                  <div className={`space-y-1 ${isUser ? 'items-end' : 'items-start'}`}>
-                    <div
-                      className={`p-3.5 rounded-2xl text-xs sm:text-sm leading-relaxed ${
-                        isUser
-                          ? 'bg-[#5a25eb] text-white rounded-br-xs shadow-xs font-medium'
-                          : 'bg-white/85 dark:bg-[#0c0c12] border border-blue-200/70 dark:border-[#1c1c28] text-zinc-900 dark:text-[#e4e1e8] rounded-bl-xs shadow-2xs backdrop-blur-md'
-                      }`}
-                    >
-                      {isUser && msg.attachment && (
-                        <div className="mb-2 p-2 rounded-xl bg-white/15 border border-white/25 flex items-center gap-2 text-white">
-                          <div className="p-1.5 rounded-lg bg-white/20 shrink-0">
-                            <FileText className="w-3.5 h-3.5 text-white" />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-xs font-semibold truncate leading-tight">{msg.attachment.name}</p>
-                            <p className="text-[10px] text-white/75 font-mono">{msg.attachment.size}</p>
-                          </div>
-                        </div>
-                      )}
-
-                      <div>{renderFormattedContent(msg.content, isUser)}</div>
-
-                      {!isUser && (
-                        <div className="mt-2.5 pt-2 border-t border-zinc-100 dark:border-white/10 flex items-center justify-between text-[10px] text-zinc-400">
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => {
-                                if (isMuted) setIsMuted(false);
-                                speakText(msg.content);
-                              }}
-                              className="flex items-center gap-1 text-[#5a25eb] dark:text-[#cbbeff] hover:underline font-semibold cursor-pointer"
-                            >
-                              <Volume2 className="w-3 h-3" />
-                              <span>Listen</span>
-                            </button>
-                            <span>•</span>
-                            <button
-                              onClick={() => handleCopy(msg.id, msg.content)}
-                              className="flex items-center gap-1 hover:text-zinc-900 dark:hover:text-white cursor-pointer"
-                            >
-                              {copiedId === msg.id ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
-                              <span>{copiedId === msg.id ? 'Copied' : 'Copy'}</span>
-                            </button>
-                          </div>
-                          <span className="font-mono text-[9px]">{msg.timestamp}</span>
-                        </div>
-                      )}
-                    </div>
-
-                    {!isUser && msg.sourceType && (
-                      <div className="flex flex-wrap items-center gap-1 pt-0.5">
-                        {msg.sourceType === 'evidence-backed' && (
-                          <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] bg-emerald-500/10 border border-emerald-500/25 text-emerald-600 dark:text-emerald-400 font-medium">
-                            <FileCheck className="w-3 h-3" />
-                            <span className="font-mono text-[9px] truncate max-w-[180px]">
-                              {msg.evidenceDoc || 'Degree_Certificate_SLRTCE_2024.pdf'}
-                            </span>
-                          </div>
-                        )}
-                        {msg.sourceType === 'user-confirmed' && (
-                          <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] bg-[#5a25eb]/10 border border-[#5a25eb]/25 text-[#5a25eb] dark:text-[#cbbeff]">
-                            <UserCheck className="w-3 h-3" />
-                            <span>{msg.sourceNote || 'Self-asserted'}</span>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {isUser && (
-                      <div className="text-right text-[9px] text-zinc-400">
-                        {msg.timestamp}
-                      </div>
-                    )}
-                  </div>
-
-                  {isUser && (
-                    <div className="w-7 h-7 rounded-full bg-[#5a25eb]/15 border border-[#5a25eb]/30 flex items-center justify-center shrink-0 font-bold text-[10px] text-[#5a25eb] dark:text-[#cbbeff] mt-0.5">
-                      {userName.slice(0, 2).toUpperCase()}
-                    </div>
-                  )}
-                </motion.div>
-              );
-            })}
-
-            {isStreaming && streamingText && (
+          {/* Messages */}
+          {messages.map((msg) => {
+            const isUser = msg.sender === 'user';
+            return (
               <motion.div
+                key={msg.id}
                 initial={{ opacity: 0, y: 5 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="flex gap-2.5 max-w-2xl mr-auto justify-start"
+                transition={{ duration: 0.12 }}
+                className={`flex gap-3 max-w-3xl lg:max-w-4xl ${isUser ? 'ml-auto justify-end' : 'mr-auto justify-start'}`}
               >
-                <div className="w-7 h-7 rounded-full bg-[#5a25eb]/15 border border-[#5a25eb]/30 flex items-center justify-center shrink-0 shadow-xs mt-0.5 overflow-hidden">
-                  <AILoaderOrb state={isSpeakingVoice ? 'speaking' : 'generating'} variant="avatar" size={22} />
-                </div>
-                <div className="p-3.5 rounded-2xl text-xs sm:text-sm bg-white/85 dark:bg-[#0c0c12] border-2 border-[#5a25eb] text-zinc-900 dark:text-white shadow-xs backdrop-blur-md">
-                  <div className="leading-relaxed">
-                    {renderFormattedContent(streamingText, false)}
-                    <span className="inline-block w-1.5 h-3.5 bg-[#5a25eb] ml-1 animate-pulse align-middle" />
+                {!isUser && (
+                  <div className="w-7 h-7 rounded-full bg-white/80 dark:bg-[#12121c] border border-blue-200 dark:border-[#222230] flex items-center justify-center shrink-0 shadow-2xs mt-0.5 overflow-hidden">
+                    <AILoaderOrb state={isSpeakingVoice ? 'speaking' : 'idle'} variant="avatar" size={22} />
                   </div>
-                </div>
-              </motion.div>
-            )}
+                )}
 
-            {isTyping && !isStreaming && (
+                <div className={`space-y-1 ${isUser ? 'items-end' : 'items-start'}`}>
+                  <div
+                    className={`p-3.5 rounded-2xl text-xs sm:text-sm leading-relaxed ${
+                      isUser
+                        ? 'bg-[#5a25eb] text-white rounded-br-xs shadow-xs font-medium'
+                        : 'bg-white/85 dark:bg-[#0c0c12] border border-blue-200/70 dark:border-[#1c1c28] text-zinc-900 dark:text-[#e4e1e8] rounded-bl-xs shadow-2xs backdrop-blur-md'
+                    }`}
+                  >
+                    {isUser && msg.attachment && (
+                      <div className="mb-2 p-2 rounded-xl bg-white/15 border border-white/25 flex items-center gap-2 text-white">
+                        <div className="p-1.5 rounded-lg bg-white/20 shrink-0">
+                          <FileText className="w-3.5 h-3.5 text-white" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-semibold truncate leading-tight">{msg.attachment.name}</p>
+                          <p className="text-[10px] text-white/75 font-mono">{msg.attachment.size}</p>
+                        </div>
+                      </div>
+                    )}
+
+                    <div>{renderFormattedContent(msg.content, isUser)}</div>
+
+                    {!isUser && (
+                      <div className="mt-2.5 pt-2 border-t border-zinc-100 dark:border-white/10 flex items-center justify-between text-[10px] text-zinc-400">
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => {
+                              if (isMuted) setIsMuted(false);
+                              speakText(msg.content);
+                            }}
+                            className="flex items-center gap-1 text-[#5a25eb] dark:text-[#cbbeff] hover:underline font-semibold cursor-pointer"
+                          >
+                            <Volume2 className="w-3 h-3" />
+                            <span>Listen</span>
+                          </button>
+                          <span>•</span>
+                          <button
+                            onClick={() => handleCopy(msg.id, msg.content)}
+                            className="flex items-center gap-1 hover:text-zinc-900 dark:hover:text-white cursor-pointer"
+                          >
+                            {copiedId === msg.id ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                            <span>{copiedId === msg.id ? 'Copied' : 'Copy'}</span>
+                          </button>
+                        </div>
+                        <span className="font-mono text-[9px]">{msg.timestamp}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {!isUser && msg.sourceType && (
+                    <div className="flex flex-wrap items-center gap-1 pt-0.5">
+                      {msg.sourceType === 'evidence-backed' && (
+                        <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] bg-emerald-500/10 border border-emerald-500/25 text-emerald-600 dark:text-emerald-400 font-medium">
+                          <FileCheck className="w-3 h-3" />
+                          <span className="font-mono text-[9px] truncate max-w-[180px]">
+                            {msg.evidenceDoc || 'Degree_Certificate_SLRTCE_2024.pdf'}
+                          </span>
+                        </div>
+                      )}
+                      {msg.sourceType === 'user-confirmed' && (
+                        <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] bg-[#5a25eb]/10 border border-[#5a25eb]/25 text-[#5a25eb] dark:text-[#cbbeff]">
+                          <UserCheck className="w-3 h-3" />
+                          <span>{msg.sourceNote || 'Self-asserted'}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {isUser && (
+                    <div className="text-right text-[9px] text-zinc-400">
+                      {msg.timestamp}
+                    </div>
+                  )}
+                </div>
+
+                {isUser && (
+                  <div className="w-7 h-7 rounded-full bg-[#5a25eb]/15 border border-[#5a25eb]/30 flex items-center justify-center shrink-0 font-bold text-[10px] text-[#5a25eb] dark:text-[#cbbeff] mt-0.5">
+                    {userName.slice(0, 2).toUpperCase()}
+                  </div>
+                )}
+              </motion.div>
+            );
+          })}
+
+          {isStreaming && streamingText && (
+            <motion.div
+              initial={{ opacity: 0, y: 5 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex gap-2.5 max-w-2xl mr-auto justify-start"
+            >
+              <div className="w-7 h-7 rounded-full bg-[#5a25eb]/15 border border-[#5a25eb]/30 flex items-center justify-center shrink-0 shadow-xs mt-0.5 overflow-hidden">
+                <AILoaderOrb state={isSpeakingVoice ? 'speaking' : 'generating'} variant="avatar" size={22} />
+              </div>
+              <div className="p-3.5 rounded-2xl text-xs sm:text-sm bg-white/85 dark:bg-[#0c0c12] border-2 border-[#5a25eb] text-zinc-900 dark:text-white shadow-xs backdrop-blur-md">
+                <div className="leading-relaxed">
+                  {renderFormattedContent(streamingText, false)}
+                  <span className="inline-block w-1.5 h-3.5 bg-[#5a25eb] ml-1 animate-pulse align-middle" />
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {isTyping && !isStreaming && (
+            <motion.div
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex items-center gap-2.5 py-1.5"
+            >
+              <div className="inline-flex h-9 items-center gap-2.5 rounded-full pl-2.5 pr-4 bg-white/85 dark:bg-[#0c0c12] border border-blue-200 dark:border-[#222230] shadow-xs backdrop-blur-md">
+                <ThinkingOrb
+                  state={currentThinkingStep.state}
+                  size={20}
+                  theme="auto"
+                />
+                <AnimatePresence mode="wait">
+                  <motion.span
+                    key={currentThinkingStep.text}
+                    initial={{ opacity: 0, y: 3 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -3 }}
+                    transition={{ duration: 0.22 }}
+                    className="whitespace-nowrap text-xs font-medium text-zinc-700 dark:text-zinc-200"
+                  >
+                    {currentThinkingStep.text}
+                  </motion.span>
+                </AnimatePresence>
+              </div>
+            </motion.div>
+          )}
+
+          <div ref={messagesEndRef} />
+        </div>
+
+        {/* === BOTTOM INPUT BAR === */}
+        <div className="pt-1.5 pb-2 sm:pb-3 bg-transparent shrink-0 space-y-2 relative z-20 px-2 sm:px-3">
+
+          {/* Attached File Preview */}
+          <AnimatePresence>
+            {attachedFile && (
               <motion.div
-                initial={{ opacity: 0, y: 4 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="flex items-center gap-2.5 py-1.5"
+                initial={{ opacity: 0, y: 6, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 4, scale: 0.95 }}
+                className="flex items-center gap-2 p-1.5 pl-2.5 pr-2 rounded-xl bg-white/85 dark:bg-[#12121c] border border-blue-200 dark:border-[#272738] shadow-xs backdrop-blur-md max-w-sm"
               >
-                <div className="inline-flex h-9 items-center gap-2.5 rounded-full pl-2.5 pr-4 bg-white/85 dark:bg-[#0c0c12] border border-blue-200 dark:border-[#222230] shadow-xs backdrop-blur-md">
-                  <ThinkingOrb
-                    state={currentThinkingStep.state}
-                    size={20}
-                    theme="auto"
-                  />
-                  <AnimatePresence mode="wait">
-                    <motion.span
-                      key={currentThinkingStep.text}
-                      initial={{ opacity: 0, y: 3 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -3 }}
-                      transition={{ duration: 0.22 }}
-                      className="whitespace-nowrap text-xs font-medium text-zinc-700 dark:text-zinc-200"
-                    >
-                      {currentThinkingStep.text}
-                    </motion.span>
-                  </AnimatePresence>
+                <div className="p-1 rounded-md bg-[#5a25eb]/10 dark:bg-[#5a25eb]/20 text-[#5a25eb] dark:text-[#cbbeff] shrink-0">
+                  <FileText className="w-3.5 h-3.5" />
                 </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold text-zinc-900 dark:text-zinc-100 truncate">{attachedFile.name}</p>
+                  <p className="text-[10px] text-zinc-500 dark:text-zinc-400 font-mono">{attachedFile.formattedSize}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setAttachedFile(null)}
+                  className="p-1 rounded-md text-zinc-400 hover:text-zinc-700 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                  title="Remove attachment"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
               </motion.div>
             )}
-          </>
-        )}
+          </AnimatePresence>
 
-        <div ref={messagesEndRef} />
-      </div>
+          {/* Intelligent Control Panel / Composer with Animated Border Beam */}
+          <div className="relative w-full max-w-[1050px] mx-auto rounded-[30px] sm:rounded-[34px] p-[1.5px] overflow-hidden group">
+            {/* Animated Rotating Conic Glow Beam */}
+            <motion.div
+              animate={{ rotate: 360 }}
+              transition={{ duration: 8, repeat: Infinity, ease: 'linear' }}
+              className="absolute -inset-[150%] w-[400%] h-[400%] left-[-150%] top-[-150%] pointer-events-none z-0"
+              style={{
+                background:
+                  theme === 'dark'
+                    ? 'conic-gradient(from 0deg, transparent 0deg, transparent 70deg, rgba(90, 37, 235, 0.7) 120deg, rgba(56, 189, 248, 0.85) 180deg, rgba(203, 190, 255, 0.75) 240deg, transparent 290deg, transparent 360deg)'
+                    : 'conic-gradient(from 0deg, transparent 0deg, transparent 70deg, rgba(90, 37, 235, 0.45) 120deg, rgba(56, 189, 248, 0.6) 180deg, rgba(140, 110, 255, 0.5) 240deg, transparent 290deg, transparent 360deg)',
+              }}
+            />
 
-          {/* === BOTTOM INPUT BAR === */}
-          <div className="pt-1.5 pb-2 sm:pb-3 bg-transparent shrink-0 space-y-2 relative z-20 px-2 sm:px-3">
+            {/* Inner Composer Body */}
+            <div
+              className="w-full rounded-[28px] sm:rounded-[32px] p-2.5 sm:p-3.5 relative z-10 transition-all
+                         border border-white/60 dark:border-white/10
+                         shadow-[0_12px_45px_rgba(90,70,255,0.12)]
+                         dark:shadow-[0_12px_45px_rgba(0,0,0,0.45)]
+                         backdrop-blur-xl"
+              style={{
+                background:
+                  theme === 'dark'
+                    ? 'radial-gradient(circle at 20% 0%, rgba(90, 37, 235, 0.18), transparent 50%), radial-gradient(circle at 90% 100%, rgba(139, 92, 246, 0.14), transparent 55%), linear-gradient(135deg, rgba(22, 20, 38, 0.94), rgba(14, 13, 28, 0.92))'
+                    : 'radial-gradient(circle at 20% 0%, rgba(210, 220, 255, 0.40), transparent 50%), radial-gradient(circle at 90% 100%, rgba(220, 205, 255, 0.35), transparent 55%), linear-gradient(135deg, rgba(248, 250, 255, 0.96), rgba(241, 243, 255, 0.92))',
+              }}
+            >
+              {/* Elevated Inner Input Surface */}
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  handleSendMessage();
+                }}
+                className="relative flex items-center
+                           bg-white/80 dark:bg-[#0a0a14]/80
+                           rounded-[18px] sm:rounded-[20px]
+                           border border-[#96aaff]/25 dark:border-white/10
+                           shadow-[inset_0_1px_0_rgba(255,255,255,0.85)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]
+                           focus-within:border-[#6e5aff]/50 focus-within:shadow-[0_0_24px_rgba(110,90,255,0.14)]
+                           transition-all p-1.5 z-10 backdrop-blur-md"
+              >
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleFileChange}
+                  className="hidden"
+                  accept=".pdf,.png,.jpg,.jpeg,.doc,.docx,.txt,.json,.csv"
+                />
 
-            {/* Attached File Preview */}
-            <AnimatePresence>
-              {attachedFile && (
-                <motion.div
-                  initial={{ opacity: 0, y: 6, scale: 0.95 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: 4, scale: 0.95 }}
-                  className="flex items-center gap-2 p-1.5 pl-2.5 pr-2 rounded-xl bg-white/85 dark:bg-[#12121c] border border-blue-200 dark:border-[#272738] shadow-xs backdrop-blur-md max-w-sm"
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="p-2 rounded-xl text-zinc-400 hover:text-zinc-700 dark:text-zinc-500 dark:hover:text-white transition-colors cursor-pointer ml-1"
+                  title="Attach document or image"
+                  aria-label="Attach file"
                 >
-                  <div className="p-1 rounded-md bg-[#5a25eb]/10 dark:bg-[#5a25eb]/20 text-[#5a25eb] dark:text-[#cbbeff] shrink-0">
-                    <FileText className="w-3.5 h-3.5" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs font-semibold text-zinc-900 dark:text-zinc-100 truncate">{attachedFile.name}</p>
-                    <p className="text-[10px] text-zinc-500 dark:text-zinc-400 font-mono">{attachedFile.formattedSize}</p>
-                  </div>
+                  <Paperclip className="w-4 h-4" />
+                </button>
+
+                <input
+                  type="text"
+                  value={inputText}
+                  onChange={(e) => setInputText(e.target.value)}
+                  placeholder={
+                    voiceState === 'listening'
+                      ? 'Listening...'
+                      : attachedFile
+                      ? `Message with ${attachedFile.name}...`
+                      : chatMode === 'save'
+                      ? 'Save record (e.g. "Passport: Z8921098")...'
+                      : chatMode === 'share'
+                      ? 'Share fields (e.g. "Degree with Acme")...'
+                      : 'Ask me anything...'
+                  }
+                  className="flex-1 bg-transparent px-3 py-2 text-sm sm:text-base text-zinc-900 dark:text-zinc-100 placeholder-[#6B7280] focus:outline-none"
+                />
+
+                <button
+                  type="button"
+                  onClick={openVoiceModal}
+                  className={`p-2 rounded-xl transition-all cursor-pointer mr-1.5 ${
+                    voiceState === 'listening' || isVoiceModalOpen
+                      ? 'bg-red-500 text-white animate-pulse'
+                      : 'text-zinc-400 hover:text-zinc-700 dark:text-zinc-500 dark:hover:text-white'
+                  }`}
+                  title="Open Voice Chat Mode"
+                  aria-label="Voice Chat Mode"
+                >
+                  {voiceState === 'listening' ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={(!inputText.trim() && !attachedFile) || isTyping || isStreaming}
+                  className="w-9 h-9 sm:w-10 sm:h-10 rounded-[14px] bg-gradient-to-br from-[#c9b8ff] to-[#b9a4ff] dark:from-[#8b5cf6] dark:to-[#6d28d9] text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-[0_5px_15px_rgba(120,90,255,0.22)] cursor-pointer flex items-center justify-center shrink-0 mr-0.5"
+                  aria-label="Send"
+                >
+                  <ArrowUp className="w-4 h-4 stroke-[3]" />
+                </button>
+              </form>
+
+              {/* Lower Toolbar */}
+              <div className="flex items-center justify-between gap-3 pt-2.5 mt-2.5 border-t border-black/[0.05] dark:border-white/[0.06] px-1 relative z-10">
+                <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+                  {/* Voice Mode Button */}
                   <button
                     type="button"
-                    onClick={() => setAttachedFile(null)}
-                    className="p-1 rounded-md text-zinc-400 hover:text-zinc-700 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
-                    title="Remove attachment"
+                    onClick={openVoiceModal}
+                    className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-[#7d5fff]/08 hover:bg-[#7d5fff]/14 text-[#6548E8] dark:text-[#cbbeff] border border-[#7d5fff]/22 transition-all cursor-pointer shadow-2xs"
+                    title="Launch Animated Voice Screen"
                   >
-                    <X className="w-3.5 h-3.5" />
+                    <Mic className="w-3.5 h-3.5" />
+                    <span>Voice Mode</span>
                   </button>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            {/* Input Container with Animated Gradient Border */}
-            <motion.div
-              animate={{
-                boxShadow: [
-                  '0 0 15px rgba(90, 37, 235, 0.2), inset 0 0 10px rgba(90, 37, 235, 0.05)',
-                  '0 0 25px rgba(90, 37, 235, 0.4), inset 0 0 15px rgba(90, 37, 235, 0.1)',
-                  '0 0 15px rgba(90, 37, 235, 0.2), inset 0 0 10px rgba(90, 37, 235, 0.05)'
-                ]
-              }}
-              transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-              className="w-full max-w-3xl xl:max-w-4xl mx-auto rounded-3xl p-[1.5px] relative overflow-hidden
-                         bg-white/60 dark:bg-[#0c0c12]"
-            >
-              <motion.div
-                animate={{
-                  backgroundPosition: ['0% 50%', '100% 50%', '0% 50%']
-                }}
-                transition={{ duration: 6, repeat: Infinity, ease: "linear" }}
-                className="absolute inset-0 rounded-3xl opacity-80"
-                style={{
-                  background: 'linear-gradient(90deg, #5a25eb, #93c5fd, #cbbeff, #5a25eb)',
-                  backgroundSize: '300% 300%',
-                }}
-              />
-
-              <div className="relative w-full h-full
-                              bg-white/85 dark:bg-[#0c0c12]/95
-                              backdrop-blur-xl
-                              rounded-[calc(1.5rem-1px)] p-3 z-10">
-
-                <div className="absolute top-0 left-0 right-0 h-1/2 bg-gradient-to-b from-white/50 dark:from-white/[0.03] to-transparent pointer-events-none rounded-t-[calc(1.5rem-1px)]" />
-
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    handleSendMessage();
-                  }}
-                  className="relative flex items-center
-                             bg-white/70 dark:bg-[#050508]/80
-                             rounded-2xl
-                             border border-blue-200/80 dark:border-[#1a1a24]
-                             focus-within:border-[#5a25eb]/50
-                             focus-within:ring-1 focus-within:ring-[#5a25eb]/20
-                             transition-all p-1 z-10 backdrop-blur-md"
-                >
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    onChange={handleFileChange}
-                    className="hidden"
-                    accept=".pdf,.png,.jpg,.jpeg,.doc,.docx,.txt,.json,.csv"
-                  />
 
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    className="p-2 rounded-xl text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white hover:bg-blue-100/60 dark:hover:bg-zinc-800/50 transition-colors cursor-pointer ml-1"
-                    title="Attach document or image"
-                    aria-label="Attach file"
+                    className="flex items-center gap-1.5 text-xs font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors cursor-pointer"
                   >
-                    <Paperclip className="w-4 h-4" />
+                    <Paperclip className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Import file</span>
                   </button>
 
-                  <input
-                    type="text"
-                    value={inputText}
-                    onChange={(e) => setInputText(e.target.value)}
-                    placeholder={
-                      voiceState === 'listening'
-                        ? 'Listening...'
-                        : attachedFile
-                        ? `Message with ${attachedFile.name}...`
-                        : chatMode === 'save'
-                        ? 'Save record (e.g. "Passport: Z8921098")...'
-                        : chatMode === 'share'
-                        ? 'Share fields (e.g. "Degree with Acme")...'
-                        : 'Ask me anything...'
-                    }
-                    className="flex-1 bg-transparent px-3 py-2 text-xs sm:text-sm text-zinc-800 dark:text-zinc-100 placeholder-zinc-500 focus:outline-none"
-                  />
-
-                  <button
-                    type="button"
-                    onClick={openVoiceModal}
-                    className={`p-2 rounded-xl transition-all cursor-pointer mr-1 ${
-                      voiceState === 'listening' || isVoiceModalOpen
-                        ? 'bg-red-500 text-white animate-pulse'
-                        : 'text-zinc-500 hover:text-[#5a25eb] dark:hover:text-white hover:bg-blue-100/60 dark:hover:bg-zinc-800/50'
-                    }`}
-                    title="Open ChatGPT-style Voice Chat Mode"
-                    aria-label="Voice Chat Mode"
-                  >
-                    {voiceState === 'listening' ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
-                  </button>
-
-                  <button
-                    type="submit"
-                    disabled={(!inputText.trim() && !attachedFile) || isTyping || isStreaming}
-                    className="p-2 rounded-xl bg-[#5a25eb] hover:bg-[#6b37fa] text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-md shadow-[#5a25eb]/30 cursor-pointer mr-1"
-                    aria-label="Send"
-                  >
-                    <ArrowUp className="w-4 h-4 stroke-[3]" />
-                  </button>
-                </form>
-
-                <div className="flex items-center justify-between gap-3 mt-3 px-1 relative z-10">
-                  <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-                    {/* Voice Mode Button */}
+                  {/* Interactive Tools Menu */}
+                  <div className="relative">
                     <button
                       type="button"
-                      onClick={openVoiceModal}
-                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-[#5a25eb]/10 hover:bg-[#5a25eb]/20 text-[#5a25eb] dark:text-[#cbbeff] border border-[#5a25eb]/30 transition-all cursor-pointer shadow-xs"
-                      title="Launch ChatGPT-style Animated Voice Screen"
-                    >
-                      <Mic className="w-3.5 h-3.5" />
-                      <span>Voice Mode</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      className="flex items-center gap-1.5 text-[11px] font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors cursor-pointer"
-                    >
-                      <Paperclip className="w-3.5 h-3.5" />
-                      <span className="hidden sm:inline">Import file</span>
-                    </button>
-
-                    {/* Interactive Tools Menu */}
-                    <div className="relative">
-                      <button
-                        type="button"
-                        onClick={() => setIsToolsOpen(!isToolsOpen)}
-                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium transition-all cursor-pointer ${
-                          chatMode !== 'normal'
-                            ? 'bg-[#5a25eb]/15 text-[#5a25eb] dark:text-[#cbbeff] border border-[#5a25eb]/30 shadow-xs'
-                            : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/10'
-                        }`}
-                        title="Select AI Chat Tool Mode"
-                      >
-                        <Sparkles className="w-3.5 h-3.5" />
-                        <span>Tools</span>
-                        {chatMode !== 'normal' && (
-                          <span className="font-semibold capitalize px-1.5 py-0.2 rounded-full text-[10px] bg-[#5a25eb] text-white">
-                            {chatMode}
-                          </span>
-                        )}
-                      </button>
-
-                      {/* Tools Popover Dropdown */}
-                      <AnimatePresence>
-                        {isToolsOpen && (
-                          <motion.div
-                            initial={{ opacity: 0, y: 8, scale: 0.96 }}
-                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                            exit={{ opacity: 0, y: 8, scale: 0.96 }}
-                            className="absolute bottom-full left-0 mb-2.5 w-64 p-2 rounded-2xl bg-white/95 dark:bg-[#10101c]/95 backdrop-blur-2xl border border-blue-200/80 dark:border-white/15 shadow-2xl z-40 space-y-1"
-                          >
-                            <div className="px-2.5 py-1 text-[10px] font-mono text-zinc-400 font-bold uppercase tracking-wider">
-                              AI Mode & Tools
-                            </div>
-
-                            <button
-                              type="button"
-                              onClick={() => { setChatMode('normal'); setIsToolsOpen(false); }}
-                              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all text-left cursor-pointer ${
-                                chatMode === 'normal'
-                                    ? 'bg-[#5a25eb] text-white shadow-xs'
-                                  : 'text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-white/10'
-                              }`}
-                            >
-                              <QuestionIcon className="w-4 h-4 shrink-0" />
-                              <div className="flex-1 min-w-0">
-                                <span className="block font-bold">Normal Mode</span>
-                                <span className={`text-[10px] block truncate ${chatMode === 'normal' ? 'text-white/80' : 'text-zinc-400'}`}>Zero-knowledge retrieval</span>
-                              </div>
-                              {chatMode === 'normal' && <Check className="w-3.5 h-3.5" />}
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => { setChatMode('save'); setIsToolsOpen(false); }}
-                              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all text-left cursor-pointer ${
-                                chatMode === 'save'
-                                  ? 'bg-emerald-600 text-white shadow-xs'
-                                  : 'text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-white/10'
-                              }`}
-                            >
-                              <Save className="w-4 h-4 shrink-0" />
-                              <div className="flex-1 min-w-0">
-                                <span className="block font-bold">Save Record</span>
-                                <span className={`text-[10px] block truncate ${chatMode === 'save' ? 'text-white/80' : 'text-zinc-400'}`}>Encrypt to personal vault</span>
-                              </div>
-                              {chatMode === 'save' && <Check className="w-3.5 h-3.5" />}
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => { setChatMode('share'); setIsToolsOpen(false); }}
-                              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all text-left cursor-pointer ${
-                                chatMode === 'share'
-                                  ? 'bg-[#8a54ff] text-white shadow-xs'
-                                  : 'text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-white/10'
-                              }`}
-                            >
-                              <Share2 className="w-4 h-4 shrink-0" />
-                              <div className="flex-1 min-w-0">
-                                <span className="block font-bold">Selective Share</span>
-                                <span className={`text-[10px] block truncate ${chatMode === 'share' ? 'text-white/80' : 'text-zinc-400'}`}>Scoped zk-SNARK link</span>
-                              </div>
-                              {chatMode === 'share' && <Check className="w-3.5 h-3.5" />}
-                            </button>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 text-[10px] text-zinc-400">
-                    {/* Global Mute Toggle Button */}
-                    <button
-                      type="button"
-                      onClick={toggleMute}
-                      className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium transition-all cursor-pointer ${
-                        isMuted
-                          ? 'bg-red-500/15 text-red-500 border border-red-500/30'
-                          : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/10'
+                      onClick={() => setIsToolsOpen(!isToolsOpen)}
+                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-all cursor-pointer ${
+                        chatMode !== 'normal'
+                          ? 'bg-[#5a25eb]/15 text-[#5a25eb] dark:text-[#cbbeff] border border-[#5a25eb]/30 shadow-2xs'
+                          : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
                       }`}
-                      title={isMuted ? 'Voice is Muted (Click to Unmute)' : 'Mute AI Voice Speech Output'}
+                      title="Select AI Chat Tool Mode"
                     >
-                      {isMuted ? <VolumeX className="w-3.5 h-3.5 text-red-500" /> : <Volume2 className="w-3.5 h-3.5" />}
-                      <span>{isMuted ? 'Muted' : 'Mute'}</span>
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>Tools</span>
+                      {chatMode !== 'normal' && (
+                        <span className="font-semibold capitalize px-1.5 py-0.2 rounded-full text-[10px] bg-[#5a25eb] text-white">
+                          {chatMode}
+                        </span>
+                      )}
                     </button>
 
-                    {isSpeakingVoice && (
-                      <button
-                        onClick={stopAudio}
-                        className="p-1 rounded-lg text-red-500 hover:bg-red-500/10 transition-colors cursor-pointer"
-                        title="Stop Current Audio"
-                      >
-                        <VolumeX className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                    {messages.length > 0 && (
-                      <button
-                        onClick={handleResetChat}
-                        className="flex items-center gap-1 px-2 py-0.8 rounded-lg text-zinc-500 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
-                        title="Clear Chat History"
-                      >
-                        <RotateCcw className="w-3 h-3" />
-                        <span className="text-[10px]">Clear</span>
-                      </button>
-                    )}
-                    <div className="hidden sm:flex items-center gap-1 text-[10px] text-zinc-400">
-                      <ShieldCheck className="w-3 h-3 text-emerald-500" />
-                      <span>Encrypted</span>
-                    </div>
+                    {/* Tools Popover Dropdown */}
+                    <AnimatePresence>
+                      {isToolsOpen && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 8, scale: 0.96 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: 8, scale: 0.96 }}
+                          className="absolute bottom-full left-0 mb-2.5 w-64 p-2 rounded-2xl bg-white/95 dark:bg-[#10101c]/95 backdrop-blur-2xl border border-blue-200/80 dark:border-white/15 shadow-2xl z-40 space-y-1"
+                        >
+                          <div className="px-2.5 py-1 text-[10px] font-mono text-zinc-400 font-bold uppercase tracking-wider">
+                            AI Mode & Tools
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => { setChatMode('normal'); setIsToolsOpen(false); }}
+                            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all text-left cursor-pointer ${
+                              chatMode === 'normal'
+                                  ? 'bg-[#5a25eb] text-white shadow-xs'
+                                : 'text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-white/10'
+                            }`}
+                          >
+                            <QuestionIcon className="w-4 h-4 shrink-0" />
+                            <div className="flex-1 min-w-0">
+                              <span className="block font-bold">Normal Mode</span>
+                              <span className={`text-[10px] block truncate ${chatMode === 'normal' ? 'text-white/80' : 'text-zinc-400'}`}>Zero-knowledge retrieval</span>
+                            </div>
+                            {chatMode === 'normal' && <Check className="w-3.5 h-3.5" />}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => { setChatMode('save'); setIsToolsOpen(false); }}
+                            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all text-left cursor-pointer ${
+                              chatMode === 'save'
+                                ? 'bg-emerald-600 text-white shadow-xs'
+                                : 'text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-white/10'
+                            }`}
+                          >
+                            <Save className="w-4 h-4 shrink-0" />
+                            <div className="flex-1 min-w-0">
+                              <span className="block font-bold">Save Record</span>
+                              <span className={`text-[10px] block truncate ${chatMode === 'save' ? 'text-white/80' : 'text-zinc-400'}`}>Encrypt to personal vault</span>
+                            </div>
+                            {chatMode === 'save' && <Check className="w-3.5 h-3.5" />}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => { setChatMode('share'); setIsToolsOpen(false); }}
+                            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all text-left cursor-pointer ${
+                              chatMode === 'share'
+                                ? 'bg-[#8a54ff] text-white shadow-xs'
+                                : 'text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-white/10'
+                            }`}
+                          >
+                            <Share2 className="w-4 h-4 shrink-0" />
+                            <div className="flex-1 min-w-0">
+                              <span className="block font-bold">Selective Share</span>
+                              <span className={`text-[10px] block truncate ${chatMode === 'share' ? 'text-white/80' : 'text-zinc-400'}`}>Scoped zk-SNARK link</span>
+                            </div>
+                            {chatMode === 'share' && <Check className="w-3.5 h-3.5" />}
+                          </button>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
                 </div>
 
+                <div className="flex items-center gap-2 text-[10px] text-zinc-400">
+                  {/* Global Mute Toggle Button */}
+                  <button
+                    type="button"
+                    onClick={toggleMute}
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium transition-all cursor-pointer ${
+                      isMuted
+                        ? 'bg-red-500/15 text-red-500 border border-red-500/30'
+                        : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/10'
+                    }`}
+                    title={isMuted ? 'Voice is Muted (Click to Unmute)' : 'Mute AI Voice Speech Output'}
+                  >
+                    {isMuted ? <VolumeX className="w-3.5 h-3.5 text-red-500" /> : <Volume2 className="w-3.5 h-3.5" />}
+                    <span>{isMuted ? 'Muted' : 'Mute'}</span>
+                  </button>
+
+                  {isSpeakingVoice && (
+                    <button
+                      onClick={stopAudio}
+                      className="p-1 rounded-lg text-red-500 hover:bg-red-500/10 transition-colors cursor-pointer"
+                      title="Stop Current Audio"
+                    >
+                      <VolumeX className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                  {messages.length > 0 && (
+                    <button
+                      onClick={handleResetChat}
+                      className="flex items-center gap-1 px-2 py-0.8 rounded-lg text-zinc-500 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                      title="Clear Chat History"
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      <span className="text-[10px]">Clear</span>
+                    </button>
+                  )}
+                  <div className="hidden sm:flex items-center gap-1 text-[11px] text-zinc-400">
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-500/80" />
+                    <span className="text-zinc-500 dark:text-zinc-400">Encrypted</span>
+                  </div>
+                </div>
               </div>
-            </motion.div>
-
-            <p className="text-[10px] text-center text-zinc-400 dark:text-zinc-600 mt-2 relative z-10">
-              SYNDEO AI • Zero-knowledge cryptographic personal records
-            </p>
+            </div>
           </div>
-        </div>
 
+          <p className="text-[10px] text-center text-zinc-400 dark:text-zinc-600 mt-2 relative z-10">
+            SYNDEO AI • Zero-knowledge cryptographic personal records
+          </p>
+        </div>
       </div>
-    );
-  };
+    </div>
+  );
+};

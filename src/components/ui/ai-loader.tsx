@@ -66,13 +66,10 @@ export const Component: React.FC<LoaderProps> = ({
 
   // Hero / Big Middle Screen Glowing Orb (for start screen & voice copilot)
   const content = (
-    <div className={`relative flex flex-col items-center justify-center select-none ${className}`}>
-      {/* Ambient Glow Aura */}
-      <div className="absolute -top-6 left-1/2 -translate-x-1/2 w-64 h-64 bg-[#005dff]/15 dark:bg-[#38bdf8]/20 rounded-full blur-3xl pointer-events-none" />
-
+    <div className={`relative flex flex-col items-center justify-center select-none overflow-visible ${className}`}>
       {/* Main Rotating Circular Orb */}
       <div
-        className="relative flex items-center justify-center font-inter select-none my-2"
+        className="relative flex items-center justify-center font-inter select-none my-2 overflow-visible"
         style={{ width: computedSize, height: computedSize }}
       >
         {/* Spelled Letter Animations with crisp high-contrast theme styling */}

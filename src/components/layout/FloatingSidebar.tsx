@@ -479,48 +479,6 @@ export const FloatingSidebar: React.FC<FloatingSidebarProps> = ({
           </div>
         )}
       </AnimatePresence>
-
-      {/* =========================================================================
-          MOBILE FLOATING BOTTOM CAPSULE NAVIGATION BAR (When collapsed on mobile)
-         ========================================================================= */}
-      <nav
-        className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 block md:hidden p-1.5 rounded-full
-                   bg-white/80 dark:bg-[#0e0e18]/85
-                   backdrop-blur-[24px] backdrop-saturate-[140%]
-                   border border-black/[0.08] dark:border-white/[0.12]
-                   shadow-[0_12px_40px_rgba(0,0,0,0.25)]
-                   select-none max-w-[92vw]"
-        aria-label="Mobile Bottom Navigation"
-      >
-        <div className="flex items-center gap-1.5">
-          {navItems.map((item) => {
-            const isActive = currentPath === item.path;
-            const Icon = item.icon;
-
-            return (
-              <button
-                key={item.path}
-                onClick={() => handleNav(item.path)}
-                className={`relative px-4 py-2.5 rounded-full flex items-center gap-1.5 transition-all duration-300 cursor-pointer ${
-                  isActive
-                    ? isDark
-                      ? 'bg-white text-[#111111] font-bold shadow-md'
-                      : 'bg-[#111111] text-white font-bold shadow-md'
-                    : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
-                }`}
-                title={item.label}
-              >
-                <Icon className={`w-4 h-4 ${isActive ? 'stroke-[2.2]' : 'stroke-[1.8]'}`} />
-                {isActive && (
-                  <span className="text-xs font-semibold whitespace-nowrap">
-                    {item.label.split(' ')[0]}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-      </nav>
     </>
   );
 };
