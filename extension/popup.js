@@ -1,26 +1,25 @@
 /**
- * SYNDEO Form Scanner — Popup Script (Phase 1)
+ * SYNDEO Secure MemoryFill — Popup Controller
  *
- * READ-ONLY GUARANTEE:
- * - Safely renders webpage metadata without injecting untrusted HTML.
- * - Performs zero data mutations, value assignments, or network transmissions.
+ * Core Principle:
+ * AI proposes → Backend validates → Policy authorizes → User approves → Extension fills → User submits → Audit records
  */
 
 (function () {
   'use strict';
 
-  // State
+  // Application State
   let currentScanResult = null;
-  let currentFilterCategory = 'all';
-  let searchQuery = '';
+  let currentMappingResult = null;
+  let selectedFieldIds = new Set();
+  let currentOrigin = '';
 
   // UI Element References
   const scanBtn = document.getElementById('scanBtn');
   const scanBtnText = document.getElementById('scanBtnText');
-  const filterInput = document.getElementById('filterInput');
-  const copyJsonBtn = document.getElementById('copyJsonBtn');
-  const categoryTabs = document.getElementById('categoryTabs');
-  const fieldsList = document.getElementById('fieldsList');
+  const mapBtn = document.getElementById('mapBtn');
+  const mapBannerBtn = document.getElementById('mapBannerBtn');
+  const vaultUserName = document.getElementById('vaultUserName');
 
   // State Views
   const stateInitial = document.getElementById('stateInitial');
@@ -28,31 +27,41 @@
   const stateRestricted = document.getElementById('stateRestricted');
   const stateError = document.getElementById('stateError');
   const stateEmpty = document.getElementById('stateEmpty');
-  const stateResults = document.getElementById('stateResults');
-  const errorMessage = document.getElementById('errorMessage');
+  const stateScanned = document.getElementById('stateScanned');
+  const stateApproval = document.getElementById('stateApproval');
+  const stateFilled = document.getElementById('stateFilled');
 
-  // Summary Elements
+  // Messages & Dynamic Text
+  const errorMessage = document.getElementById('errorMessage');
+  const scanningTitle = document.getElementById('scanningTitle');
+  const scanningDesc = document.getElementById('scanningDesc');
   const pageDomain = document.getElementById('pageDomain');
   const pageTitle = document.getElementById('pageTitle');
   const summaryCount = document.getElementById('summaryCount');
-  const countAll = document.getElementById('countAll');
-  const countInputs = document.getElementById('countInputs');
-  const countSelects = document.getElementById('countSelects');
-  const countOptions = document.getElementById('countOptions');
-  const countTextareas = document.getElementById('countTextareas');
-  const countRequired = document.getElementById('countRequired');
+  const rawFieldsList = document.getElementById('rawFieldsList');
+  const filterInput = document.getElementById('filterInput');
+
+  // Approval View Elements
+  const approvalOrigin = document.getElementById('approvalOrigin');
+  const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+  const approvedCountPill = document.getElementById('approvedCountPill');
+  const approvalFieldsList = document.getElementById('approvalFieldsList');
+  const executeFillBtn = document.getElementById('executeFillBtn');
+  const executeFillBtnText = document.getElementById('executeFillBtnText');
+
+  // Filled View Elements
+  const filledSummaryText = document.getElementById('filledSummaryText');
+  const verificationDetailsList = document.getElementById('verificationDetailsList');
+  const rescanAfterFillBtn = document.getElementById('rescanAfterFillBtn');
 
   /**
    * Switch visible state in the popup UI
-   * @param {'initial' | 'scanning' | 'restricted' | 'error' | 'empty' | 'results'} state
    */
   function showState(state) {
-    stateInitial.classList.add('hidden');
-    stateScanning.classList.add('hidden');
-    stateRestricted.classList.add('hidden');
-    stateError.classList.add('hidden');
-    stateEmpty.classList.add('hidden');
-    stateResults.classList.add('hidden');
+    [
+      stateInitial, stateScanning, stateRestricted, stateError,
+      stateEmpty, stateScanned, stateApproval, stateFilled,
+    ].forEach((el) => el && el.classList.add('hidden'));
 
     switch (state) {
       case 'initial':
@@ -70,271 +79,56 @@
       case 'empty':
         stateEmpty.classList.remove('hidden');
         break;
-      case 'results':
-        stateResults.classList.remove('hidden');
+      case 'scanned':
+        stateScanned.classList.remove('hidden');
+        break;
+      case 'approval':
+        stateApproval.classList.remove('hidden');
+        break;
+      case 'filled':
+        stateFilled.classList.remove('hidden');
         break;
     }
   }
 
-  /**
-   * Check if the given URL is a restricted Chrome page that cannot be scanned
-   * @param {string} url
-   * @returns {boolean}
-   */
   function isRestrictedUrl(url) {
     if (!url) return true;
-    const restrictedPrefixes = [
-      'chrome://',
-      'chrome-extension://',
-      'https://chrome.google.com/webstore',
-      'https://chromewebstore.google.com',
-      'edge://',
-      'about:',
-      'view-source:',
-    ];
-    return restrictedPrefixes.some((prefix) => url.startsWith(prefix));
+    const restricted = ['chrome://', 'chrome-extension://', 'https://chrome.google.com/webstore', 'https://chromewebstore.google.com', 'edge://', 'about:', 'view-source:'];
+    return restricted.some((p) => url.startsWith(p));
   }
 
-  /**
-   * Extract domain host from a full URL string
-   * @param {string} rawUrl
-   * @returns {string}
-   */
   function getHostname(rawUrl) {
     try {
       const parsed = new URL(rawUrl);
       return parsed.hostname || rawUrl;
     } catch {
-      return rawUrl || 'Current Page';
+      return rawUrl || 'Current Webpage';
     }
   }
 
   /**
-   * Render structured field cards safely into the fieldsList container
-   * using native document.createElement and textContent APIs.
+   * Check authenticated user session on startup
    */
-  function renderFields() {
-    if (!currentScanResult || !currentScanResult.fields) return;
-
-    fieldsList.innerHTML = '';
-    const query = searchQuery.trim().toLowerCase();
-
-    const filtered = currentScanResult.fields.filter((field) => {
-      // 1. Category Tab Filter
-      if (currentFilterCategory === 'input' && (field.tag !== 'input' || field.type === 'radio' || field.type === 'checkbox')) return false;
-      if (currentFilterCategory === 'select' && field.type !== 'select') return false;
-      if (currentFilterCategory === 'options' && field.type !== 'radio' && field.type !== 'checkbox' && (!field.options || field.options.length === 0)) return false;
-      if (currentFilterCategory === 'textarea' && field.type !== 'textarea') return false;
-      if (currentFilterCategory === 'required' && !field.required) return false;
-
-      // 2. Text Search Query
-      if (query) {
-        const matchLabel = (field.label || '').toLowerCase().includes(query);
-        const matchName = (field.name || '').toLowerCase().includes(query);
-        const matchId = (field.id || '').toLowerCase().includes(query);
-        const matchType = (field.type || '').toLowerCase().includes(query);
-        const matchPlaceholder = (field.placeholder || '').toLowerCase().includes(query);
-        const matchForm = (field.formId || '').toLowerCase().includes(query);
-        const matchOptions = Array.isArray(field.options) && field.options.some((opt) => (opt.label || opt.value || '').toLowerCase().includes(query));
-        return matchLabel || matchName || matchId || matchType || matchPlaceholder || matchForm || matchOptions;
+  function initAuthSession() {
+    chrome.runtime.sendMessage({ action: 'GET_AUTH_STATUS' }, (response) => {
+      if (response && response.success && response.data && response.data.user) {
+        const u = response.data.user;
+        vaultUserName.textContent = `${u.name} (Neo4j)`;
+        vaultUserName.title = `Vault Connected: ${u.claimsCount} verified claims active.`;
       }
-
-      return true;
-    });
-
-    if (filtered.length === 0) {
-      const emptyNotice = document.createElement('div');
-      emptyNotice.className = 'state-desc';
-      emptyNotice.style.textAlign = 'center';
-      emptyNotice.style.padding = '20px 0';
-      emptyNotice.textContent = 'No matching fields found for your filter.';
-      fieldsList.appendChild(emptyNotice);
-      return;
-    }
-
-    filtered.forEach((field) => {
-      const card = document.createElement('div');
-      card.className = 'field-card';
-
-      // Header: Label + Type Badge
-      const header = document.createElement('div');
-      header.className = 'field-header';
-
-      const labelEl = document.createElement('div');
-      labelEl.className = 'field-label';
-      labelEl.textContent = field.label || 'Unnamed field';
-
-      const typeBadge = document.createElement('span');
-      typeBadge.className = 'field-type-badge';
-      typeBadge.textContent = field.type || field.tag;
-
-      header.appendChild(labelEl);
-      header.appendChild(typeBadge);
-      card.appendChild(header);
-
-      // Meta Grid: name & id & placeholder
-      const metaGrid = document.createElement('div');
-      metaGrid.className = 'field-meta-grid';
-
-      if (field.name) {
-        const item = document.createElement('div');
-        item.className = 'meta-item';
-        const k = document.createElement('span');
-        k.className = 'meta-key';
-        k.textContent = 'name:';
-        const v = document.createElement('span');
-        v.className = 'meta-val';
-        v.textContent = field.name;
-        item.appendChild(k);
-        item.appendChild(v);
-        metaGrid.appendChild(item);
-      }
-
-      if (field.id) {
-        const item = document.createElement('div');
-        item.className = 'meta-item';
-        const k = document.createElement('span');
-        k.className = 'meta-key';
-        k.textContent = 'id:';
-        const v = document.createElement('span');
-        v.className = 'meta-val';
-        v.textContent = field.id;
-        item.appendChild(k);
-        item.appendChild(v);
-        metaGrid.appendChild(item);
-      }
-
-      if (field.placeholder) {
-        const item = document.createElement('div');
-        item.className = 'meta-item';
-        const k = document.createElement('span');
-        k.className = 'meta-key';
-        k.textContent = 'placeholder:';
-        const v = document.createElement('span');
-        v.className = 'meta-val';
-        v.textContent = `"${field.placeholder}"`;
-        item.appendChild(k);
-        item.appendChild(v);
-        metaGrid.appendChild(item);
-      }
-
-      if (metaGrid.children.length > 0) {
-        card.appendChild(metaGrid);
-      }
-
-      // Badges Row: Required, ReadOnly, Disabled, Form, Autocomplete, Multiple
-      const badgesRow = document.createElement('div');
-      badgesRow.className = 'field-badges-row';
-
-      if (field.required) {
-        const b = document.createElement('span');
-        b.className = 'badge badge-required';
-        b.textContent = 'REQUIRED';
-        badgesRow.appendChild(b);
-      }
-
-      if (field.multiple) {
-        const b = document.createElement('span');
-        b.className = 'badge badge-multiple';
-        b.textContent = 'MULTIPLE';
-        badgesRow.appendChild(b);
-      }
-
-      if (Array.isArray(field.options) && field.options.length > 1) {
-        const b = document.createElement('span');
-        b.className = 'badge badge-options-count';
-        b.textContent = `${field.options.length} OPTIONS`;
-        badgesRow.appendChild(b);
-      }
-
-      if (field.readonly) {
-        const b = document.createElement('span');
-        b.className = 'badge badge-readonly';
-        b.textContent = 'READONLY';
-        badgesRow.appendChild(b);
-      }
-
-      if (field.disabled) {
-        const b = document.createElement('span');
-        b.className = 'badge badge-disabled';
-        b.textContent = 'DISABLED';
-        badgesRow.appendChild(b);
-      }
-
-      if (field.formId) {
-        const b = document.createElement('span');
-        b.className = 'badge badge-form';
-        b.textContent = `FORM: #${field.formId}`;
-        badgesRow.appendChild(b);
-      } else if (field.formAction) {
-        const b = document.createElement('span');
-        b.className = 'badge badge-form';
-        b.textContent = `ACTION: ${field.formAction}`;
-        badgesRow.appendChild(b);
-      }
-
-      if (field.autocomplete && field.autocomplete !== 'off') {
-        const b = document.createElement('span');
-        b.className = 'badge badge-autocomplete';
-        b.textContent = `AUTOCOMPLETE: ${field.autocomplete}`;
-        badgesRow.appendChild(b);
-      }
-
-      if (badgesRow.children.length > 0) {
-        card.appendChild(badgesRow);
-      }
-
-      // Render Options Preview (Radio Choices, Checkbox Choices, Select Options)
-      if (Array.isArray(field.options) && field.options.length > 0) {
-        const optionsBox = document.createElement('div');
-        optionsBox.className = 'options-box';
-
-        const optionsHeader = document.createElement('div');
-        optionsHeader.className = 'options-header';
-
-        const typeIcon = field.type === 'radio' ? '🔘' : field.type === 'checkbox' ? '☑️' : '▾';
-        const typeLabel = field.type === 'radio' ? 'Radio Options' : field.type === 'checkbox' ? 'Checkbox Choices' : 'Select Options';
-        
-        optionsHeader.textContent = `${typeIcon} ${typeLabel} (${field.options.length}):`;
-        optionsBox.appendChild(optionsHeader);
-
-        const chipsContainer = document.createElement('div');
-        chipsContainer.className = 'options-chips';
-
-        field.options.forEach((opt) => {
-          const chip = document.createElement('div');
-          chip.className = 'option-chip';
-
-          const chipText = document.createElement('span');
-          chipText.className = 'option-chip-text';
-          chipText.textContent = opt.label || opt.value || 'Option';
-          chip.appendChild(chipText);
-
-          if (opt.value && opt.value !== opt.label && opt.value !== 'on' && opt.value !== 'true') {
-            const chipVal = document.createElement('span');
-            chipVal.className = 'option-chip-val';
-            chipVal.textContent = `[${opt.value}]`;
-            chip.appendChild(chipVal);
-          }
-
-          chipsContainer.appendChild(chip);
-        });
-
-        optionsBox.appendChild(chipsContainer);
-        card.appendChild(optionsBox);
-      }
-
-      fieldsList.appendChild(card);
     });
   }
 
   /**
-   * Main scan function communicating with the active tab's content script
+   * Scan active page DOM structure
    */
   async function performScan() {
     showState('scanning');
+    scanningTitle.textContent = 'Scanning Page DOM...';
+    scanningDesc.textContent = 'Extracting field metadata, labels, and form associations.';
     scanBtn.disabled = true;
     scanBtnText.textContent = 'Scanning...';
+    mapBtn.classList.add('hidden');
 
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -354,9 +148,11 @@
         return;
       }
 
-      function handleResponse(response) {
+      currentOrigin = new URL(tab.url).origin;
+
+      function handleScanSuccess(response) {
         scanBtn.disabled = false;
-        scanBtnText.textContent = 'Rescan Current Page';
+        scanBtnText.textContent = 'Rescan Form';
 
         if (!response || !response.success) {
           errorMessage.textContent = (response && response.error) || 'Failed to scan DOM structure.';
@@ -371,56 +167,39 @@
           return;
         }
 
-        // Populate Page Info & Counts
         pageDomain.textContent = getHostname(response.page.url || tab.url);
-        pageTitle.textContent = response.page.title || tab.title || 'Untitled Page';
+        pageTitle.textContent = response.page.title || tab.title || 'Webpage';
         summaryCount.textContent = `${response.summary.total} detected`;
 
-        countAll.textContent = response.summary.total;
-        countInputs.textContent = response.summary.inputs;
-        countSelects.textContent = response.summary.selects;
-        if (countOptions) countOptions.textContent = response.summary.radiosCheckboxes || 0;
-        countTextareas.textContent = response.summary.textareas;
-        countRequired.textContent = response.summary.required;
-
-        showState('results');
-        renderFields();
+        mapBtn.classList.remove('hidden');
+        showState('scanned');
+        renderRawFields();
       }
 
-      // First attempt sending message
       chrome.tabs.sendMessage(tab.id, { action: 'SCAN_FORM' }, (response) => {
         if (chrome.runtime.lastError) {
-          // If receiving end does not exist (tab was opened prior to extension install/reload),
-          // dynamically inject content.js and retry automatically!
+          // Dynamic injection fallback
           if (chrome.scripting && tab.id) {
             chrome.scripting.executeScript(
-              {
-                target: { tabId: tab.id },
-                files: ['content.js'],
-              },
+              { target: { tabId: tab.id }, files: ['content.js'] },
               () => {
                 if (chrome.runtime.lastError) {
-                  console.warn('[SYNDEO Form Scanner] Script injection fallback error:', chrome.runtime.lastError.message);
-                  errorMessage.textContent =
-                    'Could not connect to this webpage. Please refresh the page (F5) and click Scan again.';
+                  errorMessage.textContent = 'Could not connect to this webpage. Please refresh the page (F5) and click Scan again.';
                   showState('error');
                   scanBtn.disabled = false;
                   scanBtnText.textContent = 'Scan Current Page';
                   return;
                 }
-
-                // Retry message after dynamic injection
                 setTimeout(() => {
-                  chrome.tabs.sendMessage(tab.id, { action: 'SCAN_FORM' }, (retryResponse) => {
-                    if (chrome.runtime.lastError || !retryResponse) {
-                      errorMessage.textContent =
-                        'Could not connect to this webpage. Please refresh the page (F5) and click Scan again.';
+                  chrome.tabs.sendMessage(tab.id, { action: 'SCAN_FORM' }, (retryRes) => {
+                    if (chrome.runtime.lastError || !retryRes) {
+                      errorMessage.textContent = 'Could not connect to this webpage. Please refresh the page (F5) and click Scan again.';
                       showState('error');
                       scanBtn.disabled = false;
                       scanBtnText.textContent = 'Scan Current Page';
                       return;
                     }
-                    handleResponse(retryResponse);
+                    handleScanSuccess(retryRes);
                   });
                 }, 100);
               }
@@ -428,18 +207,17 @@
             return;
           }
 
-          errorMessage.textContent =
-            'Could not connect to the webpage. Please refresh the page (F5) and click Scan again.';
+          errorMessage.textContent = 'Could not connect to the webpage. Please refresh the page and try again.';
           showState('error');
           scanBtn.disabled = false;
           scanBtnText.textContent = 'Scan Current Page';
           return;
         }
 
-        handleResponse(response);
+        handleScanSuccess(response);
       });
     } catch (err) {
-      console.error('[SYNDEO Form Scanner] Unexpected error:', err);
+      console.error('[SYNDEO Autofill] Scan exception:', err);
       scanBtn.disabled = false;
       scanBtnText.textContent = 'Scan Current Page';
       errorMessage.textContent = 'An unexpected error occurred while scanning.';
@@ -447,38 +225,315 @@
     }
   }
 
-  // Event Listeners
-  scanBtn.addEventListener('click', () => {
-    performScan();
-  });
+  /**
+   * Render raw fields list in scanned view
+   */
+  function renderRawFields() {
+    if (!currentScanResult || !currentScanResult.fields) return;
+    rawFieldsList.innerHTML = '';
+    const query = (filterInput.value || '').trim().toLowerCase();
 
-  filterInput.addEventListener('input', (e) => {
-    searchQuery = e.target.value;
-    renderFields();
-  });
-
-  categoryTabs.addEventListener('click', (e) => {
-    const target = e.target.closest('.tab-pill');
-    if (!target) return;
-
-    categoryTabs.querySelectorAll('.tab-pill').forEach((btn) => btn.classList.remove('active'));
-    target.classList.add('active');
-    currentFilterCategory = target.getAttribute('data-filter') || 'all';
-    renderFields();
-  });
-
-  copyJsonBtn.addEventListener('click', () => {
-    if (!currentScanResult) return;
-    const jsonStr = JSON.stringify(currentScanResult, null, 2);
-    navigator.clipboard.writeText(jsonStr).then(() => {
-      const originalText = copyJsonBtn.querySelector('span').textContent;
-      copyJsonBtn.querySelector('span').textContent = 'Copied!';
-      setTimeout(() => {
-        copyJsonBtn.querySelector('span').textContent = originalText;
-      }, 1800);
+    const filtered = currentScanResult.fields.filter((f) => {
+      if (!query) return true;
+      return (
+        (f.label || '').toLowerCase().includes(query) ||
+        (f.name || '').toLowerCase().includes(query) ||
+        (f.id || '').toLowerCase().includes(query)
+      );
     });
+
+    filtered.forEach((f) => {
+      const card = document.createElement('div');
+      card.className = 'field-card';
+
+      const header = document.createElement('div');
+      header.className = 'field-header';
+
+      const labelEl = document.createElement('div');
+      labelEl.className = 'field-label';
+      labelEl.textContent = f.label || f.name || 'Unnamed Field';
+
+      const typeBadge = document.createElement('span');
+      typeBadge.className = 'field-type-badge';
+      typeBadge.textContent = f.type || f.tag;
+
+      header.appendChild(labelEl);
+      header.appendChild(typeBadge);
+      card.appendChild(header);
+
+      rawFieldsList.appendChild(card);
+    });
+  }
+
+  /**
+   * Trigger MemoryFill Agent Mapping Pipeline
+   */
+  function performMapping() {
+    if (!currentScanResult || !currentScanResult.fields) return;
+
+    showState('scanning');
+    scanningTitle.textContent = 'MemoryFill Policy Mapping...';
+    scanningDesc.textContent = 'Evaluating form fields against authorized claims and sensitivity policies.';
+
+    chrome.runtime.sendMessage(
+      {
+        action: 'MAP_FIELDS',
+        origin: currentOrigin,
+        fields: currentScanResult.fields,
+      },
+      (response) => {
+        if (!response || !response.success || !response.data) {
+          errorMessage.textContent = (response && response.error) || 'Failed to connect to SYNDEO backend.';
+          showState('error');
+          return;
+        }
+
+        currentMappingResult = response.data;
+        renderApprovalScreen();
+      }
+    );
+  }
+
+  /**
+   * Render Review & Approval UI (Step 7)
+   */
+  function renderApprovalScreen() {
+    if (!currentMappingResult || !currentMappingResult.mappings) return;
+
+    approvalOrigin.textContent = currentMappingResult.origin || currentOrigin;
+    approvalFieldsList.innerHTML = '';
+    selectedFieldIds.clear();
+
+    const mappings = currentMappingResult.mappings;
+
+    mappings.forEach((m) => {
+      const isReady = m.status === 'READY';
+      const isBlocked = m.status === 'BLOCKED';
+
+      const card = document.createElement('div');
+      card.className = `approval-card ${isReady ? 'selected' : isBlocked ? 'blocked' : ''}`;
+
+      const top = document.createElement('div');
+      top.className = 'approval-card-top';
+
+      if (isReady) {
+        selectedFieldIds.add(m.field_id);
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.className = 'approval-checkbox';
+        checkbox.checked = true;
+        checkbox.dataset.fieldId = m.field_id;
+
+        checkbox.addEventListener('change', (e) => {
+          if (e.target.checked) {
+            selectedFieldIds.add(m.field_id);
+            card.classList.add('selected');
+          } else {
+            selectedFieldIds.delete(m.field_id);
+            card.classList.remove('selected');
+          }
+          updateApprovalCount();
+        });
+
+        top.appendChild(checkbox);
+      }
+
+      const body = document.createElement('div');
+      body.className = 'approval-card-body';
+
+      // Destination Field Info
+      const destField = document.createElement('div');
+      destField.className = 'approval-dest-field';
+      destField.innerHTML = `Web field: <strong>${m.field_label || m.field_id}</strong> (${m.field_type})`;
+      body.appendChild(destField);
+
+      // Target Claim Name
+      if (m.target_claim_name) {
+        const target = document.createElement('div');
+        target.className = 'approval-memory-target';
+        target.textContent = m.target_claim_name;
+        body.appendChild(target);
+      }
+
+      // Preview Value
+      if (m.preview_value) {
+        const preview = document.createElement('div');
+        preview.className = 'approval-preview-value';
+        preview.textContent = m.preview_value;
+        body.appendChild(preview);
+      } else if (isBlocked) {
+        const blockedMsg = document.createElement('div');
+        blockedMsg.className = 'approval-preview-value';
+        blockedMsg.style.color = '#f43f5e';
+        blockedMsg.textContent = m.reason || 'Restricted attribute blocked by policy';
+        body.appendChild(blockedMsg);
+      }
+
+      // Badges
+      const badgesRow = document.createElement('div');
+      badgesRow.className = 'approval-badges-row';
+
+      if (m.assurance && m.assurance.includes('EVIDENCE')) {
+        const b = document.createElement('span');
+        b.className = 'badge-evidence';
+        b.textContent = 'Evidence Attached';
+        badgesRow.appendChild(b);
+      } else if (m.assurance && m.assurance.includes('USER')) {
+        const b = document.createElement('span');
+        b.className = 'badge-evidence';
+        b.style.color = '#a1a1aa';
+        b.style.borderColor = 'rgba(255,255,255,0.1)';
+        b.textContent = 'User Asserted';
+        badgesRow.appendChild(b);
+      }
+
+      if (m.confidence > 0) {
+        const b = document.createElement('span');
+        b.className = 'badge-confidence';
+        b.textContent = `${Math.round(m.confidence * 100)}% Match`;
+        badgesRow.appendChild(b);
+      }
+
+      if (isBlocked) {
+        const b = document.createElement('span');
+        b.className = 'badge-blocked';
+        b.textContent = 'RESTRICTED';
+        badgesRow.appendChild(b);
+      }
+
+      body.appendChild(badgesRow);
+      top.appendChild(body);
+      card.appendChild(top);
+      approvalFieldsList.appendChild(card);
+    });
+
+    updateApprovalCount();
+    showState('approval');
+  }
+
+  function updateApprovalCount() {
+    const count = selectedFieldIds.size;
+    approvedCountPill.textContent = `${count} selected`;
+    executeFillBtnText.textContent = `Fill Approved Fields (${count})`;
+    executeFillBtn.disabled = count === 0;
+  }
+
+  /**
+   * Execute Approved Fill Pipeline into Webpage DOM
+   */
+  async function executeFill() {
+    if (selectedFieldIds.size === 0 || !currentMappingResult) return;
+
+    executeFillBtn.disabled = true;
+    executeFillBtnText.textContent = 'Authorizing Fill...';
+
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab || !tab.id) {
+      errorMessage.textContent = 'Active tab lost. Please rescan.';
+      showState('error');
+      return;
+    }
+
+    // 1. Request Authorized Claim Values from Backend
+    chrome.runtime.sendMessage(
+      {
+        action: 'GET_APPROVED_FILL_VALUES',
+        approval_id: currentMappingResult.approval_id,
+        origin: currentOrigin,
+        approved_field_ids: Array.from(selectedFieldIds),
+      },
+      (response) => {
+        if (!response || !response.success || !response.data) {
+          errorMessage.textContent = (response && response.error) || 'Failed to authorize fill values.';
+          showState('error');
+          return;
+        }
+
+        const instructions = response.data.instructions || [];
+
+        // 2. Dispatch Approved Instructions to Content Script for Deterministic DOM Filling
+        chrome.tabs.sendMessage(
+          tab.id,
+          { action: 'FILL_FIELDS', instructions },
+          (fillResult) => {
+            if (chrome.runtime.lastError || !fillResult || !fillResult.success) {
+              errorMessage.textContent = (fillResult && fillResult.error) || 'Failed to populate DOM elements.';
+              showState('error');
+              return;
+            }
+
+            renderFilledResults(fillResult);
+
+            // 3. Log Client Audit Event
+            chrome.runtime.sendMessage({
+              action: 'LOG_EXTENSION_AUDIT',
+              event: 'FILL_DOM_VERIFIED',
+              origin: currentOrigin,
+              fields: instructions.map((i) => i.memory_path),
+              result: 'SUCCESS',
+            });
+          }
+        );
+      }
+    );
+  }
+
+  /**
+   * Render Fill Verification & Manual Submit Notice
+   */
+  function renderFilledResults(fillResult) {
+    filledSummaryText.textContent = `${fillResult.filled_count} fields populated and verified into webpage DOM.`;
+    verificationDetailsList.innerHTML = '';
+
+    (fillResult.results || []).forEach((r) => {
+      const card = document.createElement('div');
+      card.className = 'verification-card';
+
+      const path = document.createElement('span');
+      path.textContent = r.memory_path || r.field_id;
+      path.style.fontWeight = '600';
+
+      const status = document.createElement('span');
+      status.className = `verification-status ${r.status === 'FILLED' ? 'filled' : ''}`;
+      status.textContent = r.status;
+
+      card.appendChild(path);
+      card.appendChild(status);
+      verificationDetailsList.appendChild(card);
+    });
+
+    showState('filled');
+  }
+
+  // Event Listeners
+  scanBtn.addEventListener('click', performScan);
+  mapBtn.addEventListener('click', performMapping);
+  mapBannerBtn.addEventListener('click', performMapping);
+  executeFillBtn.addEventListener('click', executeFill);
+  rescanAfterFillBtn.addEventListener('click', performScan);
+
+  filterInput.addEventListener('input', renderRawFields);
+
+  selectAllCheckbox.addEventListener('change', (e) => {
+    const checked = e.target.checked;
+    const checkboxes = approvalFieldsList.querySelectorAll('.approval-checkbox');
+    checkboxes.forEach((cb) => {
+      cb.checked = checked;
+      const fid = cb.dataset.fieldId;
+      const card = cb.closest('.approval-card');
+      if (checked) {
+        selectedFieldIds.add(fid);
+        if (card) card.classList.add('selected');
+      } else {
+        selectedFieldIds.delete(fid);
+        if (card) card.classList.remove('selected');
+      }
+    });
+    updateApprovalCount();
   });
 
-  // Automatically trigger initial scan on popup open for instant feedback
+  // Startup initialization
+  initAuthSession();
   performScan();
 })();

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SYNDEO Form Scanner</title>
+  <title>SYNDEO Secure MemoryFill</title>
   <link rel="stylesheet" href="popup.css" />
 </head>
 <body>
@@ -25,21 +25,32 @@
         </div>
         <div class="brand-text">
           <div class="brand-name">SYNDEO</div>
-          <div class="brand-tag">FORM SCANNER</div>
+          <div class="brand-tag">SECURE AUTOFILL</div>
         </div>
       </div>
-      <div class="badge-phase">Phase 1: Read-Only</div>
+      <div id="vaultUserBadge" class="vault-user-badge" title="Connected to SYNDEO Vault">
+        <span class="vault-dot"></span>
+        <span id="vaultUserName">Indresh सुरेश</span>
+      </div>
     </header>
 
-    <!-- Scan Trigger Action -->
+    <!-- Top Action Bar -->
     <div class="action-section">
-      <button id="scanBtn" class="btn-scan">
-        <svg class="scan-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="11" cy="11" r="8"></circle>
-          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-        </svg>
-        <span id="scanBtnText">Scan Current Page</span>
-      </button>
+      <div class="action-buttons-row">
+        <button id="scanBtn" class="btn-scan">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          <span id="scanBtnText">Scan Current Page</span>
+        </button>
+        <button id="mapBtn" class="btn-map hidden" title="AI MemoryFill Agent Policy Mapping">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+          </svg>
+          <span>Map with SYNDEO</span>
+        </button>
+      </div>
     </div>
 
     <!-- Main Dynamic Content Views -->
@@ -56,9 +67,9 @@
               <polyline points="10 9 9 9 8 9"></polyline>
             </svg>
           </div>
-          <div class="state-title">Ready to Scan</div>
+          <div class="state-title">Ready to Scan Webpage</div>
           <div class="state-desc">
-            Inspect all visible input, textarea, and select fields on the current tab without reading or modifying any data.
+            Detect visible form fields, evaluate against your Neo4j memory vault, and review before filling.
           </div>
         </div>
       </div>
@@ -67,12 +78,12 @@
       <div id="stateScanning" class="state-view hidden">
         <div class="state-card">
           <div class="scanning-spinner"></div>
-          <div class="state-title">Scanning Page DOM...</div>
-          <div class="state-desc">Extracting field metadata, labels, and form associations.</div>
+          <div id="scanningTitle" class="state-title">Scanning Page DOM...</div>
+          <div id="scanningDesc" class="state-desc">Extracting field metadata, labels, and form controls.</div>
         </div>
       </div>
 
-      <!-- 3. Restricted / Unsupported Page State -->
+      <!-- 3. Restricted State -->
       <div id="stateRestricted" class="state-view hidden">
         <div class="state-card warning">
           <div class="state-icon warning-icon">
@@ -81,9 +92,9 @@
               <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
             </svg>
           </div>
-          <div class="state-title">This Page Cannot Be Scanned</div>
+          <div class="state-title">Restricted Browser Page</div>
           <div class="state-desc">
-            Chrome security restricts extensions from running on system pages (chrome://, Web Store, or local file schemes).
+            Chrome security restricts extensions from running on system pages (chrome://, Web Store, or local schemes).
           </div>
         </div>
       </div>
@@ -98,14 +109,14 @@
               <line x1="12" y1="16" x2="12.01" y2="16"></line>
             </svg>
           </div>
-          <div class="state-title">Unable to Scan This Page</div>
+          <div class="state-title">Action Required</div>
           <div id="errorMessage" class="state-desc">
-            Could not communicate with the webpage. Please refresh the page and try again.
+            Could not communicate with the webpage. Please refresh the page (F5) and try again.
           </div>
         </div>
       </div>
 
-      <!-- 5. Empty State (No Fields Found) -->
+      <!-- 5. Empty State -->
       <div id="stateEmpty" class="state-view hidden">
         <div class="state-card">
           <div class="state-icon">
@@ -114,16 +125,15 @@
               <line x1="8" y1="12" x2="16" y2="12"></line>
             </svg>
           </div>
-          <div class="state-title">No Visible Form Fields Found</div>
+          <div class="state-title">No Form Fields Found</div>
           <div class="state-desc">
             The scanner did not find any interactive input, select, or textarea fields on this page.
           </div>
         </div>
       </div>
 
-      <!-- 6. Success Results View -->
-      <div id="stateResults" class="results-view hidden">
-        <!-- Page Context Summary Header -->
+      <!-- 6. Scanned Raw Fields List (Before Mapping) -->
+      <div id="stateScanned" class="results-view hidden">
         <div class="page-meta-card">
           <div class="page-meta-main">
             <div id="pageDomain" class="page-domain">example.com</div>
@@ -132,49 +142,94 @@
           <div class="summary-pill" id="summaryCount">0 fields</div>
         </div>
 
-        <!-- Filter & Search Controls -->
+        <div class="mapping-prompt-banner">
+          <div class="prompt-text">
+            <strong>Ready to Autofill?</strong> Run the MemoryFill Agent to map these fields to your verified identity claims.
+          </div>
+          <button id="mapBannerBtn" class="btn-banner-map">Map Fields Now</button>
+        </div>
+
+        <!-- Filter Controls -->
         <div class="search-filter-row">
           <div class="search-box">
-            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="11" cy="11" r="8"></circle>
-              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-            </svg>
-            <input type="text" id="filterInput" placeholder="Filter fields by name or label..." />
+            <input type="text" id="filterInput" placeholder="Filter detected fields..." />
           </div>
-          <button id="copyJsonBtn" class="btn-copy-json" title="Copy Raw Structured JSON">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+        </div>
+
+        <div id="rawFieldsList" class="fields-list"></div>
+      </div>
+
+      <!-- 7. Review & Approval View (The Core Autofill Stage) -->
+      <div id="stateApproval" class="approval-view hidden">
+        <div class="approval-origin-card">
+          <div class="origin-header">
+            <div class="origin-badge">
+              <span class="lock-icon-svg">🔒</span>
+              <span id="approvalOrigin">https://example.com</span>
+            </div>
+            <span class="policy-pill">Origin Bound</span>
+          </div>
+          <div class="approval-subtitle">
+            Review and select the fields you authorize SYNDEO to fill.
+          </div>
+        </div>
+
+        <!-- Approval Action Bar: Select All Toggle -->
+        <div class="approval-toolbar">
+          <label class="select-all-label">
+            <input type="checkbox" id="selectAllCheckbox" checked />
+            <span>Select All Mappable Fields</span>
+          </label>
+          <span id="approvedCountPill" class="approved-count-pill">0 selected</span>
+        </div>
+
+        <!-- Mappings List -->
+        <div id="approvalFieldsList" class="approval-list"></div>
+
+        <!-- Fill Action Sticky Footer Container -->
+        <div class="fill-action-bar">
+          <button id="executeFillBtn" class="btn-execute-fill">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="btn-icon">
+              <polyline points="20 6 9 17 4 12"></polyline>
             </svg>
-            <span>JSON</span>
+            <span id="executeFillBtnText">Fill Approved Fields (0)</span>
           </button>
         </div>
+      </div>
 
-        <!-- Filter Category Pills -->
-        <div class="category-tabs" id="categoryTabs">
-          <button class="tab-pill active" data-filter="all">All (<span id="countAll">0</span>)</button>
-          <button class="tab-pill" data-filter="input">Inputs (<span id="countInputs">0</span>)</button>
-          <button class="tab-pill" data-filter="select">Selects (<span id="countSelects">0</span>)</button>
-          <button class="tab-pill" data-filter="options">Choice / Radios (<span id="countOptions">0</span>)</button>
-          <button class="tab-pill" data-filter="textarea">Textarea (<span id="countTextareas">0</span>)</button>
-          <button class="tab-pill" data-filter="required">Required (<span id="countRequired">0</span>)</button>
+      <!-- 8. Fill Result & Verification View -->
+      <div id="stateFilled" class="filled-view hidden">
+        <div class="success-banner">
+          <div class="success-icon">✓</div>
+          <div class="success-title">Fields Filled Successfully!</div>
+          <div id="filledSummaryText" class="success-desc">
+            4 fields populated and verified into webpage DOM.
+          </div>
         </div>
 
-        <!-- Field Cards List -->
-        <div id="fieldsList" class="fields-list">
-          <!-- Dynamically populated via popup.js safely using textContent -->
+        <div class="manual-submit-notice">
+          <div class="notice-badge">⚠️ NO AUTO-SUBMIT</div>
+          <div class="notice-desc">
+            SYNDEO never auto-submits forms. Please review the values on the webpage and click the website's <strong>Submit</strong> button.
+          </div>
+        </div>
+
+        <div id="verificationDetailsList" class="verification-list"></div>
+
+        <div class="post-fill-actions">
+          <button id="rescanAfterFillBtn" class="btn-rescan-secondary">Rescan Form</button>
         </div>
       </div>
     </main>
 
-    <!-- Footer Privacy Seal -->
+    <!-- Footer Security & Policy Seal -->
     <footer class="footer">
       <div class="footer-seal">
         <svg class="lock-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
           <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
         </svg>
-        <span>Read-Only Metadata Scanner • No values collected or transmitted</span>
+        <span>Zero-Knowledge • Policy-Governed • User-Approved</span>
       </div>
     </footer>
   </div>

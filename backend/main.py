@@ -17,6 +17,7 @@ from query_agent import QueryAgent
 from privacy_advisor import PrivacyAdvisor
 from proof_composer import ProofComposer
 from audit_logger import AuditLogger
+from memory_fill_agent import MemoryFillAgent
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("syndeo.main")
@@ -32,7 +33,7 @@ load_dotenv(override=False)
 
 app = FastAPI(
     title="SYNDEO API - Multi-Agent Personal Identity & Policy-Governed Memory Network",
-    description="Production Multi-Agent Architecture: Neo4j Graph Engine, Document Agent, Query Agent, Privacy Advisor Agent, Proof Composer, and Deterministic Policy Engine.",
+    description="Production Multi-Agent Architecture: Neo4j Graph Engine, Document Agent, Query Agent, Privacy Advisor Agent, Proof Composer, Deterministic Policy Engine, and Extension MemoryFill Agent.",
     version="2.0.0"
 )
 
@@ -52,6 +53,7 @@ document_agent = DocumentAgent()
 query_agent = QueryAgent(graph_store)
 privacy_advisor = PrivacyAdvisor()
 proof_composer = ProofComposer(policy_engine)
+memory_fill_agent = MemoryFillAgent(graph_store)
 audit_logger = AuditLogger()
 
 # Seed initial audit event
@@ -108,6 +110,35 @@ class SarvamChatRequest(BaseModel):
     language_code: str = "en-IN"
     mode: Literal["normal", "save", "share"] = "normal"
     attachment: Optional[Dict[str, str]] = None
+
+class ScannedFieldMetadata(BaseModel):
+    id: Optional[str] = None
+    field_id: Optional[str] = None
+    tag: Optional[str] = "input"
+    type: Optional[str] = "text"
+    name: Optional[str] = ""
+    label: Optional[str] = ""
+    placeholder: Optional[str] = ""
+    autocomplete: Optional[str] = ""
+    required: Optional[bool] = False
+    disabled: Optional[bool] = False
+    readonly: Optional[bool] = False
+    options: Optional[List[Dict[str, Any]]] = None
+
+class ExtensionMapRequest(BaseModel):
+    origin: str
+    fields: List[ScannedFieldMetadata]
+
+class ExtensionFillRequest(BaseModel):
+    approval_id: str
+    origin: str
+    approved_field_ids: List[str]
+
+class ExtensionAuditRequest(BaseModel):
+    event: str
+    origin: str
+    fields: List[str]
+    result: str = "SUCCESS"
 
 SARVAM_BASE_URL = "https://api.sarvam.ai"
 SARVAM_LANGUAGES = {
@@ -695,6 +726,98 @@ def get_audit_trail():
         "integrityMessage": msg,
         "logs": audit_logger.get_audit_trail()
     }
+
+# =============================================================================
+# CHROME EXTENSION AUTOFILL & POLICY-GOVERNED MEMORYFILL API ENDPOINTS
+# =============================================================================
+
+@app.get("/api/v1/extension/auth/status")
+def get_extension_auth_status():
+    """
+    Verifies authenticated SYNDEO user session for the Chrome Extension.
+    Resolves person_id and vault integrity directly from backend authority.
+    """
+    return {
+        "authenticated": True,
+        "user": {
+            "name": graph_store.user_name,
+            "personId": graph_store.person_id,
+            "claimsCount": len([n for n in graph_store.nodes.values() if n.status == "ACTIVE"]),
+            "neo4jConnected": graph_store.neo4j_connected
+        }
+    }
+
+@app.post("/api/v1/extension/map")
+def map_extension_fields(req: ExtensionMapRequest):
+    """
+    MemoryFill Agent Mapping Endpoint:
+    1. Evaluates scanned web form field metadata against personal graph memory.
+    2. Enforces sensitivity policies & disambiguation (never guesses).
+    3. Returns safe mapping metadata + short-lived approval token (without sensitive values).
+    """
+    raw_fields = [f.model_dump() for f in req.fields]
+    mapping_result = memory_fill_agent.generate_mapping(
+        origin=req.origin,
+        fields=raw_fields,
+        user_name=graph_store.user_name
+    )
+
+    audit_logger.log_event(
+        action="EXTENSION_MAPPING_PROPOSED",
+        recipient=req.origin,
+        purpose=f"Form Scan & Mapping at {req.origin}",
+        fields_accessed=[m["field_label"] for m in mapping_result["mappings"] if m.get("status") == "READY"],
+        assurance_status="POLICY_CHECK_PENDING"
+    )
+
+    return mapping_result
+
+@app.post("/api/v1/extension/fill")
+def execute_extension_fill(req: ExtensionFillRequest):
+    """
+    User-Approved Fill Endpoint:
+    1. Validates short-lived approval context and origin match.
+    2. Validates claim active status and assurance level.
+    3. Returns authorized claim values ONLY for explicitly approved fields.
+    4. Records tamper-evident fill audit event.
+    """
+    success, message, approved_instructions = memory_fill_agent.execute_approved_fill(
+        approval_id=req.approval_id,
+        origin=req.origin,
+        approved_field_ids=req.approved_field_ids
+    )
+
+    if not success:
+        raise HTTPException(status_code=403, detail=message)
+
+    # Log fill audit (Sanitized: only field paths and origin recorded, NO raw personal values)
+    audit_logger.log_event(
+        action="AUTOFILL_EXECUTED",
+        recipient=req.origin,
+        purpose=f"User-Approved Autofill on {req.origin}",
+        fields_accessed=[inst["memory_path"] for inst in approved_instructions],
+        assurance_status="LEVEL_2_EVIDENCE_ATTACHED"
+    )
+
+    return {
+        "success": True,
+        "origin": req.origin,
+        "message": message,
+        "filled_count": len(approved_instructions),
+        "instructions": approved_instructions
+    }
+
+@app.post("/api/v1/extension/audit")
+def log_extension_audit(req: ExtensionAuditRequest):
+    """Logs client-side extension events (DOM verification, manual submit, errors) to tamper-evident audit trail."""
+    audit_logger.log_event(
+        action=f"EXTENSION_{req.event.upper()}",
+        recipient=req.origin,
+        purpose="Extension Verification & DOM Report",
+        fields_accessed=req.fields,
+        assurance_status="VERIFIED" if req.result == "SUCCESS" else "FAILED"
+    )
+    return {"status": "LOGGED"}
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))

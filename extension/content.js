@@ -790,7 +790,227 @@
     }
   }
 
-  // Listen for SCAN_FORM request from popup
+  /**
+   * Deterministically locates and fills approved form fields into the DOM
+   * using React/Vue/Angular-compatible native prototype setters and event dispatchers.
+   *
+   * @param {Array<{ field_id: string, claim_name: string, value: string, memory_path: string }>} instructions
+   * @returns {object} Fill Execution & DOM Verification Results
+   */
+  function fillApprovedFields(instructions) {
+    if (!Array.isArray(instructions) || instructions.length === 0) {
+      return { success: false, error: 'No fill instructions provided', results: [] };
+    }
+
+    const allElements = collectFormElements(document);
+    const visibleElements = allElements.filter(isElementVisible);
+    const scannedFields = normalizeAndGroupFields(visibleElements);
+
+    const fillResults = [];
+    let filledCount = 0;
+
+    instructions.forEach((inst) => {
+      const fid = inst.field_id;
+      const val = inst.value;
+      
+      // Locate the matching element from scanned fields
+      let targetEl = null;
+      const matchedField = scannedFields.find((f) => f.id === fid || f.name === fid || `f_${String(f.index).padStart(3, '0')}` === fid);
+
+      if (matchedField) {
+        if (matchedField.id) {
+          targetEl = document.getElementById(matchedField.id);
+        }
+        if (!targetEl && matchedField.name) {
+          try {
+            targetEl = document.querySelector(`[name="${CSS.escape(matchedField.name)}"]`);
+          } catch {
+            targetEl = document.querySelector(`[name="${matchedField.name}"]`);
+          }
+        }
+        if (!targetEl && typeof matchedField.index === 'number' && visibleElements[matchedField.index]) {
+          targetEl = visibleElements[matchedField.index];
+        }
+      }
+
+      // Fallback search by ID or name directly
+      if (!targetEl && fid) {
+        try {
+          targetEl = document.getElementById(fid) || document.querySelector(`[name="${CSS.escape(fid)}"]`);
+        } catch {
+          targetEl = document.getElementById(fid);
+        }
+      }
+
+      if (!targetEl) {
+        fillResults.push({
+          field_id: fid,
+          memory_path: inst.memory_path,
+          status: 'NOT_FOUND',
+          reason: 'Field element could not be located in DOM',
+        });
+        return;
+      }
+
+      // Check if disabled or readonly
+      if (targetEl.disabled || targetEl.getAttribute('aria-disabled') === 'true') {
+        fillResults.push({
+          field_id: fid,
+          memory_path: inst.memory_path,
+          status: 'DISABLED',
+          reason: 'Field is disabled',
+        });
+        return;
+      }
+
+      if (targetEl.readOnly || targetEl.getAttribute('aria-readonly') === 'true') {
+        fillResults.push({
+          field_id: fid,
+          memory_path: inst.memory_path,
+          status: 'READONLY',
+          reason: 'Field is read-only',
+        });
+        return;
+      }
+
+      const tag = targetEl.tagName.toLowerCase();
+      const type = (targetEl.getAttribute('type') || 'text').toLowerCase();
+      const valueStr = String(val ?? '');
+
+      try {
+        if (tag === 'select') {
+          // Select dropdown
+          let optionMatched = false;
+          for (let i = 0; i < targetEl.options.length; i++) {
+            const opt = targetEl.options[i];
+            const optVal = (opt.value || '').trim().toLowerCase();
+            const optText = (opt.text || '').trim().toLowerCase();
+            const searchVal = valueStr.trim().toLowerCase();
+
+            if (optVal === searchVal || optText === searchVal || optText.includes(searchVal) || searchVal.includes(optText)) {
+              targetEl.selectedIndex = i;
+              opt.selected = true;
+              optionMatched = true;
+              break;
+            }
+          }
+
+          // Framework setter for select
+          const selectProto = window.HTMLSelectElement.prototype;
+          const selectSetter = Object.getOwnPropertyDescriptor(selectProto, 'value')?.set;
+          if (selectSetter && optionMatched) {
+            selectSetter.call(targetEl, targetEl.value);
+          }
+
+          targetEl.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+          targetEl.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+          targetEl.dispatchEvent(new Event('blur', { bubbles: true, composed: true }));
+
+          fillResults.push({
+            field_id: fid,
+            memory_path: inst.memory_path,
+            status: optionMatched ? 'FILLED' : 'VALUE_MISMATCH',
+            reason: optionMatched ? 'Option selected successfully' : 'No matching select option found',
+          });
+          if (optionMatched) filledCount++;
+        } else if (type === 'checkbox') {
+          // Checkbox
+          const boolVal = Boolean(val === true || val === 'true' || val === '1' || val === 'yes');
+          const inputProto = window.HTMLInputElement.prototype;
+          const checkSetter = Object.getOwnPropertyDescriptor(inputProto, 'checked')?.set;
+          if (checkSetter) {
+            checkSetter.call(targetEl, boolVal);
+          } else {
+            targetEl.checked = boolVal;
+          }
+
+          targetEl.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+          targetEl.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+          targetEl.dispatchEvent(new Event('blur', { bubbles: true, composed: true }));
+
+          fillResults.push({
+            field_id: fid,
+            memory_path: inst.memory_path,
+            status: 'FILLED',
+            reason: `Checkbox set to ${boolVal}`,
+          });
+          filledCount++;
+        } else if (type === 'radio') {
+          // Radio button group
+          let radioMatched = false;
+          try {
+            const radioGroup = document.querySelectorAll(`input[type="radio"][name="${CSS.escape(targetEl.name)}"]`);
+            for (const radio of radioGroup) {
+              const rVal = (radio.value || '').trim().toLowerCase();
+              if (rVal === valueStr.trim().toLowerCase()) {
+                const checkSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'checked')?.set;
+                if (checkSetter) checkSetter.call(radio, true);
+                else radio.checked = true;
+                radio.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+                radio.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+                radio.dispatchEvent(new Event('blur', { bubbles: true, composed: true }));
+                radioMatched = true;
+                break;
+              }
+            }
+          } catch {}
+
+          fillResults.push({
+            field_id: fid,
+            memory_path: inst.memory_path,
+            status: radioMatched ? 'FILLED' : 'VALUE_MISMATCH',
+            reason: radioMatched ? 'Radio choice selected' : 'No matching radio option in group',
+          });
+          if (radioMatched) filledCount++;
+        } else {
+          // Text-like inputs and Textareas
+          const proto = tag === 'textarea' ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
+          const valSetter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+
+          // Focus first
+          try { targetEl.focus(); } catch {}
+
+          if (valSetter) {
+            valSetter.call(targetEl, valueStr);
+          } else {
+            targetEl.value = valueStr;
+          }
+
+          // Framework compatibility event sequence (React SyntheticEvent / Vue Reactivity)
+          targetEl.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+          targetEl.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+          targetEl.dispatchEvent(new Event('blur', { bubbles: true, composed: true }));
+
+          // Immediate DOM Verification
+          const verified = (targetEl.value === valueStr);
+
+          fillResults.push({
+            field_id: fid,
+            memory_path: inst.memory_path,
+            status: verified ? 'FILLED' : 'VALUE_MISMATCH',
+            reason: verified ? 'DOM value verified successfully' : 'DOM value mismatch after event dispatch',
+          });
+          if (verified) filledCount++;
+        }
+      } catch (fillErr) {
+        fillResults.push({
+          field_id: fid,
+          memory_path: inst.memory_path,
+          status: 'ERROR',
+          reason: fillErr.message || 'Error modifying DOM element',
+        });
+      }
+    });
+
+    return {
+      success: true,
+      total_requested: instructions.length,
+      filled_count: filledCount,
+      results: fillResults,
+    };
+  }
+
+  // Listen for SCAN_FORM and FILL_FIELDS requests from popup
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request && request.action === 'SCAN_FORM') {
       try {
@@ -805,7 +1025,20 @@
           summary: { total: 0 },
         });
       }
+    } else if (request && request.action === 'FILL_FIELDS') {
+      try {
+        const result = fillApprovedFields(request.instructions || []);
+        sendResponse(result);
+      } catch (err) {
+        console.error('[SYNDEO Form Scanner] Content script fill error:', err);
+        sendResponse({
+          success: false,
+          error: err.message || 'Failed to fill fields into DOM',
+          results: [],
+        });
+      }
     }
     return true; // Keep message channel open for response
   });
 })();
+

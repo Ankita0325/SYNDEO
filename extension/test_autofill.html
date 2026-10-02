@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SYNDEO Extension Autofill Test Suite</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0f0f14;
+      color: #e4e1e8;
+      padding: 30px;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    h1 { color: #ffffff; font-size: 24px; margin-bottom: 8px; }
+    p.sub { color: #9490a0; font-size: 14px; margin-bottom: 24px; }
+    .form-section {
+      background: #181720;
+      border: 1px solid #282733;
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 20px;
+    }
+    h2 { font-size: 16px; color: #cbbeff; margin-bottom: 16px; border-bottom: 1px solid #282733; padding-bottom: 8px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .field { display: flex; flex-direction: column; gap: 6px; }
+    label { font-size: 12px; font-weight: 600; color: #c4c0d0; }
+    input[type="text"], input[type="email"], input[type="tel"], input[type="number"], select, textarea {
+      background: #0c0b10;
+      border: 1px solid #323040;
+      border-radius: 8px;
+      padding: 10px 12px;
+      color: #ffffff;
+      font-size: 13px;
+      outline: none;
+    }
+    input:focus, select:focus, textarea:focus { border-color: #5a25eb; box-shadow: 0 0 10px rgba(90,37,235,0.3); }
+    .radio-group, .check-group { display: flex; gap: 16px; align-items: center; margin-top: 4px; }
+    .radio-label, .check-label { font-size: 13px; color: #e4e1e8; display: flex; align-items: center; gap: 6px; cursor: pointer; }
+    .btn-submit {
+      background: #5a25eb;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+    .btn-submit:hover { background: #6b37fa; }
+    .status-box {
+      margin-top: 20px;
+      padding: 16px;
+      background: #14131b;
+      border-radius: 8px;
+      font-family: monospace;
+      font-size: 12px;
+      color: #10b981;
+    }
+  </style>
+</head>
+<body>
+  <h1>SYNDEO Extension Autofill Test Suite</h1>
+  <p class="sub">Open the SYNDEO Extension popup to test Form Scanning, AI MemoryFill Mapping, User Approval, and Deterministic DOM Filling.</p>
+
+  <form id="jobApplicationForm" onsubmit="event.preventDefault(); document.getElementById('statusResult').textContent = 'FORM SUBMITTED SUCCESSFULLY BY USER! Value snapshot: ' + JSON.stringify(Object.fromEntries(new FormData(event.target)));">
+    <!-- Section 1: Personal & Identity -->
+    <div class="form-section">
+      <h2>1. Personal & Identity</h2>
+      <div class="grid">
+        <div class="field">
+          <label for="fullName">Full Legal Name *</label>
+          <input type="text" id="fullName" name="full_name" placeholder="Your full name" autocomplete="name" required />
+        </div>
+        <div class="field">
+          <label for="emailAddress">Primary Email Address *</label>
+          <input type="email" id="emailAddress" name="primary_email" placeholder="name@example.com" autocomplete="email" required />
+        </div>
+        <div class="field">
+          <label for="phoneNumber">Phone / Mobile Number</label>
+          <input type="tel" id="phoneNumber" name="primary_phone" placeholder="+91..." autocomplete="tel" />
+        </div>
+        <div class="field">
+          <label for="githubUrl">GitHub Profile URL</label>
+          <input type="text" id="githubUrl" name="github_profile" placeholder="https://github.com/..." />
+        </div>
+        <div class="field">
+          <label for="linkedinUrl">LinkedIn Profile URL</label>
+          <input type="text" id="linkedinUrl" name="linkedin_profile" placeholder="https://linkedin.com/in/..." />
+        </div>
+        <div class="field">
+          <label for="portfolioUrl">Portfolio Website</label>
+          <input type="text" id="portfolioUrl" name="portfolio_url" placeholder="https://..." />
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 2: Education & Academic Records -->
+    <div class="form-section">
+      <h2>2. Education & Academic Records</h2>
+      <div class="grid">
+        <div class="field">
+          <label for="collegeUniversity">College / University</label>
+          <input type="text" id="collegeUniversity" name="college_university" placeholder="Institute name" />
+        </div>
+        <div class="field">
+          <label for="degreeMajor">Degree & Major</label>
+          <input type="text" id="degreeMajor" name="degree_major" placeholder="e.g. Bachelor of Engineering in CS" />
+        </div>
+        <div class="field">
+          <label for="cgpa">Cumulative GPA (CGPA)</label>
+          <input type="text" id="cgpa" name="cgpa" placeholder="e.g. 8.45" />
+        </div>
+        <div class="field">
+          <label for="currentCompany">Current Company / Employer</label>
+          <input type="text" id="currentCompany" name="current_company" placeholder="Organization name" />
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 3: Restricted Security Fields (Should be Blocked) -->
+    <div class="form-section">
+      <h2>3. Restricted Security Controls (Verification of Policy Gate)</h2>
+      <div class="grid">
+        <div class="field">
+          <label for="accountPassword">Password (Restricted - Must Never Autofill)</label>
+          <input type="password" id="accountPassword" name="password" placeholder="••••••••" />
+        </div>
+        <div class="field">
+          <label for="disabledField">Disabled Field (Should be Skipped)</label>
+          <input type="text" id="disabledField" name="disabled_field" value="Fixed System Value" disabled />
+        </div>
+      </div>
+    </div>
+
+    <button type="submit" class="btn-submit">Submit Application Manually</button>
+  </form>
+
+  <div id="statusResult" class="status-box">Status: Ready for test scan.</div>
+</body>
+</html>

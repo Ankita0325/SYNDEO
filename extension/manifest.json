@@ -1,12 +1,20 @@
 {
   "manifest_version": 3,
-  "name": "SYNDEO Form Scanner",
-  "version": "0.1.0",
-  "description": "Read and inspect form fields on webpages for SYNDEO.",
+  "name": "SYNDEO Secure MemoryFill",
+  "version": "1.0.0",
+  "description": "Policy-governed, user-approved autofill powered by SYNDEO zero-knowledge memory network.",
   "permissions": [
     "activeTab",
-    "scripting"
+    "scripting",
+    "storage"
   ],
+  "host_permissions": [
+    "http://127.0.0.1:8000/*",
+    "http://localhost:8000/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
