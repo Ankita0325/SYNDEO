@@ -1323,9 +1323,7 @@ export const ChatPage: React.FC = () => {
         {/* === MESSAGES CONTAINER === */}
         <div
           ref={messagesContainerRef}
-          className={`flex-1 min-h-0 px-2 sm:px-4 py-2 sm:py-3 space-y-4 scrollbar-none no-scrollbar flex flex-col justify-start relative z-10 ${
-            messages.length > 0 ? 'overflow-y-auto' : 'overflow-visible my-auto'
-          }`}
+          className="flex-1 min-h-0 px-2 sm:px-4 py-2 sm:py-3 space-y-4 scrollbar-none no-scrollbar flex flex-col overflow-y-auto overflow-x-hidden relative z-10"
         >
           {/* Welcome Hero (Centered Composition) */}
           {messages.length === 0 && (
@@ -1333,19 +1331,19 @@ export const ChatPage: React.FC = () => {
               initial={{ opacity: 0, scale: 0.98 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.3 }}
-              className="my-auto py-2 sm:py-4 px-4 text-center space-y-4 sm:space-y-6 flex flex-col items-center justify-center overflow-visible"
+              className="m-auto py-2 sm:py-4 px-2 sm:px-4 text-center space-y-3 sm:space-y-4 flex flex-col items-center justify-center w-full max-w-2xl min-w-0"
             >
               {/* Unclipped AI Orb with Subtle Breathing Motion */}
               <motion.div
                 animate={{ scale: [1, 1.025, 1] }}
                 transition={{ duration: 4.5, repeat: Infinity, ease: 'easeInOut' }}
-                className="relative flex items-center justify-center my-2 sm:my-3 select-none overflow-visible isolate"
+                className="relative flex items-center justify-center my-1 sm:my-2 select-none isolate"
               >
-                {/* Dedicated Soft Radial Atmosphere Glow (420px x 420px, dissolving gradually) */}
+                {/* Dedicated Soft Radial Atmosphere Glow */}
                 <motion.div
                   animate={{ opacity: [0.75, 1, 0.75] }}
                   transition={{ duration: 5.5, repeat: Infinity, ease: 'easeInOut' }}
-                  className="absolute w-[360px] h-[360px] sm:w-[440px] sm:h-[440px] -translate-x-1/2 -translate-y-1/2 left-1/2 top-1/2 rounded-full blur-[28px] pointer-events-none z-0"
+                  className="absolute w-[280px] h-[280px] sm:w-[360px] sm:h-[360px] -translate-x-1/2 -translate-y-1/2 left-1/2 top-1/2 rounded-full blur-[24px] pointer-events-none z-0"
                   style={{
                     background:
                       theme === 'dark'
@@ -1358,18 +1356,18 @@ export const ChatPage: React.FC = () => {
                   <AILoaderOrb
                     state={currentOrbState}
                     text={currentOrbText}
-                    size={190}
+                    size={160}
                     variant="hero"
                   />
                 </div>
               </motion.div>
 
               {/* Typography Hierarchy */}
-              <div className="space-y-1.5 max-w-lg mx-auto">
-                <h2 className="text-sm sm:text-base font-semibold text-zinc-600 dark:text-zinc-300 tracking-tight">
+              <div className="space-y-1 max-w-lg mx-auto min-w-0">
+                <h2 className="text-xs sm:text-sm font-semibold text-zinc-600 dark:text-zinc-300 tracking-tight">
                   Hi, {userName}
                 </h2>
-                <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-zinc-950 dark:text-white tracking-tight">
+                <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-zinc-950 dark:text-white tracking-tight leading-tight">
                   How can I help today?
                 </h1>
                 <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 pt-0.5">
@@ -1378,14 +1376,14 @@ export const ChatPage: React.FC = () => {
               </div>
 
               {/* Quick Prompts */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-2xl mx-auto pt-1 sm:pt-2 w-full">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3 max-w-2xl mx-auto pt-1 sm:pt-2 w-full min-w-0">
                 {quickPrompts.map((p, idx) => {
                   const Icon = p.icon;
                   return (
                     <button
                       key={idx}
                       onClick={() => handleSendMessage(p.text)}
-                      className="p-3.5 sm:p-4 rounded-2xl
+                      className="p-3 sm:p-3.5 rounded-2xl
                                  bg-white/55 dark:bg-[#121222]/60
                                  backdrop-blur-md
                                  border border-[#96aaff]/20 dark:border-white/10
@@ -1393,16 +1391,16 @@ export const ChatPage: React.FC = () => {
                                  hover:bg-white/80 dark:hover:bg-[#18182e]/80
                                  text-left transition-all cursor-pointer flex items-start gap-3 group
                                  shadow-[0_6px_20px_rgba(100,100,180,0.04)]
-                                 dark:shadow-md hover:-translate-y-0.5"
+                                 dark:shadow-md hover:-translate-y-0.5 w-full min-w-0"
                     >
-                      <div className="w-8.5 h-8.5 rounded-xl bg-[#5a25eb]/10 dark:bg-[#5a25eb]/20 border border-[#5a25eb]/20 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform mt-0.5">
+                      <div className="w-8 h-8 rounded-xl bg-[#5a25eb]/10 dark:bg-[#5a25eb]/20 border border-[#5a25eb]/20 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform mt-0.5">
                         <Icon className="w-4 h-4 text-[#5a25eb] dark:text-[#cbbeff]" />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <span className="font-semibold text-zinc-800 dark:text-zinc-200 group-hover:text-zinc-950 dark:group-hover:text-white truncate block text-sm">
+                        <span className="font-semibold text-zinc-800 dark:text-zinc-200 group-hover:text-zinc-950 dark:group-hover:text-white truncate block text-xs sm:text-sm">
                           {p.title}
                         </span>
-                        <span className="text-xs text-zinc-500 dark:text-zinc-400 truncate block mt-0.5">
+                        <span className="text-[11px] sm:text-xs text-zinc-500 dark:text-zinc-400 truncate block mt-0.5">
                           {p.subtitle}
                         </span>
                       </div>
@@ -1576,7 +1574,7 @@ export const ChatPage: React.FC = () => {
               </div>
 
               {/* 4 Agent Pipeline Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 relative z-10">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 relative z-10 w-full min-w-0">
                 {agentSteps.map((step, idx) => {
                   const isRunning = step.status === 'running';
                   const isDone = step.status === 'completed';
@@ -1588,7 +1586,7 @@ export const ChatPage: React.FC = () => {
                       initial={{ opacity: 0, y: 6 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: idx * 0.05 }}
-                      className={`p-3 rounded-2xl transition-all duration-300 relative overflow-hidden flex flex-col justify-between ${
+                      className={`p-3 rounded-2xl transition-all duration-300 relative overflow-hidden flex flex-col justify-between w-full min-w-0 ${
                         isRunning
                           ? 'bg-white dark:bg-white/10 border-2 border-[#5a25eb] dark:border-white shadow-[0_0_20px_rgba(255,255,255,0.25)]'
                           : isDone
@@ -1605,8 +1603,8 @@ export const ChatPage: React.FC = () => {
                         />
                       )}
 
-                      <div className="flex items-start justify-between gap-2 mb-1.5">
-                        <div className="flex items-center gap-2">
+                      <div className="flex items-start justify-between gap-2 mb-1.5 min-w-0">
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
                           {/* White Glowing Orb Animation Container */}
                           <div
                             className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 transition-transform ${
@@ -1623,18 +1621,18 @@ export const ChatPage: React.FC = () => {
                               theme="dark"
                             />
                           </div>
-                          <div>
-                            <h4 className="text-xs font-bold text-zinc-900 dark:text-white leading-tight">
+                          <div className="min-w-0 flex-1">
+                            <h4 className="text-xs font-bold text-zinc-900 dark:text-white leading-tight truncate">
                               {step.name}
                             </h4>
-                            <p className="text-[10px] text-zinc-500 dark:text-zinc-400 font-mono">
+                            <p className="text-[10px] text-zinc-500 dark:text-zinc-400 font-mono truncate">
                               {step.role}
                             </p>
                           </div>
                         </div>
 
                         {/* Status Badge */}
-                        <div>
+                        <div className="shrink-0">
                           {isDone && (
                             <span className="inline-flex items-center gap-1 text-[9px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded-md border border-emerald-500/20">
                               <CheckCircle2 className="w-2.5 h-2.5" />
@@ -1711,33 +1709,36 @@ export const ChatPage: React.FC = () => {
           </AnimatePresence>
 
           {/* Intelligent Control Panel / Composer with Animated Border Beam & Glass Surface */}
-          <div className="relative w-full max-w-[1050px] mx-auto rounded-[30px] sm:rounded-[34px] p-[2px] overflow-hidden group select-none">
+          <div className="relative w-full max-w-[1050px] mx-auto rounded-[30px] sm:rounded-[34px] p-[2px] group select-none overflow-visible">
             
-            {/* Primary Rotating Conic Glow Beam (Pure White Glow in Dark Theme) */}
-            <motion.div
-              animate={{ rotate: 360 }}
-              transition={{ duration: 7, repeat: Infinity, ease: 'linear' }}
-              className="absolute -inset-[180%] w-[460%] h-[460%] left-[-180%] top-[-180%] pointer-events-none z-0 opacity-95 group-hover:opacity-100 transition-opacity"
-              style={{
-                background:
-                  theme === 'dark'
-                    ? 'conic-gradient(from 0deg, transparent 0deg, transparent 50deg, rgba(255, 255, 255, 0.45) 100deg, rgba(255, 255, 255, 1) 160deg, rgba(220, 235, 255, 0.95) 210deg, rgba(255, 255, 255, 0.5) 260deg, transparent 320deg, transparent 360deg)'
-                    : 'conic-gradient(from 0deg, transparent 0deg, transparent 60deg, rgba(90, 37, 235, 0.65) 110deg, rgba(56, 189, 248, 0.8) 160deg, rgba(217, 70, 239, 0.65) 210deg, rgba(140, 110, 255, 0.7) 260deg, transparent 320deg, transparent 360deg)',
-              }}
-            />
+            {/* Clipped Rotating Glowing Border Frame */}
+            <div className="absolute inset-0 rounded-[30px] sm:rounded-[34px] overflow-hidden pointer-events-none z-0">
+              {/* Primary Rotating Conic Glow Beam (Pure White Glow in Dark Theme) */}
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ duration: 7, repeat: Infinity, ease: 'linear' }}
+                className="absolute -inset-[180%] w-[460%] h-[460%] left-[-180%] top-[-180%] pointer-events-none opacity-95 group-hover:opacity-100 transition-opacity"
+                style={{
+                  background:
+                    theme === 'dark'
+                      ? 'conic-gradient(from 0deg, transparent 0deg, transparent 50deg, rgba(255, 255, 255, 0.45) 100deg, rgba(255, 255, 255, 1) 160deg, rgba(220, 235, 255, 0.95) 210deg, rgba(255, 255, 255, 0.5) 260deg, transparent 320deg, transparent 360deg)'
+                      : 'conic-gradient(from 0deg, transparent 0deg, transparent 60deg, rgba(90, 37, 235, 0.65) 110deg, rgba(56, 189, 248, 0.8) 160deg, rgba(217, 70, 239, 0.65) 210deg, rgba(140, 110, 255, 0.7) 260deg, transparent 320deg, transparent 360deg)',
+                }}
+              />
 
-            {/* Counter-Rotating Soft Ambient Sheen */}
-            <motion.div
-              animate={{ rotate: -360 }}
-              transition={{ duration: 11, repeat: Infinity, ease: 'linear' }}
-              className="absolute -inset-[150%] w-[400%] h-[400%] left-[-150%] top-[-150%] pointer-events-none z-0 opacity-60 blur-[6px]"
-              style={{
-                background:
-                  theme === 'dark'
-                    ? 'conic-gradient(from 180deg, transparent 0deg, rgba(255, 255, 255, 0.5) 120deg, rgba(255, 255, 255, 0.8) 180deg, rgba(200, 220, 255, 0.4) 240deg, transparent 360deg)'
-                    : 'conic-gradient(from 180deg, transparent 0deg, rgba(90, 70, 255, 0.35) 120deg, rgba(56, 189, 248, 0.4) 240deg, transparent 360deg)',
-              }}
-            />
+              {/* Counter-Rotating Soft Ambient Sheen */}
+              <motion.div
+                animate={{ rotate: -360 }}
+                transition={{ duration: 11, repeat: Infinity, ease: 'linear' }}
+                className="absolute -inset-[150%] w-[400%] h-[400%] left-[-150%] top-[-150%] pointer-events-none opacity-60 blur-[6px]"
+                style={{
+                  background:
+                    theme === 'dark'
+                      ? 'conic-gradient(from 180deg, transparent 0deg, rgba(255, 255, 255, 0.5) 120deg, rgba(255, 255, 255, 0.8) 180deg, rgba(200, 220, 255, 0.4) 240deg, transparent 360deg)'
+                      : 'conic-gradient(from 180deg, transparent 0deg, rgba(90, 70, 255, 0.35) 120deg, rgba(56, 189, 248, 0.4) 240deg, transparent 360deg)',
+                }}
+              />
+            </div>
 
             {/* Inner Composer Body Surface */}
             <div
@@ -1745,7 +1746,7 @@ export const ChatPage: React.FC = () => {
                          border border-white/70 dark:border-white/20
                          shadow-[0_12px_45px_rgba(90,70,255,0.14)]
                          dark:shadow-[0_15px_50px_rgba(0,0,0,0.6),0_0_20px_rgba(255,255,255,0.08)]
-                         backdrop-blur-2xl overflow-hidden"
+                         backdrop-blur-2xl overflow-visible"
               style={{
                 background:
                   theme === 'dark'
@@ -1907,7 +1908,7 @@ export const ChatPage: React.FC = () => {
                           initial={{ opacity: 0, y: 8, scale: 0.96 }}
                           animate={{ opacity: 1, y: 0, scale: 1 }}
                           exit={{ opacity: 0, y: 8, scale: 0.96 }}
-                          className="absolute bottom-full left-0 mb-2.5 w-64 p-2 rounded-2xl bg-white/95 dark:bg-[#10101c]/95 backdrop-blur-2xl border border-blue-200/80 dark:border-white/15 shadow-2xl z-40 space-y-1"
+                          className="absolute bottom-full left-0 sm:left-auto sm:right-0 mb-2.5 w-64 p-2 rounded-2xl bg-white/95 dark:bg-[#10101c]/95 backdrop-blur-2xl border border-blue-200/80 dark:border-white/15 shadow-2xl z-50 space-y-1"
                         >
                           <div className="px-2.5 py-1 text-[10px] font-mono text-zinc-400 font-bold uppercase tracking-wider">
                             AI Mode & Tools

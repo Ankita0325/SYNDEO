@@ -99,6 +99,43 @@ class EvidenceDocument:
             "status": self.status
         }
 
+def _normalize_field_name(raw_name: str, category: str = "identity") -> Tuple[str, str, bool]:
+    """
+    Normalizes field names and categories for deduplication and consistent storage.
+    Returns (canonical_category, canonical_field_name, is_singular).
+    """
+    name_clean = raw_name.strip().lower().replace("_", " ").replace("-", " ")
+    
+    # Social links and identity normalization
+    if any(k in name_clean for k in ["github", "git hub", "gh profile", "gh link"]):
+        return "identity", "GitHub Profile", False
+    if any(k in name_clean for k in ["linkedin", "linked in"]):
+        return "identity", "LinkedIn Profile", False
+    if any(k in name_clean for k in ["discord", "discord tag", "discord handle"]):
+        return "identity", "Discord Profile", False
+    if any(k in name_clean for k in ["twitter", "x profile", "x handle", "tweet"]):
+        return "identity", "Twitter / X Profile", False
+    if any(k in name_clean for k in ["portfolio", "personal website", "portfolio website", "personal site"]):
+        return "identity", "Portfolio Website", False
+    if any(k in name_clean for k in ["legal name", "full name", "user name"]):
+        return "identity", "Full Legal Name", True
+    if any(k in name_clean for k in ["dob", "date of birth", "birth date", "birthdate"]):
+        return "identity", "Date of Birth", True
+    if any(k in name_clean for k in ["primary email", "email address", "email"]):
+        return "identity", "Primary Email", False
+    if any(k in name_clean for k in ["phone number", "mobile number", "contact number", "primary phone"]):
+        return "identity", "Primary Phone", False
+    if any(k in name_clean for k in ["residential address", "home address", "permanent address"]):
+        return "identity", "Residential Address", False
+    if any(k in name_clean for k in ["pan", "pan number", "tax id", "tax identifier"]):
+        return "finance", "Primary Tax Identifier (PAN)", True
+    if any(k in name_clean for k in ["blood group", "blood type"]):
+        return "healthcare", "Blood Group", True
+    
+    # Default capitalization
+    title_name = " ".join([w.capitalize() for w in raw_name.strip().split()])
+    return category.lower().strip() or "identity", title_name, False
+
 class GraphStore:
     """
     Production Multi-Hop Graph Storage Engine.
@@ -349,6 +386,7 @@ class GraphStore:
             GraphNode("hlth-3", "healthcare", "Health Insurance Provider", "Star Health & Allied — Policy #SH-88921-99", "Extracted from document", "evidence-backed", "LEVEL_2_EVIDENCE_ATTACHED", d4.name, d4.sha256_hash)
         ]
 
+
         for claim in seed_claims:
             self.nodes[claim.id] = claim
 
@@ -364,12 +402,37 @@ class GraphStore:
         raw_numeric_value: Optional[float] = None
     ) -> Tuple[GraphNode, Optional[Dict[str, Any]]]:
         """
-        Commits claim to Graph Store and mirrors to Neo4j.
+        Commits claim to Graph Store and mirrors to Neo4j with strict deduplication.
         Detects singular conflicts and maintains full audit history.
         """
+        canon_cat, canon_name, auto_singular = _normalize_field_name(field_name, category)
+        target_category = category if category and category != "identity" and canon_cat == "identity" and not any(s in canon_name.lower() for s in ["github", "linkedin", "discord", "twitter", "portfolio"]) else canon_cat
+        target_name = canon_name if canon_name else field_name.strip()
+        effective_singular = is_singular or auto_singular
+
+        # Check existing nodes for deduplication
         existing_node = None
         for n in self.nodes.values():
-            if n.category == category and n.field_name.strip().lower() == field_name.strip().lower() and n.status == "ACTIVE":
+            if n.status != "ACTIVE":
+                continue
+            # 1. Exact or normalized field name match in the same category
+            same_cat = (n.category.lower() == target_category.lower())
+            same_field = (n.field_name.strip().lower() == target_name.strip().lower())
+            
+            # 2. Social URL match (e.g. both are github.com or linkedin.com)
+            is_social_match = False
+            v_lower = field_value.strip().lower()
+            n_lower = n.field_value.strip().lower()
+            if "github.com" in v_lower and "github.com" in n_lower:
+                is_social_match = True
+            elif "linkedin.com" in v_lower and "linkedin.com" in n_lower:
+                is_social_match = True
+            elif ("discord.com" in v_lower or "discord.gg" in v_lower) and ("discord.com" in n_lower or "discord.gg" in n_lower):
+                is_social_match = True
+            elif ("twitter.com" in v_lower or "x.com" in v_lower) and ("twitter.com" in n_lower or "x.com" in n_lower):
+                is_social_match = True
+
+            if (same_cat and same_field) or is_social_match:
                 existing_node = n
                 break
 
@@ -377,10 +440,11 @@ class GraphStore:
         assurance = "LEVEL_2_EVIDENCE_ATTACHED" if source == "Extracted from document" else "LEVEL_1_USER_ASSERTED"
 
         if existing_node:
-            if existing_node.is_singular and existing_node.field_value.strip().lower() != field_value.strip().lower():
+            # If singular and value changed significantly
+            if (existing_node.is_singular or effective_singular) and existing_node.field_value.strip().lower() != field_value.strip().lower():
                 conflict_record = {
                     "id": f"conflict-{uuid.uuid4().hex[:8]}",
-                    "fieldName": field_name,
+                    "fieldName": target_name,
                     "existingValue": existing_node.field_value,
                     "existingSource": existing_node.source,
                     "conflictingValue": field_value,
@@ -395,13 +459,16 @@ class GraphStore:
             self.history.append({
                 "id": f"hist-{uuid.uuid4().hex[:8]}",
                 "nodeId": existing_node.id,
-                "fieldName": field_name,
+                "fieldName": target_name,
                 "previousValue": existing_node.field_value,
                 "newValue": field_value,
                 "changedAt": datetime.now(timezone.utc).isoformat()
             })
 
-            existing_node.field_value = field_value
+            # Update existing node in-place to avoid duplicates
+            existing_node.field_name = target_name
+            existing_node.field_value = field_value.strip()
+            existing_node.category = target_category
             existing_node.source = source
             existing_node.confidence = confidence
             existing_node.assurance_level = assurance
@@ -419,15 +486,15 @@ class GraphStore:
         new_id = f"rec-{uuid.uuid4().hex[:8]}"
         new_node = GraphNode(
             node_id=new_id,
-            category=category,
-            field_name=field_name,
-            field_value=field_value,
+            category=target_category,
+            field_name=target_name,
+            field_value=field_value.strip(),
             source=source,
             confidence=confidence,
             assurance_level=assurance,
             evidence_doc_name=evidence_doc_name,
             evidence_doc_hash=evidence_doc_hash,
-            is_singular=is_singular,
+            is_singular=effective_singular,
             raw_numeric_value=raw_numeric_value
         )
         self.nodes[new_id] = new_node
@@ -502,59 +569,74 @@ class GraphStore:
         return doc
 
     def query_graph_by_keyword(self, query: str) -> List[GraphNode]:
-        q = query.lower()
+        q_raw = query.lower().strip()
+        search_terms = {q_raw}
+        
+        # Expand social and identity search terms
+        if any(w in q_raw for w in ["social", "socials", "links", "profile", "handles"]):
+            search_terms.update(["github", "linkedin", "discord", "twitter", "portfolio"])
+        if "gh" in q_raw.split():
+            search_terms.add("github")
+        if "dc" in q_raw.split():
+            search_terms.add("discord")
+            
+        cypher_nodes: Dict[str, GraphNode] = {}
         # First try Cypher if connected
         if self.neo4j_driver and self.neo4j_connected:
             try:
                 with self.neo4j_driver.session() as session:
-                    result = session.run(
-                        """
-                        MATCH (p:Person {person_id: $person_id})-[:HAS_CLAIM]->(c:Claim)
-                        WHERE c.status = 'ACTIVE' AND (
-                            toLower(c.field_name) CONTAINS $q OR
-                            toLower(c.field_value) CONTAINS $q OR
-                            toLower(c.category) CONTAINS $q
+                    for term in search_terms:
+                        result = session.run(
+                            """
+                            MATCH (p:Person {person_id: $person_id})-[:HAS_CLAIM]->(c:Claim)
+                            WHERE c.status = 'ACTIVE' AND (
+                                toLower(c.field_name) CONTAINS $q OR
+                                toLower(c.field_value) CONTAINS $q OR
+                                toLower(c.category) CONTAINS $q
+                            )
+                            OPTIONAL MATCH (c)-[:BACKED_BY]->(d:Document)
+                            RETURN c.id AS id, c.category AS category, c.field_name AS field_name,
+                                   c.field_value AS field_value, c.source AS source,
+                                   c.confidence AS confidence, c.assurance_level AS assurance_level,
+                                   d.name AS evidence_doc_name, d.sha256_hash AS evidence_doc_hash,
+                                   c.is_singular AS is_singular, c.is_sensitive AS is_sensitive
+                            """,
+                            person_id=self.person_id, q=term
                         )
-                        OPTIONAL MATCH (c)-[:BACKED_BY]->(d:Document)
-                        RETURN c.id AS id, c.category AS category, c.field_name AS field_name,
-                               c.field_value AS field_value, c.source AS source,
-                               c.confidence AS confidence, c.assurance_level AS assurance_level,
-                               d.name AS evidence_doc_name, d.sha256_hash AS evidence_doc_hash,
-                               c.is_singular AS is_singular, c.is_sensitive AS is_sensitive
-                        """,
-                        person_id=self.person_id, q=q
-                    )
-                    cypher_nodes = []
-                    for record in result:
-                        cypher_nodes.append(GraphNode(
-                            node_id=record["id"],
-                            category=record["category"],
-                            field_name=record["field_name"],
-                            field_value=record["field_value"],
-                            source=record["source"] or "Confirmed by you",
-                            confidence=record["confidence"] or "user-confirmed",
-                            assurance_level=record["assurance_level"] or "LEVEL_1_USER_ASSERTED",
-                            evidence_doc_name=record["evidence_doc_name"],
-                            evidence_doc_hash=record["evidence_doc_hash"],
-                            is_singular=bool(record["is_singular"]),
-                            is_sensitive=bool(record["is_sensitive"])
-                        ))
-                    if cypher_nodes:
-                        return cypher_nodes
+                        for record in result:
+                            cid = record["id"]
+                            if cid not in cypher_nodes:
+                                cypher_nodes[cid] = GraphNode(
+                                    node_id=cid,
+                                    category=record["category"],
+                                    field_name=record["field_name"],
+                                    field_value=record["field_value"],
+                                    source=record["source"] or "Confirmed by you",
+                                    confidence=record["confidence"] or "user-confirmed",
+                                    assurance_level=record["assurance_level"] or "LEVEL_1_USER_ASSERTED",
+                                    evidence_doc_name=record["evidence_doc_name"],
+                                    evidence_doc_hash=record["evidence_doc_hash"],
+                                    is_singular=bool(record["is_singular"]),
+                                    is_sensitive=bool(record["is_sensitive"])
+                                )
+                if cypher_nodes:
+                    return list(cypher_nodes.values())
             except Exception as e:
                 logger.warning(f"Cypher query fallback: {e}")
 
-        # In-memory graph search
-        matched = []
+        # In-memory graph search fallback
+        matched_dict = {}
         for node in self.nodes.values():
             if node.status != "ACTIVE":
                 continue
-            if (q in node.field_name.lower() or 
-                q in node.field_value.lower() or 
-                q in node.category.lower() or 
-                (node.evidence_doc_name and q in node.evidence_doc_name.lower())):
-                matched.append(node)
-        return matched
+            for term in search_terms:
+                if (term in node.field_name.lower() or 
+                    term in node.field_value.lower() or 
+                    term in node.category.lower() or 
+                    (node.evidence_doc_name and term in node.evidence_doc_name.lower())):
+                    matched_dict[node.id] = node
+                    break
+        return list(matched_dict.values())
 
     def get_all_records(self) -> List[Dict[str, Any]]:
         return [n.to_dict() for n in self.nodes.values() if n.status == "ACTIVE"]

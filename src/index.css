@@ -52,7 +52,10 @@
     --card-foreground: #f4f4f6;
   }
 
-  * {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
     border-color: var(--border);
   }
 
