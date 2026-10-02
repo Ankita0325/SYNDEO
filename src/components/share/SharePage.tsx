@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { sampleShareRequest, initialSharedLinks } from '../../data/mockData';
 import type { SharedLink } from '../../types';
+import { composeSelectiveProof, revokeShareLinkBackend } from '../../lib/api';
 import { StatusBadge } from '../common/Badge';
 import { Modal } from '../common/Modal';
 import {
@@ -29,7 +30,8 @@ export const SharePage: React.FC = () => {
   const [sharedLinks, setSharedLinks] = useState<SharedLink[]>(initialSharedLinks);
   const [copiedLink, setCopiedLink] = useState<boolean>(false);
   const [isQrModalOpen, setIsQrModalOpen] = useState<boolean>(false);
-  const generatedLinkUrl = 'https://syndeo.ai/p/share-78b10f2c';
+  const [qrCodeImage, setQrCodeImage] = useState<string | null>(null);
+  const [generatedLinkUrl, setGeneratedLinkUrl] = useState<string>('https://syndeo.ai/p/share-78b10f2c');
   const [shareSuccessNotice, setShareSuccessNotice] = useState<string | null>(null);
 
   const toggleField = (key: string) => {
@@ -41,13 +43,28 @@ export const SharePage: React.FC = () => {
 
   const selectedCount = Object.values(selectedFields).filter(Boolean).length;
 
-  const handleGenerateShareLink = () => {
-    const selectedFieldNames = sampleShareRequest.requestedFields
-      .filter((f) => selectedFields[f.key])
-      .map((f) => f.label);
+  const handleGenerateShareLink = async () => {
+    const selectedFieldItems = sampleShareRequest.requestedFields
+      .filter((f) => selectedFields[f.key]);
+
+    const selectedFieldNames = selectedFieldItems.map((f) => f.label);
+
+    const expiryHours = expiryOption === '1h' ? 1 : expiryOption === '24h' ? 24 : expiryOption === '7d' ? 168 : 87600;
+
+    const proofRes = await composeSelectiveProof({
+      recipient: 'Acme University Postgraduate Admissions',
+      purpose: sampleShareRequest.purpose,
+      requestedFields: selectedFieldItems,
+      expiryHours,
+    });
+
+    if (proofRes) {
+      if (proofRes.qrDataUrl) setQrCodeImage(proofRes.qrDataUrl);
+      if (proofRes.shareToken) setGeneratedLinkUrl(`https://syndeo.ai/p/${proofRes.shareToken}`);
+    }
 
     const newLink: SharedLink = {
-      id: `link-${Date.now()}`,
+      id: proofRes?.id || `link-${Date.now()}`,
       recipient: 'Acme University (Selective)',
       fieldsShared: selectedFieldNames,
       createdAt: 'Just now',
@@ -68,10 +85,11 @@ export const SharePage: React.FC = () => {
     setTimeout(() => setShareSuccessNotice(null), 4000);
   };
 
-  const handleRevoke = (id: string) => {
+  const handleRevoke = async (id: string) => {
     setSharedLinks((prev) =>
       prev.map((link) => (link.id === id ? { ...link, status: 'Revoked', expiry: 'Revoked by user' } : link))
     );
+    await revokeShareLinkBackend(id);
   };
 
   const copyToClipboard = () => {
