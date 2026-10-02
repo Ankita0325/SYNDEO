@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SYNDEO Form Scanner</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <div class="popup-container">
+    <!-- Header -->
+    <header class="header">
+      <div class="brand">
+        <div class="brand-logo">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="logo-icon">
+            <circle cx="12" cy="12" r="10" stroke="url(#purpleGrad)" stroke-width="2.5" />
+            <circle cx="12" cy="12" r="5" fill="#5a25eb" />
+            <defs>
+              <linearGradient id="purpleGrad" x1="2" y1="2" x2="22" y2="22" gradientUnits="userSpaceOnUse">
+                <stop stop-color="#cbbeff" />
+                <stop offset="1" stop-color="#5a25eb" />
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <div class="brand-name">SYNDEO</div>
+          <div class="brand-tag">FORM SCANNER</div>
+        </div>
+      </div>
+      <div class="badge-phase">Phase 1: Read-Only</div>
+    </header>
+
+    <!-- Scan Trigger Action -->
+    <div class="action-section">
+      <button id="scanBtn" class="btn-scan">
+        <svg class="scan-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        <span id="scanBtnText">Scan Current Page</span>
+      </button>
+    </div>
+
+    <!-- Main Dynamic Content Views -->
+    <main class="main-content">
+      <!-- 1. Initial State -->
+      <div id="stateInitial" class="state-view">
+        <div class="state-card">
+          <div class="state-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+              <line x1="16" y1="13" x2="8" y2="13"></line>
+              <line x1="16" y1="17" x2="8" y2="17"></line>
+              <polyline points="10 9 9 9 8 9"></polyline>
+            </svg>
+          </div>
+          <div class="state-title">Ready to Scan</div>
+          <div class="state-desc">
+            Inspect all visible input, textarea, and select fields on the current tab without reading or modifying any data.
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. Scanning / Loading State -->
+      <div id="stateScanning" class="state-view hidden">
+        <div class="state-card">
+          <div class="scanning-spinner"></div>
+          <div class="state-title">Scanning Page DOM...</div>
+          <div class="state-desc">Extracting field metadata, labels, and form associations.</div>
+        </div>
+      </div>
+
+      <!-- 3. Restricted / Unsupported Page State -->
+      <div id="stateRestricted" class="state-view hidden">
+        <div class="state-card warning">
+          <div class="state-icon warning-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+            </svg>
+          </div>
+          <div class="state-title">This Page Cannot Be Scanned</div>
+          <div class="state-desc">
+            Chrome security restricts extensions from running on system pages (chrome://, Web Store, or local file schemes).
+          </div>
+        </div>
+      </div>
+
+      <!-- 4. Error State -->
+      <div id="stateError" class="state-view hidden">
+        <div class="state-card error">
+          <div class="state-icon error-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="8" x2="12" y2="12"></line>
+              <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
+          </div>
+          <div class="state-title">Unable to Scan This Page</div>
+          <div id="errorMessage" class="state-desc">
+            Could not communicate with the webpage. Please refresh the page and try again.
+          </div>
+        </div>
+      </div>
+
+      <!-- 5. Empty State (No Fields Found) -->
+      <div id="stateEmpty" class="state-view hidden">
+        <div class="state-card">
+          <div class="state-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="8" y1="12" x2="16" y2="12"></line>
+            </svg>
+          </div>
+          <div class="state-title">No Visible Form Fields Found</div>
+          <div class="state-desc">
+            The scanner did not find any interactive input, select, or textarea fields on this page.
+          </div>
+        </div>
+      </div>
+
+      <!-- 6. Success Results View -->
+      <div id="stateResults" class="results-view hidden">
+        <!-- Page Context Summary Header -->
+        <div class="page-meta-card">
+          <div class="page-meta-main">
+            <div id="pageDomain" class="page-domain">example.com</div>
+            <div id="pageTitle" class="page-title">Page Title</div>
+          </div>
+          <div class="summary-pill" id="summaryCount">0 fields</div>
+        </div>
+
+        <!-- Filter & Search Controls -->
+        <div class="search-filter-row">
+          <div class="search-box">
+            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <input type="text" id="filterInput" placeholder="Filter fields by name or label..." />
+          </div>
+          <button id="copyJsonBtn" class="btn-copy-json" title="Copy Raw Structured JSON">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+            <span>JSON</span>
+          </button>
+        </div>
+
+        <!-- Filter Category Pills -->
+        <div class="category-tabs" id="categoryTabs">
+          <button class="tab-pill active" data-filter="all">All (<span id="countAll">0</span>)</button>
+          <button class="tab-pill" data-filter="input">Inputs (<span id="countInputs">0</span>)</button>
+          <button class="tab-pill" data-filter="select">Selects (<span id="countSelects">0</span>)</button>
+          <button class="tab-pill" data-filter="textarea">Textarea (<span id="countTextareas">0</span>)</button>
+          <button class="tab-pill" data-filter="required">Required (<span id="countRequired">0</span>)</button>
+        </div>
+
+        <!-- Field Cards List -->
+        <div id="fieldsList" class="fields-list">
+          <!-- Dynamically populated via popup.js safely using textContent -->
+        </div>
+      </div>
+    </main>
+
+    <!-- Footer Privacy Seal -->
+    <footer class="footer">
+      <div class="footer-seal">
+        <svg class="lock-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+          <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+        </svg>
+        <span>Read-Only Metadata Scanner • No values collected or transmitted</span>
+      </div>
+    </footer>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
