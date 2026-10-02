@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigation } from '../../context/NavigationContext';
-import { initialDocuments, initialSharedLinks } from '../../data/mockData';
 import type { AccessViewer, DocumentItem, OrganizationAccessProfile, OrganizationType, SharePurpose, SharedLink } from '../../types';
 import { loadSharedLinks, saveSharedLinks, subscribeToSharedLinks } from '../../lib/shareStore';
 import { supabase } from '../../lib/supabase';
@@ -251,36 +250,36 @@ interface SharedLinkViewerProps {
 }
 
 export const SharedLinkViewer: React.FC<SharedLinkViewerProps> = ({ token: propToken, packet: propPacket, onBack }) => {
-  const { isAuthenticated, navigate } = useNavigation();
+  const { isAuthenticated, navigate, signInAsGuest } = useNavigation();
   // Resolve packet data
   const initialPacket = React.useMemo<SharedPacketData>(() => {
     if (propPacket) return propPacket;
-    const token = propToken || 'link-1';
-    const existing = loadSharedLinks(initialSharedLinks).find((l) => l.id === token);
-    const selectedLabels = existing?.fieldsShared || ['GitHub', 'LinkedIn', 'School / College', 'Degree & Major'];
-    const documents = existing?.sharedDocuments || initialDocuments.filter((document) => existing?.sharedDocumentIds?.includes(document.id));
+    const token = propToken || '';
+    const existing = loadSharedLinks([]).find((l) => l.id === token);
+    const selectedLabels = existing?.fieldsShared || [];
+    const documents = existing?.sharedDocuments || [];
     const matched = ALL_MASTER_FIELDS.filter((f) =>
       selectedLabels.some((label) => f.label.toLowerCase().includes(label.toLowerCase()) || label.toLowerCase().includes(f.label.toLowerCase()))
     );
 
     return {
       id: token,
-      creatorName: 'Indresh',
-      creatorEmail: 'indresh@example.com',
-      recipient: existing?.recipient || 'Verified Partner Review',
+      creatorName: 'Vault Owner',
+      creatorEmail: 'owner@syndeo.vault',
+      recipient: existing?.recipient || 'Verified Verification Scope',
       createdAt: existing?.createdAt || 'Recently',
-      expiry: existing?.expiry || 'Active (24h)',
+      expiry: existing?.expiry || 'Active',
       token,
-      status: existing?.status || 'Expired',
-      fields: matched.length > 0 ? matched : existing?.sharedDocumentIds !== undefined ? [] : ALL_MASTER_FIELDS.slice(0, 4),
+      status: existing?.status || 'Active',
+      fields: matched,
       documents,
-      documentShare: existing?.sharedDocumentIds !== undefined,
+      documentShare: Boolean(existing?.sharedDocumentIds?.length),
     };
   }, [propPacket, propToken]);
 
   const [packet, setPacket] = useState<SharedPacketData>(initialPacket);
   const [fields, setFields] = useState<SharedFieldData[]>(initialPacket.fields);
-  const [shareLinks, setShareLinks] = useState<SharedLink[]>(() => loadSharedLinks(initialSharedLinks));
+  const [shareLinks, setShareLinks] = useState<SharedLink[]>(() => loadSharedLinks([]));
   const [organizationProfile, setOrganizationProfile] = useState<OrganizationAccessProfile>({
     fullName: '',
     workEmail: '',
@@ -384,8 +383,8 @@ export const SharedLinkViewer: React.FC<SharedLinkViewerProps> = ({ token: propT
       setPacket((current) => ({
         ...current,
         status: currentLink.status,
-        documents: currentLink.sharedDocuments || initialDocuments.filter((document) => currentLink.sharedDocumentIds?.includes(document.id)),
-        documentShare: currentLink.sharedDocumentIds !== undefined,
+        documents: currentLink.sharedDocuments || [],
+        documentShare: Boolean(currentLink.sharedDocumentIds?.length),
       }));
     }
   }, [packet.token, shareLinks]);
@@ -683,16 +682,26 @@ export const SharedLinkViewer: React.FC<SharedLinkViewerProps> = ({ token: propT
           <Lock className="mx-auto h-8 w-8 text-amber-500" />
           <h1 className="text-xl font-bold text-zinc-900 dark:text-white">Sign in to request access</h1>
           <p className="text-sm text-zinc-500 dark:text-[#8c879a]">After sign-in, provide your organization details to request these documents.</p>
-          <button
-            onClick={() => {
-              window.sessionStorage.setItem('syndeo.pending-share-token', packet.token);
-              navigate('/auth');
-            }}
-            className="inline-flex items-center gap-2 rounded-lg bg-emerald-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-600"
-          >
-            Sign In / Register on SYNDEO
-            <ExternalLink className="h-4 w-4" />
-          </button>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+            <button
+              onClick={() => {
+                window.sessionStorage.setItem('syndeo.pending-share-token', packet.token);
+                navigate('/auth');
+              }}
+              className="inline-flex items-center gap-2 rounded-xl bg-[#5a25eb] px-5 py-2.5 text-xs font-semibold text-white hover:bg-[#6b37fa] transition-all cursor-pointer shadow-xs"
+            >
+              <span>Sign In / Register on SYNDEO</span>
+              <ExternalLink className="h-3.5 w-3.5" />
+            </button>
+            <button
+              onClick={() => {
+                signInAsGuest('Guest Reviewer');
+              }}
+              className="inline-flex items-center gap-2 rounded-xl bg-zinc-100 dark:bg-[#161622] hover:bg-zinc-200 dark:hover:bg-[#202030] px-4 py-2.5 text-xs font-semibold text-zinc-700 dark:text-[#cbbeff] border border-zinc-200 dark:border-[#28283a] transition-all cursor-pointer"
+            >
+              <span>Continue as Guest →</span>
+            </button>
+          </div>
         </div>
       </div>
     );

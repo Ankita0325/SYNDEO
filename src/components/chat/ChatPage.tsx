@@ -1519,17 +1519,6 @@ export const ChatPage: React.FC = () => {
                     <span>Voice Mode</span>
                   </button>
 
-                  {/* New Chat Quick Action */}
-                  <button
-                    type="button"
-                    onClick={handleResetChat}
-                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium text-zinc-600 dark:text-zinc-300 hover:text-zinc-950 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10 transition-all cursor-pointer"
-                    title="Start a fresh chat conversation"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">New Chat</span>
-                  </button>
-
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
