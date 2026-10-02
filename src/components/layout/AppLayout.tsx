@@ -1,389 +1,206 @@
 import React, { useState } from 'react';
 import { useNavigation, type RoutePath } from '../../context/NavigationContext';
 import { useTheme } from '../../context/ThemeContext';
-import { AILoaderOrb } from '../ui/ai-loader';
-import {
-  Share2,
-  Settings,
-  Sun,
-  Moon,
-  Menu,
-  X,
-  ArrowRight,
-  ShieldCheck,
-  MessageSquare,
-  Folder,
-  LogOut,
-} from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { ThemeToggle } from '../ui/ThemeToggle';
+import { ArrowRight } from 'lucide-react';
+import { motion } from 'framer-motion';
+
+import { FloatingSidebar } from './FloatingSidebar';
 
 export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { currentPath, navigate, userName, signOut } = useNavigation();
-  const { theme, toggleTheme } = useTheme();
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  const { currentPath, navigate, userName } = useNavigation();
+  const { theme } = useTheme();
+  const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
 
   const isLanding = currentPath === '/';
   const isAuth = currentPath === '/auth';
-
-  const navItems: { path: RoutePath; label: string; icon: React.FC<{ className?: string }>; desc: string }[] = [
-    { path: '/chat', label: 'AI Memory Chat', icon: MessageSquare, desc: 'Zero-Knowledge Conversational Retrieval' },
-    { path: '/memory', label: 'Life-Stage Store', icon: Folder, desc: 'Obsidian Knowledge Graph & Credentials' },
-    { path: '/share', label: 'Selective Share', icon: Share2, desc: 'Scoped zk-SNARK Disclosure Links' },
-    { path: '/settings', label: 'Vault Settings', icon: Settings, desc: 'Cryptographic Keys & Security' },
-  ];
+  const isChat = currentPath === '/chat';
 
   const handleNavClick = (path: RoutePath) => {
     navigate(path);
-  };
-
-  const handleLogout = async () => {
-    setDrawerOpen(false);
-    await signOut();
   };
 
   const displayName = userName?.trim() || 'Indresh Suresh';
   const displayInitials = displayName.slice(0, 2).toUpperCase();
 
   return (
-    <div
-      className={`bg-white dark:bg-black text-[#09090b] dark:text-[#f4f4f6] flex flex-col selection:bg-[#5a25eb]/40 selection:text-[#cbbeff] transition-colors duration-200 ${
-        isAuth || isLanding ? 'min-h-screen overflow-x-hidden' : 'h-screen h-[100dvh] overflow-hidden'
-      }`}
-    >
-      {/* 1. STANDALONE AUTH MODE */}
-      {isAuth ? (
-        <main className="flex-1 flex flex-col min-h-screen">{children}</main>
-      ) : isLanding ? (
-        /* 2. LANDING PAGE MODE (Clean Floating Capsule Header, No Side Panel Glitches) */
-        <>
-          <header className="sticky top-3 z-50 max-w-6xl mx-auto w-full px-3 sm:px-4">
-            <div className="rounded-full bg-white/85 dark:bg-black/80 backdrop-blur-2xl border border-zinc-200 dark:border-white/10 shadow-xl px-3.5 py-2 sm:px-5 sm:py-2.5 flex items-center justify-between transition-all">
-              <button onClick={() => handleNavClick('/')} className="flex items-center gap-2.5 text-left group cursor-pointer">
-                <div className="relative w-8 h-8 rounded-full overflow-hidden bg-zinc-100 dark:bg-[#121218] border border-zinc-300 dark:border-white/15 flex items-center justify-center p-0.5 shadow-sm group-hover:border-[#5a25eb]/70 transition-colors">
-                  <img src="/logo.png" alt="SYNDEO AI Logo" className="w-full h-full object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-sm sm:text-base font-bold tracking-tight text-zinc-900 dark:text-white group-hover:text-[#5a25eb] dark:group-hover:text-[#cbbeff] transition-colors">SYNDEO AI</span>
-                  <span className="hidden sm:inline-block text-[10px] font-mono px-2 py-0.5 rounded-full bg-[#5a25eb]/15 dark:bg-[#5a25eb]/20 text-[#5a25eb] dark:text-[#cbbeff] border border-[#5a25eb]/30">Sovereign</span>
-                </div>
-              </button>
+    <div className="min-h-screen w-full relative overflow-x-hidden bg-white dark:bg-[#070710] text-[#09090b] dark:text-[#f4f4f6] flex flex-col selection:bg-[#5a25eb]/30 selection:text-[#cbbeff] transition-colors duration-300">
+      
+      {/* =========================================================================
+          1. CONTINUOUS GLOBAL ATMOSPHERE BACKGROUND (Layer 0 - Unclipped Canvas)
+         ========================================================================= */}
+      <div
+        className="fixed inset-0 pointer-events-none z-0"
+        style={{
+          background:
+            theme === 'dark'
+              ? `
+                radial-gradient(circle at 25% 10%, rgba(90, 37, 235, 0.22), transparent 35%),
+                radial-gradient(circle at 50% 20%, rgba(56, 189, 248, 0.15), transparent 32%),
+                radial-gradient(circle at 75% 45%, rgba(90, 37, 235, 0.20), transparent 35%),
+                #070710
+              `
+              : `
+                radial-gradient(circle at 25% 10%, rgba(190, 210, 255, 0.55), transparent 32%),
+                radial-gradient(circle at 50% 20%, rgba(147, 197, 253, 0.35), transparent 30%),
+                radial-gradient(circle at 75% 45%, rgba(220, 210, 255, 0.40), transparent 35%),
+                #ffffff
+              `,
+        }}
+      />
 
-              <nav className="hidden md:flex items-center gap-1 pl-3 border-l border-zinc-200 dark:border-white/10">
-                <button onClick={() => handleNavClick('/chat')} className="px-3.5 py-1.5 rounded-full text-xs font-medium text-zinc-600 dark:text-[#a1a1aa] hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/5 transition-all cursor-pointer">AI Assistant</button>
-                <button onClick={() => handleNavClick('/memory')} className="px-3.5 py-1.5 rounded-full text-xs font-medium text-zinc-600 dark:text-[#a1a1aa] hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/5 transition-all cursor-pointer">Memory Store</button>
-                <button onClick={() => handleNavClick('/share')} className="px-3.5 py-1.5 rounded-full text-xs font-medium text-zinc-600 dark:text-[#a1a1aa] hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/5 transition-all cursor-pointer">Selective Share</button>
-              </nav>
+      {/* Subtle Moving Ambient Sheen Overlay */}
+      <motion.div
+        animate={{
+          opacity: [0.3, 0.5, 0.3],
+          scale: [1, 1.02, 1],
+        }}
+        transition={{ duration: 12, repeat: Infinity, ease: 'easeInOut' }}
+        className="fixed inset-0 pointer-events-none z-0 bg-gradient-to-b from-transparent via-blue-100/10 dark:via-[#5a25eb]/5 to-transparent"
+      />
 
-              <div className="flex items-center gap-2">
-                <button onClick={toggleTheme} className="p-2 rounded-full text-zinc-600 dark:text-[#a1a1aa] hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/10 border border-zinc-200 dark:border-white/10 transition-colors cursor-pointer" title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}>
-                  {theme === 'dark' ? <Sun className="w-3.5 h-3.5 text-[#e4e4e7]" /> : <Moon className="w-3.5 h-3.5 text-zinc-700" />}
-                </button>
-                <button onClick={() => handleNavClick('/auth')} className="hidden sm:inline-block px-3.5 py-1.5 rounded-full text-xs font-semibold text-zinc-700 dark:text-[#e4e4e7] hover:text-zinc-900 dark:hover:text-white bg-zinc-100 dark:bg-white/5 border border-zinc-200 dark:border-white/15 transition-all cursor-pointer">Sign In</button>
-                <button onClick={() => handleNavClick('/chat')} className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold text-white bg-[#5a25eb] hover:bg-[#6b37fa] shadow-md shadow-[#5a25eb]/30 transition-all cursor-pointer">
-                  <span>Launch</span><ArrowRight className="w-3 h-3" />
-                </button>
-              </div>
-            </div>
-          </header>
-          <main className="flex-1">{children}</main>
-        </>
-      ) : (
-        /* 3. WORKSPACE MODE (Proper Nav Bar: SYNDEO AI on left, Profile Name on right) */
-        <div className="flex-1 flex flex-col h-full w-full min-h-0 overflow-hidden relative bg-zinc-50/50 dark:bg-[#030308]">
-          
-          {/* Top Navbar */}
-          <header className="sticky top-0 z-30 w-full px-4 sm:px-6 py-2.5 flex items-center justify-between bg-white/75 dark:bg-[#07070d]/80 backdrop-blur-xl border-b border-zinc-200/70 dark:border-white/10 transition-colors">
-            {/* Left: Just name SYNDEO AI */}
+      {/* =========================================================================
+          2. FLOATING FIXED NAVBAR (Layer 100 - Premium Glassmorphism)
+         ========================================================================= */}
+      {!isAuth && (
+        <header className="fixed top-3 sm:top-3 md:top-3 left-3 sm:left-4 md:left-6 right-3 sm:right-4 md:right-6 h-[58px] sm:h-16 z-[100] transition-all">
+          <div
+            className="w-full h-full rounded-[18px] px-3.5 sm:px-6 flex items-center justify-between
+                       bg-white/70 dark:bg-[#0c0c16]/75
+                       backdrop-blur-[24px] backdrop-saturate-[160%]
+                       border border-black/[0.06] dark:border-white/[0.08]
+                       shadow-[0_8px_32px_rgba(30,20,80,0.06),inset_0_1px_0_rgba(255,255,255,0.8)]
+                       dark:shadow-[0_8px_32px_rgba(0,0,0,0.4),inset_0_1px_0_rgba(255,255,255,0.06)]"
+          >
+            {/* Left: Logo + SYNDEO AI + Vault+ badge */}
             <button
               onClick={() => handleNavClick('/')}
-              className="flex items-center gap-2.5 group cursor-pointer text-left"
-              title="SYNDEO AI"
+              className="flex items-center gap-2.5 text-left group cursor-pointer transition-transform hover:scale-[1.02]"
+              title="SYNDEO AI Home"
             >
-              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#5a25eb]/20 to-[#8b5cf6]/20 border border-[#5a25eb]/40 flex items-center justify-center p-1 shadow-xs group-hover:scale-105 transition-transform">
-                <img src="/logo.png" alt="SYNDEO AI" className="w-full h-full object-contain" />
+              <div className="relative w-8 h-8 rounded-full overflow-hidden bg-gradient-to-br from-[#5a25eb]/15 to-[#8b5cf6]/15 border border-[#5a25eb]/30 flex items-center justify-center p-0.5 shadow-sm group-hover:border-[#5a25eb]/70 transition-colors">
+                <img
+                  src="/logo.png"
+                  alt="SYNDEO AI Logo"
+                  className="w-full h-full object-contain"
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                  }}
+                />
               </div>
-              <span className="text-sm font-bold tracking-tight text-zinc-900 dark:text-white group-hover:text-[#5a25eb] dark:group-hover:text-[#cbbeff] transition-colors">
-                SYNDEO AI
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-sm sm:text-base font-bold tracking-tight text-zinc-900 dark:text-white group-hover:text-[#5a25eb] dark:group-hover:text-[#cbbeff] transition-colors">
+                  SYNDEO AI
+                </span>
+                <span className="inline-block text-[9px] sm:text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full bg-[#5a25eb]/15 dark:bg-[#5a25eb]/25 text-[#5a25eb] dark:text-[#cbbeff] border border-[#5a25eb]/30">
+                  Vault+
+                </span>
+              </div>
             </button>
 
-            {/* Right: Profile Name Only */}
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setDrawerOpen(true)}
-                className="flex items-center gap-2.5 p-1 pr-3 rounded-full bg-zinc-100/90 dark:bg-white/[0.06] border border-zinc-200/80 dark:border-white/10 hover:border-[#5a25eb]/40 dark:hover:border-[#5a25eb]/40 transition-all cursor-pointer shadow-xs group"
-                title="Open Vault Profile & Settings"
-              >
-                <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#5a25eb] to-[#8b5cf6] flex items-center justify-center text-xs font-bold text-white shadow-xs">
-                  {displayInitials}
-                </div>
-                <span className="text-xs font-semibold text-zinc-800 dark:text-zinc-200 group-hover:text-[#5a25eb] dark:group-hover:text-[#cbbeff] transition-colors">
-                  {displayName}
-                </span>
-              </button>
+            {/* Center: Clean & Uncluttered (Shows landing links on home page, empty in workspace) */}
+            {isLanding ? (
+              <nav className="hidden md:flex items-center gap-1 pl-3 border-l border-zinc-200/60 dark:border-white/10">
+                <button
+                  onClick={() => handleNavClick('/chat')}
+                  className="px-3.5 py-1.5 rounded-full text-xs font-medium text-zinc-600 dark:text-[#a1a1aa] hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100/80 dark:hover:bg-white/5 transition-all cursor-pointer"
+                >
+                  AI Assistant
+                </button>
+                <button
+                  onClick={() => handleNavClick('/memory')}
+                  className="px-3.5 py-1.5 rounded-full text-xs font-medium text-zinc-600 dark:text-[#a1a1aa] hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100/80 dark:hover:bg-white/5 transition-all cursor-pointer"
+                >
+                  Memory Store
+                </button>
+                <button
+                  onClick={() => handleNavClick('/share')}
+                  className="px-3.5 py-1.5 rounded-full text-xs font-medium text-zinc-600 dark:text-[#a1a1aa] hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100/80 dark:hover:bg-white/5 transition-all cursor-pointer"
+                >
+                  Selective Share
+                </button>
+              </nav>
+            ) : (
+              <div className="hidden md:block flex-1" />
+            )}
+
+            {/* Right: Day/Night Theme Switcher & Profile Avatar / Sign In */}
+            <div className="flex items-center gap-2 sm:gap-3">
+              <ThemeToggle size="sm" />
+
+              {isLanding ? (
+                <>
+                  <button
+                    onClick={() => handleNavClick('/auth')}
+                    className="hidden sm:inline-block px-3.5 py-1.5 rounded-full text-xs font-semibold text-zinc-700 dark:text-[#e4e4e7] hover:text-zinc-900 dark:hover:text-white bg-zinc-100/70 dark:bg-white/5 border border-zinc-200/70 dark:border-white/10 transition-all cursor-pointer"
+                  >
+                    Sign In
+                  </button>
+                  <button
+                    onClick={() => handleNavClick('/chat')}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold text-white bg-[#111111] dark:bg-white dark:text-[#111111] hover:opacity-90 shadow-md transition-all cursor-pointer"
+                  >
+                    <span>Launch</span>
+                    <ArrowRight className="w-3 h-3" />
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => setIsSidebarExpanded((prev) => !prev)}
+                  className={`flex items-center gap-2 p-1 sm:pr-3 rounded-full border shadow-xs transition-all cursor-pointer group hover:scale-[1.02] ${
+                    isSidebarExpanded
+                      ? 'bg-[#111111] dark:bg-white text-white dark:text-[#111111] border-transparent ring-2 ring-[#5a25eb]/40'
+                      : 'bg-white/60 dark:bg-white/5 border-zinc-200/60 dark:border-white/10 hover:border-[#111111]/30 dark:hover:border-white/30'
+                  }`}
+                  title="Toggle Vault Profile & Side Panel"
+                  aria-expanded={isSidebarExpanded}
+                >
+                  <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold shadow-xs ${
+                    isSidebarExpanded
+                      ? 'bg-white dark:bg-[#111111] text-[#111111] dark:text-white'
+                      : 'bg-[#111111] dark:bg-white text-white dark:text-[#111111]'
+                  }`}>
+                    {displayInitials}
+                  </div>
+                  <span className={`hidden sm:inline-block text-xs font-semibold max-w-[120px] truncate transition-colors ${
+                    isSidebarExpanded
+                      ? 'text-white dark:text-[#111111]'
+                      : 'text-zinc-800 dark:text-zinc-200 group-hover:text-zinc-950 dark:group-hover:text-white'
+                  }`}>
+                    {displayName}
+                  </span>
+                </button>
+              )}
             </div>
-          </header>
-
-          {/* Full-Screen Ambient Gradients */}
-          <div className="absolute top-[-15%] left-[-10%] w-[55%] h-[55%] rounded-full bg-blue-300/30 dark:bg-[#5a25eb]/15 blur-[140px] pointer-events-none -z-10" />
-          <div className="absolute bottom-[-15%] right-[-10%] w-[60%] h-[60%] rounded-full bg-indigo-300/30 dark:bg-[#3a1c8c]/25 blur-[150px] pointer-events-none -z-10" />
-          <div className="absolute top-[30%] right-[20%] w-[45%] h-[45%] rounded-full bg-cyan-200/20 dark:bg-[#1a0a3e]/30 blur-[130px] pointer-events-none -z-10" />
-
-          {/* Main Viewport */}
-          <main className="flex-1 flex flex-col min-h-0 h-full w-full overflow-hidden relative z-10">
-            {children}
-          </main>
-        </div>
+          </div>
+        </header>
       )}
 
       {/* =========================================================================
-          PERSISTENT FLOATING CAPSULE NAVBAR (Visible on workspace when side panel is closed)
+          3. MAIN WORKSPACE CONTENT (Layer 10 - Fixed Height for /chat to Prevent Double Scroll)
          ========================================================================= */}
-      <AnimatePresence>
-        {!isLanding && !isAuth && !drawerOpen && (
-          <motion.div
-            initial={{ opacity: 0, x: -20, scale: 0.9 }}
-            animate={{ opacity: 1, x: 0, scale: 1 }}
-            exit={{ opacity: 0, x: -20, scale: 0.9 }}
-            transition={{ type: 'spring', damping: 25, stiffness: 300, delay: 0.1 }}
-            className="fixed left-4 top-1/2 -translate-y-1/2 z-40 flex flex-col gap-2 p-2 rounded-full shadow-2xl border border-white/40 dark:border-white/10 backdrop-blur-2xl"
-            style={{
-              background: theme === 'dark' 
-                ? 'linear-gradient(145deg, rgba(30, 25, 45, 0.75) 0%, rgba(10, 10, 15, 0.85) 100%)'
-                : 'linear-gradient(145deg, rgba(255, 255, 255, 0.8) 0%, rgba(240, 240, 255, 0.9) 100%)',
-              boxShadow: theme === 'dark'
-                ? '0 8px 32px 0 rgba(0, 0, 0, 0.7), inset 0 1px 0 0 rgba(255,255,255,0.1)'
-                : '0 8px 32px 0 rgba(90, 37, 235, 0.15), inset 0 1px 0 0 rgba(255,255,255,0.9)'
-            }}
-          >
-            {/* Capsule Navbar Items */}
-            {navItems.map((item) => {
-              const isActive = currentPath === item.path;
-              const Icon = item.icon;
-              return (
-                <button
-                  key={item.path}
-                  onClick={() => handleNavClick(item.path)}
-                  className={`relative w-12 h-12 rounded-full flex items-center justify-center transition-all duration-300 group cursor-pointer ${
-                    isActive
-                      ? 'bg-[#5a25eb] text-white shadow-md shadow-[#5a25eb]/40'
-                      : 'bg-black/5 dark:bg-white/5 text-zinc-600 dark:text-zinc-400 hover:bg-black/10 dark:hover:bg-white/10 hover:text-zinc-900 dark:hover:text-white'
-                  }`}
-                  title={item.label}
-                >
-                  {item.path === '/chat' ? (
-                    <AILoaderOrb state={isActive ? 'thinking' : 'idle'} variant="avatar" size={20} />
-                  ) : (
-                    <Icon className="w-5 h-5" />
-                  )}
-                  {/* Active indicator dot */}
-                  {isActive && (
-                    <motion.div 
-                      layoutId="activeNavDot"
-                      className="absolute -right-1 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-[#5a25eb] shadow-[0_0_8px_rgba(90,37,235,0.8)]" 
-                    />
-                  )}
-                </button>
-              );
-            })}
-            
-            {/* Separator */}
-            <div className="w-8 h-px bg-zinc-300/50 dark:bg-white/10 mx-auto my-1" />
-
-            {/* Menu Toggle Button */}
-            <button
-              onClick={() => setDrawerOpen(true)}
-              className="w-12 h-12 rounded-full flex items-center justify-center text-zinc-600 dark:text-zinc-400 hover:bg-black/10 dark:hover:bg-white/10 hover:text-zinc-900 dark:hover:text-white transition-all duration-300 cursor-pointer group"
-              title="Open Liquid Glass Menu"
-            >
-              <Menu className="w-5 h-5" />
-            </button>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <main
+        className={`flex-1 flex flex-col w-full relative z-10 ${
+          isAuth
+            ? 'min-h-screen'
+            : isChat
+            ? 'h-[100dvh] overflow-hidden pt-[76px] sm:pt-[84px] md:pt-[90px] pb-2'
+            : 'min-h-screen overflow-y-auto overflow-x-hidden pt-[78px] sm:pt-[88px] md:pt-[96px] lg:pt-[104px] pb-6'
+        }`}
+      >
+        {children}
+      </main>
 
       {/* =========================================================================
-          LIQUID GLASS SIDE PANEL (Rounded 3.5rem, Glassmorphism, Profile & Logout)
+          4. MASTER FLOATING SIDEBAR NAVIGATION (Layer 50 - Unified All-in-One Panel)
          ========================================================================= */}
-      <AnimatePresence>
-        {drawerOpen && !isLanding && !isAuth && (
-          <div className="fixed inset-0 z-50 flex justify-end">
-            {/* Backdrop Blur Overlay */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.3 }}
-              onClick={() => setDrawerOpen(false)}
-              className="fixed inset-0 bg-black/40 dark:bg-black/60 backdrop-blur-md"
-            />
-
-            {/* Liquid Glass Panel */}
-            <motion.div
-              initial={{ x: '100%', opacity: 0, scale: 0.95 }}
-              animate={{ x: 0, opacity: 1, scale: 1 }}
-              exit={{ x: '100%', opacity: 0, scale: 0.95 }}
-              transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-              className="relative w-[85vw] max-w-[340px] h-[92vh] my-auto mr-3 rounded-[3.5rem] overflow-hidden shadow-2xl flex flex-col justify-between z-10"
-              style={{
-                background: theme === 'dark' 
-                  ? 'linear-gradient(145deg, rgba(30, 25, 45, 0.6) 0%, rgba(10, 10, 15, 0.9) 100%)'
-                  : 'linear-gradient(145deg, rgba(255, 255, 255, 0.85) 0%, rgba(240, 240, 255, 0.95) 100%)',
-                backdropFilter: 'blur(30px) saturate(200%)',
-                WebkitBackdropFilter: 'blur(30px) saturate(200%)',
-                border: theme === 'dark' 
-                  ? '1px solid rgba(255, 255, 255, 0.08)' 
-                  : '1px solid rgba(255, 255, 255, 0.7)',
-                boxShadow: theme === 'dark'
-                  ? '0 8px 32px 0 rgba(0, 0, 0, 0.9), inset 0 1px 0 0 rgba(255,255,255,0.1)'
-                  : '0 8px 32px 0 rgba(90, 37, 235, 0.15), inset 0 1px 0 0 rgba(255,255,255,0.9)'
-              }}
-            >
-              {/* Animated Internal Gradient Glow */}
-              <motion.div 
-                animate={{ 
-                  background: [
-                    'radial-gradient(circle at 20% 0%, rgba(90, 37, 235, 0.3) 0%, transparent 60%)',
-                    'radial-gradient(circle at 80% 100%, rgba(90, 37, 235, 0.3) 0%, transparent 60%)',
-                    'radial-gradient(circle at 20% 0%, rgba(90, 37, 235, 0.3) 0%, transparent 60%)'
-                  ]
-                }}
-                transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
-                className="absolute inset-0 pointer-events-none mix-blend-overlay opacity-60"
-              />
-
-              <div className="relative z-20 flex flex-col h-full">
-                {/* Header - Capsule Logo & Close Button */}
-                <div className="p-6 pb-4 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-10 rounded-full bg-white/10 dark:bg-black/20 flex items-center justify-center backdrop-blur-md border border-white/20 shadow-sm overflow-hidden p-1">
-                      <img src="/logo.png" alt="SYNDEO AI" className="w-full h-full object-contain" />
-                    </div>
-                    <div>
-                      <h2 className="text-sm font-bold text-zinc-900 dark:text-white tracking-wide">SYNDEO AI</h2>
-                      <p className="text-[10px] text-zinc-500 dark:text-zinc-400">Sovereign Vault</p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => setDrawerOpen(false)}
-                    className="w-8 h-8 rounded-full bg-black/5 dark:bg-white/10 flex items-center justify-center text-zinc-600 dark:text-zinc-300 hover:bg-black/10 dark:hover:bg-white/20 transition-colors cursor-pointer"
-                    title="Close Panel"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-
-                {/* Navigation Capsule Items */}
-                <div className="flex-1 overflow-y-auto px-4 py-2 space-y-3 no-scrollbar">
-                  {navItems.map((item) => {
-                    const isActive = currentPath === item.path;
-                    const Icon = item.icon;
-                    return (
-                      <button
-                        key={item.path}
-                        onClick={() => handleNavClick(item.path)}
-                        className={`w-full flex items-center gap-4 p-2 rounded-full transition-all duration-300 cursor-pointer group ${
-                          isActive 
-                            ? 'bg-white/90 dark:bg-white/15 shadow-lg shadow-black/5 dark:shadow-white/5 border border-white/40 dark:border-white/10' 
-                            : 'hover:bg-white/40 dark:hover:bg-white/5 border border-transparent'
-                        }`}
-                      >
-                        {/* Circular Icon Container */}
-                        <div
-                          className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 transition-all duration-300 ${
-                            isActive
-                              ? 'bg-[#5a25eb] text-white shadow-md shadow-[#5a25eb]/40'
-                              : 'bg-black/5 dark:bg-white/10 text-zinc-600 dark:text-zinc-300 group-hover:bg-black/10 dark:group-hover:bg-white/20'
-                          }`}
-                        >
-                          {item.path === '/chat' ? (
-                            <AILoaderOrb state={isActive ? 'thinking' : 'idle'} variant="avatar" size={20} />
-                          ) : (
-                            <Icon className={`w-5 h-5 ${isActive ? 'text-white' : ''}`} />
-                          )}
-                        </div>
-
-                        {/* Text Content */}
-                        <div className="flex flex-col items-start overflow-hidden">
-                          <span className={`text-sm font-bold truncate w-full text-left ${
-                            isActive ? 'text-zinc-900 dark:text-white' : 'text-zinc-700 dark:text-zinc-300'
-                          }`}>
-                            {item.label}
-                          </span>
-                          <span className={`text-[10px] truncate w-full text-left ${
-                            isActive ? 'text-zinc-600 dark:text-zinc-300' : 'text-zinc-500 dark:text-zinc-500'
-                          }`}>
-                            {item.desc}
-                          </span>
-                        </div>
-
-                        {/* Active Indicator */}
-                        {isActive && (
-                          <motion.div 
-                            layoutId="activeIndicator"
-                            className="ml-auto w-2 h-2 rounded-full bg-[#5a25eb] shadow-[0_0_8px_rgba(90,37,235,0.8)]" 
-                          />
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {/* Footer / Profile Section */}
-                <div className="p-6 pt-2 space-y-4">
-                  {/* User Profile Card */}
-                  <div className="p-4 rounded-[2rem] bg-white/40 dark:bg-black/20 border border-white/30 dark:border-white/5 backdrop-blur-md flex items-center gap-4 shadow-inner">
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#5a25eb] to-[#8b5cf6] flex items-center justify-center text-sm font-bold text-white shadow-md">
-                      {displayInitials}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h3 className="text-xs font-bold text-zinc-900 dark:text-white truncate">{displayName}</h3>
-                      <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1 mt-0.5">
-                        <ShieldCheck className="w-3 h-3" /> Vault #8921
-                      </p>
-                    </div>
-                    <button
-                      onClick={toggleTheme}
-                      className="w-8 h-8 rounded-full bg-white/50 dark:bg-white/10 flex items-center justify-center text-zinc-600 dark:text-zinc-300 hover:bg-white/80 dark:hover:bg-white/20 transition-colors cursor-pointer shadow-sm"
-                      title="Toggle Theme"
-                    >
-                      {theme === 'dark' ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4" />}
-                    </button>
-                  </div>
-
-                  {/* Action Buttons: Settings & Log Out */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <button
-                      onClick={() => handleNavClick('/settings')}
-                      className={`py-3 rounded-full text-xs font-semibold text-center transition-all cursor-pointer backdrop-blur-md border shadow-sm flex items-center justify-center gap-1.5 ${
-                        currentPath === '/settings'
-                          ? 'bg-[#5a25eb] text-white border-transparent shadow-[#5a25eb]/30'
-                          : 'text-zinc-800 dark:text-white bg-white/50 dark:bg-white/10 hover:bg-white/80 dark:hover:bg-white/20 border-white/30 dark:border-white/5'
-                      }`}
-                    >
-                      <Settings className="w-3.5 h-3.5" />
-                      <span>Settings</span>
-                    </button>
-                    <button
-                      onClick={handleLogout}
-                      className="py-3 rounded-full text-xs font-semibold text-center text-red-600 dark:text-red-400 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 transition-colors cursor-pointer shadow-sm flex items-center justify-center gap-1.5"
-                    >
-                      <LogOut className="w-3.5 h-3.5" />
-                      <span>Log Out</span>
-                    </button>
-                  </div>
-
-                  <div className="text-center pt-2">
-                    <span className="text-[10px] text-zinc-500 dark:text-zinc-500 font-mono tracking-widest uppercase">
-                      v1.4 Sovereign
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      {!isLanding && !isAuth && (
+        <FloatingSidebar
+          isExpanded={isSidebarExpanded}
+          onToggleExpand={() => setIsSidebarExpanded((prev) => !prev)}
+          onClose={() => setIsSidebarExpanded(false)}
+        />
+      )}
     </div>
   );
 };

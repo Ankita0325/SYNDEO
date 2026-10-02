@@ -28,6 +28,8 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
+import { InChatVoiceStage } from './InChatVoiceStage';
+
 const NORMAL_THINKING_STEPS: Array<{ text: string; state: OrbState }> = [
   { text: 'Thinking...', state: 'searching' },
   { text: 'Searching memory graph...', state: 'connecting' },
@@ -55,9 +57,14 @@ export const ChatPage: React.FC = () => {
   const [orbState, setOrbState] = useState<OrbStateMode>('idle');
   const [voiceState, setVoiceState] = useState<VoiceState>('idle');
   const [isSpeakingVoice, setIsSpeakingVoice] = useState<boolean>(false);
+  const [isMuted, setIsMuted] = useState<boolean>(false);
+  const [isVoiceModalOpen, setIsVoiceModalOpen] = useState<boolean>(false);
+  const [voiceTranscript, setVoiceTranscript] = useState<string>('');
+  const [assistantVoiceResponse, setAssistantVoiceResponse] = useState<string>('');
   const [streamingText, setStreamingText] = useState<string>('');
   const [isStreaming, setIsStreaming] = useState<boolean>(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [isToolsOpen, setIsToolsOpen] = useState<boolean>(false);
 
   interface AttachedFile {
     name: string;
@@ -155,6 +162,7 @@ export const ChatPage: React.FC = () => {
             .map((result: any) => (result as any)[0].transcript)
             .join('');
           setInputText(transcript);
+          setVoiceTranscript(transcript);
         };
 
         recognition.onerror = () => {
@@ -173,7 +181,7 @@ export const ChatPage: React.FC = () => {
   }, []);
 
   const speakText = (text: string, onComplete?: () => void) => {
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+    if (isMuted || typeof window === 'undefined' || !('speechSynthesis' in window)) {
       if (onComplete) onComplete();
       return;
     }
@@ -218,24 +226,65 @@ export const ChatPage: React.FC = () => {
     setOrbState('idle');
   };
 
-  const toggleVoiceInput = () => {
+  const openVoiceModal = () => {
+    stopAudio();
+    setIsVoiceModalOpen(true);
+    setVoiceTranscript('');
+    setAssistantVoiceResponse('');
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.start();
+        setVoiceState('listening');
+        setOrbState('listening');
+      } catch (e) {
+        console.warn('Speech recognition start failed', e);
+      }
+    }
+  };
+
+  const closeVoiceModal = () => {
+    if (voiceState === 'listening' && recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch (e) {}
+    }
+    stopAudio();
+    setIsVoiceModalOpen(false);
+  };
+
+  const startVoiceListening = () => {
     if (!recognitionRef.current) {
       alert('Speech recognition is not supported in this browser.');
       return;
     }
-
-    if (voiceState === 'listening') {
-      recognitionRef.current.stop();
-      setVoiceState('idle');
-      setOrbState('idle');
-    } else {
-      stopAudio();
-      try {
-        recognitionRef.current.start();
-      } catch {
-        recognitionRef.current.stop();
-      }
+    stopAudio();
+    try {
+      recognitionRef.current.start();
+      setVoiceState('listening');
+      setOrbState('listening');
+    } catch (e) {
+      console.warn('Recognition start', e);
     }
+  };
+
+  const stopVoiceListening = () => {
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch (e) {}
+    }
+    setVoiceState('idle');
+    setOrbState('idle');
+    if (voiceTranscript.trim()) {
+      handleSendMessage(voiceTranscript);
+    }
+  };
+
+  const toggleMute = () => {
+    if (!isMuted) {
+      stopAudio();
+    }
+    setIsMuted(!isMuted);
   };
 
   const handleCopy = (id: string, text: string) => {
@@ -247,10 +296,13 @@ export const ChatPage: React.FC = () => {
   const streamAIResponse = (fullResponse: ChatMessage) => {
     setIsStreaming(true);
     setStreamingText('');
+    setAssistantVoiceResponse(fullResponse.content);
     setVoiceState('speaking');
     setOrbState('speaking');
 
-    speakText(fullResponse.content);
+    if (!isMuted) {
+      speakText(fullResponse.content);
+    }
 
     let index = 0;
     const words = fullResponse.content.split(' ');
@@ -600,124 +652,112 @@ export const ChatPage: React.FC = () => {
   };
 
   return (
-    <div className="h-full flex-1 flex flex-col min-h-0 bg-zinc-50 dark:bg-[#000000] text-zinc-900 dark:text-[#f4f4f6] transition-colors duration-200 overflow-hidden relative">
+    <div className="w-full max-w-5xl xl:max-w-6xl 2xl:max-w-7xl mx-auto flex-1 flex flex-col min-h-0 relative z-10 px-2 sm:px-4">
+      {/* Translucent Glass Workspace Container */}
+      <div
+        className="relative flex-1 flex flex-col min-h-0 rounded-[2rem] sm:rounded-[2.5rem]
+                   bg-white/35 dark:bg-[#0c0c18]/45
+                   backdrop-blur-[30px]
+                   border border-white/60 dark:border-white/10
+                   shadow-[0_8px_40px_-10px_rgba(90,37,235,0.08),inset_0_1px_0_0_rgba(255,255,255,0.8)]
+                   dark:shadow-[0_0_40px_rgba(90,37,235,0.12),inset_0_1px_0_0_rgba(255,255,255,0.05)]"
+      >
+        {/* Subtle Glass Top Highlight */}
+        <div className="absolute top-0 left-0 right-0 h-24 bg-gradient-to-b from-white/40 to-transparent dark:from-white/[0.02] pointer-events-none rounded-t-[2rem] sm:rounded-t-[2.5rem]" />
 
-      {/* === LIGHT MODE BACKGROUND: soft blue/white liquid glow === */}
-      <div className="absolute top-[-10%] left-[-5%] w-[45%] h-[45%] rounded-full bg-blue-300/40 dark:bg-[#5a25eb]/20 blur-[130px] pointer-events-none z-0" />
-      <div className="absolute bottom-[-10%] right-[-5%] w-[55%] h-[55%] rounded-full bg-sky-300/40 dark:bg-[#3a1c8c]/30 blur-[140px] pointer-events-none z-0" />
-      <div className="absolute top-[25%] left-[50%] -translate-x-1/2 w-[65%] h-[35%] rounded-full bg-blue-200/50 dark:bg-[#2a1a5e]/20 blur-[110px] pointer-events-none z-0" />
-      <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[75%] h-[30%] rounded-full bg-indigo-200/40 dark:bg-[#5a25eb]/15 blur-[90px] pointer-events-none z-0" />
-      <div className="absolute top-[55%] left-[15%] w-[35%] h-[35%] rounded-full bg-cyan-200/30 dark:bg-[#1a0a3e]/40 blur-[120px] pointer-events-none z-0" />
-
-      {/* Animated soft movement overlay */}
-      <motion.div
-        animate={{
-          opacity: [0.25, 0.45, 0.25],
-          scale: [1, 1.04, 1]
-        }}
-        transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
-        className="absolute inset-0 bg-gradient-to-b from-transparent via-blue-100/20 dark:via-[#0a0514]/5 to-transparent pointer-events-none z-0"
-      />
-
-      {/* === MAIN CHAT CONTAINER === */}
-      <div className="max-w-3xl w-full mx-auto flex-1 flex flex-col h-full min-h-0 px-2.5 sm:px-6 relative z-10">
-
-        {/* Liquid glass container with blue gradient */}
-        <div className="relative flex-1 flex flex-col min-h-0 rounded-3xl my-2 overflow-hidden
-                        bg-white/70 dark:bg-[#0a0a14]/60
-                        backdrop-blur-2xl
-                        border border-blue-200/60 dark:border-[#2a1f4a]/50
-                        shadow-[0_8px_40px_-10px_rgba(59,130,246,0.25),inset_0_1px_0_0_rgba(255,255,255,0.8)]
-                        dark:shadow-[0_0_30px_rgba(90,37,235,0.1),inset_0_1px_0_0_rgba(255,255,255,0.05)]">
-
-          {/* === LIQUID GLASS BLUE GRADIENT LAYERS === */}
-          {/* Radial blue glow top-left */}
-          <div className="absolute -top-24 -left-24 w-80 h-80 rounded-full bg-blue-400/25 dark:bg-[#5a25eb]/15 blur-3xl pointer-events-none z-0" />
-          {/* Radial blue glow bottom-right */}
-          <div className="absolute -bottom-24 -right-24 w-96 h-96 rounded-full bg-indigo-400/25 dark:bg-[#3a1c8c]/20 blur-3xl pointer-events-none z-0" />
-          {/* Diagonal blue sheen */}
-          <div className="absolute inset-0 bg-gradient-to-br from-blue-100/60 via-white/10 to-indigo-200/40 dark:from-[#5a25eb]/5 dark:via-transparent dark:to-[#3a1c8c]/10 pointer-events-none z-0" />
-          {/* Top white glass highlight */}
-          <div className="absolute top-0 left-0 right-0 h-24 bg-gradient-to-b from-white/70 to-transparent dark:from-white/[0.04] pointer-events-none z-0" />
-          {/* Subtle animated shimmer */}
-          <motion.div
-            animate={{
-              opacity: [0.15, 0.3, 0.15],
-              backgroundPosition: ['0% 0%', '100% 100%', '0% 0%'],
-            }}
-            transition={{ duration: 14, repeat: Infinity, ease: "easeInOut" }}
-            className="absolute inset-0 pointer-events-none z-0"
-            style={{
-              background: 'radial-gradient(circle at 30% 20%, rgba(147,197,253,0.25), transparent 50%), radial-gradient(circle at 70% 80%, rgba(129,140,248,0.25), transparent 50%)',
-              backgroundSize: '200% 200%',
-            }}
-          />
-
-          {/* === MESSAGES STREAM === */}
-          <div ref={messagesContainerRef} className="flex-1 min-h-0 overflow-y-auto px-1 sm:px-2 py-2.5 space-y-3.5 scrollbar-none no-scrollbar flex flex-col justify-start relative z-10">
-
-            {/* Welcome Hero */}
-            {messages.length === 0 && (
+        {/* === MESSAGES / VOICE STREAM === */}
+        <div
+          ref={messagesContainerRef}
+          className="flex-1 min-h-0 overflow-y-auto px-2 sm:px-4 py-4 space-y-4 scrollbar-none no-scrollbar flex flex-col justify-start relative z-10"
+        >
+          {isVoiceModalOpen ? (
+            <InChatVoiceStage
+              voiceState={voiceState}
+              isMuted={isMuted}
+              onToggleMute={toggleMute}
+              transcript={voiceTranscript}
+              assistantResponse={assistantVoiceResponse}
+              onSendMessage={(text) => handleSendMessage(text)}
+              onStartListening={startVoiceListening}
+              onStopListening={stopVoiceListening}
+              onClose={closeVoiceModal}
+              userName={userName}
+            />
+          ) : (
+            <>
+              {/* Welcome Hero (Centered Composition) */}
+              {messages.length === 0 && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.3 }}
+              className="my-auto py-4 sm:py-8 px-4 text-center space-y-5 flex flex-col items-center justify-center min-h-[420px]"
+            >
+              {/* Unclipped AI Orb with Subtle Breathing Motion */}
               <motion.div
-                initial={{ opacity: 0, scale: 0.97 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="my-auto py-6 sm:py-8 px-4 sm:px-6 rounded-3xl bg-transparent text-center space-y-4 relative overflow-hidden flex flex-col items-center justify-center min-h-[400px]"
+                animate={{ scale: [1, 1.025, 1] }}
+                transition={{ duration: 4.5, repeat: Infinity, ease: 'easeInOut' }}
+                className="relative flex items-center justify-center my-2 select-none"
               >
-                <div className="flex items-center justify-center my-2">
-                  <AILoaderOrb
-                    state={currentOrbState}
-                    text={currentOrbText}
-                    size={150}
-                    variant="hero"
-                  />
-                </div>
+                {/* Soft Ambient Glow Aura (Non-clipped) */}
+                <div className="absolute w-64 h-64 sm:w-80 sm:h-80 rounded-full bg-gradient-to-tr from-[#5a25eb]/25 to-[#38bdf8]/20 blur-3xl pointer-events-none" />
 
-                <div className="space-y-1">
-                  <h2 className="text-lg sm:text-xl font-bold text-zinc-900 dark:text-white tracking-tight">
-                    Hi, {userName}
-                  </h2>
-                  <h3 className="text-xl sm:text-2xl font-bold text-zinc-900 dark:text-white tracking-tight">
-                    How can I help today?
-                  </h3>
-                  <p className="text-xs sm:text-sm text-zinc-500 dark:text-[#8c879a] max-w-md mx-auto pt-1">
-                    I'm here to help — from quick answers<br/>to smart recommendations.
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-lg mx-auto pt-4 w-full">
-                  {quickPrompts.map((p, idx) => {
-                    const Icon = p.icon;
-                    return (
-                      <button
-                        key={idx}
-                        onClick={() => handleSendMessage(p.text)}
-                        className="p-4 rounded-2xl
-                                   bg-white/70 dark:bg-[#12121a]/80
-                                   backdrop-blur-md
-                                   border border-blue-200/70 dark:border-[#222230]
-                                   hover:border-blue-400/80 dark:hover:border-[#5a25eb]/50
-                                   hover:bg-blue-50/80 dark:hover:bg-[#5a25eb]/5
-                                   text-left transition-all cursor-pointer flex items-start gap-3 group
-                                   shadow-[0_4px_20px_-8px_rgba(59,130,246,0.3)]
-                                   dark:shadow-lg dark:shadow-black/20"
-                      >
-                        <div className="w-9 h-9 rounded-xl bg-blue-100/80 dark:bg-[#5a25eb]/15 border border-blue-300/60 dark:border-[#5a25eb]/30 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform mt-0.5">
-                          <Icon className="w-4.5 h-4.5 text-[#5a25eb] dark:text-[#cbbeff]" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <span className="font-semibold text-zinc-800 dark:text-zinc-200 group-hover:text-zinc-900 dark:group-hover:text-white truncate block text-sm">
-                            {p.title}
-                          </span>
-                          <span className="text-xs text-zinc-500 dark:text-zinc-500 group-hover:text-zinc-600 dark:group-hover:text-zinc-400 truncate block mt-0.5">
-                            {p.subtitle}
-                          </span>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
+                <AILoaderOrb
+                  state={currentOrbState}
+                  text={currentOrbText}
+                  size={175}
+                  variant="hero"
+                />
               </motion.div>
-            )}
+
+              {/* Typography Hierarchy */}
+              <div className="space-y-1.5 max-w-lg mx-auto">
+                <h2 className="text-sm sm:text-base font-semibold text-zinc-600 dark:text-zinc-300 tracking-tight">
+                  Hi, {userName}
+                </h2>
+                <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-zinc-950 dark:text-white tracking-tight">
+                  How can I help today?
+                </h1>
+                <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 pt-1">
+                  I'm here to help — from quick answers<br className="hidden sm:inline" /> to smart recommendations.
+                </p>
+              </div>
+
+              {/* Quick Prompts */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 max-w-2xl mx-auto pt-3 w-full">
+                {quickPrompts.map((p, idx) => {
+                  const Icon = p.icon;
+                  return (
+                    <button
+                      key={idx}
+                      onClick={() => handleSendMessage(p.text)}
+                      className="p-4 rounded-2xl
+                                 bg-white/60 dark:bg-[#12121e]/70
+                                 backdrop-blur-md
+                                 border border-blue-200/50 dark:border-white/10
+                                 hover:border-[#5a25eb]/50 dark:hover:border-[#5a25eb]/50
+                                 hover:bg-white/90 dark:hover:bg-[#5a25eb]/10
+                                 text-left transition-all cursor-pointer flex items-start gap-3 group
+                                 shadow-[0_4px_20px_-8px_rgba(90,37,235,0.12)]
+                                 dark:shadow-lg dark:shadow-black/20 hover:scale-[1.01]"
+                    >
+                      <div className="w-9 h-9 rounded-xl bg-[#5a25eb]/10 dark:bg-[#5a25eb]/20 border border-[#5a25eb]/20 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform mt-0.5">
+                        <Icon className="w-4.5 h-4.5 text-[#5a25eb] dark:text-[#cbbeff]" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <span className="font-semibold text-zinc-800 dark:text-zinc-200 group-hover:text-zinc-950 dark:group-hover:text-white truncate block text-sm">
+                          {p.title}
+                        </span>
+                        <span className="text-xs text-zinc-500 dark:text-zinc-400 truncate block mt-0.5">
+                          {p.subtitle}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </motion.div>
+          )}
 
             {/* Messages */}
             {messages.map((msg) => {
@@ -728,7 +768,7 @@ export const ChatPage: React.FC = () => {
                   initial={{ opacity: 0, y: 5 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.12 }}
-                  className={`flex gap-2.5 max-w-2xl ${isUser ? 'ml-auto justify-end' : 'mr-auto justify-start'}`}
+                  className={`flex gap-3 max-w-3xl lg:max-w-4xl ${isUser ? 'ml-auto justify-end' : 'mr-auto justify-start'}`}
                 >
                   {!isUser && (
                     <div className="w-7 h-7 rounded-full bg-white/80 dark:bg-[#12121c] border border-blue-200 dark:border-[#222230] flex items-center justify-center shrink-0 shadow-2xs mt-0.5 overflow-hidden">
@@ -762,7 +802,10 @@ export const ChatPage: React.FC = () => {
                         <div className="mt-2.5 pt-2 border-t border-zinc-100 dark:border-white/10 flex items-center justify-between text-[10px] text-zinc-400">
                           <div className="flex items-center gap-2">
                             <button
-                              onClick={() => speakText(msg.content)}
+                              onClick={() => {
+                                if (isMuted) setIsMuted(false);
+                                speakText(msg.content);
+                              }}
                               className="flex items-center gap-1 text-[#5a25eb] dark:text-[#cbbeff] hover:underline font-semibold cursor-pointer"
                             >
                               <Volume2 className="w-3 h-3" />
@@ -862,82 +905,14 @@ export const ChatPage: React.FC = () => {
                 </div>
               </motion.div>
             )}
+          </>
+        )}
 
-            <div ref={messagesEndRef} />
-          </div>
+        <div ref={messagesEndRef} />
+      </div>
 
           {/* === BOTTOM INPUT BAR === */}
           <div className="pt-1.5 pb-2 sm:pb-3 bg-transparent shrink-0 space-y-2 relative z-20 px-2 sm:px-3">
-
-            {/* Mode Chips */}
-            <div className="flex items-center justify-between gap-2 px-0.5">
-              <div className="flex items-center gap-1 p-0.5 rounded-full bg-white/70 dark:bg-[#12121c] border border-blue-200/70 dark:border-[#222230] backdrop-blur-md overflow-x-auto scrollbar-none max-w-full shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setChatMode('normal')}
-                  className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer shrink-0 ${
-                    chatMode === 'normal'
-                      ? 'bg-[#5a25eb] text-white shadow-xs'
-                      : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
-                  }`}
-                >
-                  <QuestionIcon className="w-3 h-3" />
-                  <span>Normal</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setChatMode('save')}
-                  className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer shrink-0 ${
-                    chatMode === 'save'
-                      ? 'bg-emerald-600 text-white shadow-xs'
-                      : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
-                  }`}
-                >
-                  <Save className="w-3 h-3" />
-                  <span>Save</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setChatMode('share')}
-                  className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer shrink-0 ${
-                    chatMode === 'share'
-                      ? 'bg-[#8a54ff] text-white shadow-xs'
-                      : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
-                  }`}
-                >
-                  <Share2 className="w-3 h-3" />
-                  <span>Share</span>
-                </button>
-              </div>
-
-              <div className="flex items-center gap-2 text-[10px] text-zinc-400">
-                {isSpeakingVoice && (
-                  <button
-                    onClick={stopAudio}
-                    className="p-1 rounded-lg text-red-500 hover:bg-red-500/10 transition-colors cursor-pointer"
-                    title="Stop Audio"
-                  >
-                    <VolumeX className="w-3.5 h-3.5" />
-                  </button>
-                )}
-                {messages.length > 0 && (
-                  <button
-                    onClick={handleResetChat}
-                    className="flex items-center gap-1 px-2 py-1 rounded-lg text-zinc-500 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-200/60 dark:hover:bg-white/10 transition-colors cursor-pointer"
-                    title="Reset Chat"
-                  >
-                    <RotateCcw className="w-3 h-3" />
-                    <span className="text-[10px]">Clear</span>
-                  </button>
-                )}
-                <div className="hidden sm:flex items-center gap-1 text-[10px] text-zinc-400">
-                  <ShieldCheck className="w-3 h-3 text-emerald-500" />
-                  <span>Encrypted</span>
-                </div>
-              </div>
-            </div>
 
             {/* Attached File Preview */}
             <AnimatePresence>
@@ -977,7 +952,7 @@ export const ChatPage: React.FC = () => {
                 ]
               }}
               transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-              className="w-full max-w-2xl mx-auto rounded-3xl p-[1.5px] relative overflow-hidden
+              className="w-full max-w-3xl xl:max-w-4xl mx-auto rounded-3xl p-[1.5px] relative overflow-hidden
                          bg-white/60 dark:bg-[#0c0c12]"
             >
               <motion.div
@@ -998,13 +973,6 @@ export const ChatPage: React.FC = () => {
                               rounded-[calc(1.5rem-1px)] p-3 z-10">
 
                 <div className="absolute top-0 left-0 right-0 h-1/2 bg-gradient-to-b from-white/50 dark:from-white/[0.03] to-transparent pointer-events-none rounded-t-[calc(1.5rem-1px)]" />
-
-                <div className="flex items-center gap-2 mb-3 px-1 relative z-10">
-                  <Sparkles className="w-4 h-4 text-[#5a25eb] dark:text-[#cbbeff]" />
-                  <span className="text-xs font-semibold text-zinc-600 dark:text-zinc-300 tracking-wide">
-                    Unlock more features with Pro
-                  </span>
-                </div>
 
                 <form
                   onSubmit={(e) => {
@@ -1057,13 +1025,14 @@ export const ChatPage: React.FC = () => {
 
                   <button
                     type="button"
-                    onClick={toggleVoiceInput}
+                    onClick={openVoiceModal}
                     className={`p-2 rounded-xl transition-all cursor-pointer mr-1 ${
-                      voiceState === 'listening'
+                      voiceState === 'listening' || isVoiceModalOpen
                         ? 'bg-red-500 text-white animate-pulse'
                         : 'text-zinc-500 hover:text-[#5a25eb] dark:hover:text-white hover:bg-blue-100/60 dark:hover:bg-zinc-800/50'
                     }`}
-                    title="Voice Input"
+                    title="Open ChatGPT-style Voice Chat Mode"
+                    aria-label="Voice Chat Mode"
                   >
                     {voiceState === 'listening' ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
                   </button>
@@ -1078,22 +1047,158 @@ export const ChatPage: React.FC = () => {
                   </button>
                 </form>
 
-                <div className="flex items-center gap-4 mt-3 px-2 relative z-10">
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="flex items-center gap-1.5 text-[10px] font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors cursor-pointer"
-                  >
-                    <Paperclip className="w-3 h-3" />
-                    <span>Import file</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="flex items-center gap-1.5 text-[10px] font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors cursor-pointer"
-                  >
-                    <Sparkles className="w-3 h-3" />
-                    <span>Tools</span>
-                  </button>
+                <div className="flex items-center justify-between gap-3 mt-3 px-1 relative z-10">
+                  <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+                    {/* Voice Mode Button */}
+                    <button
+                      type="button"
+                      onClick={openVoiceModal}
+                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-[#5a25eb]/10 hover:bg-[#5a25eb]/20 text-[#5a25eb] dark:text-[#cbbeff] border border-[#5a25eb]/30 transition-all cursor-pointer shadow-xs"
+                      title="Launch ChatGPT-style Animated Voice Screen"
+                    >
+                      <Mic className="w-3.5 h-3.5" />
+                      <span>Voice Mode</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="flex items-center gap-1.5 text-[11px] font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors cursor-pointer"
+                    >
+                      <Paperclip className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">Import file</span>
+                    </button>
+
+                    {/* Interactive Tools Menu */}
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setIsToolsOpen(!isToolsOpen)}
+                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium transition-all cursor-pointer ${
+                          chatMode !== 'normal'
+                            ? 'bg-[#5a25eb]/15 text-[#5a25eb] dark:text-[#cbbeff] border border-[#5a25eb]/30 shadow-xs'
+                            : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/10'
+                        }`}
+                        title="Select AI Chat Tool Mode"
+                      >
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>Tools</span>
+                        {chatMode !== 'normal' && (
+                          <span className="font-semibold capitalize px-1.5 py-0.2 rounded-full text-[10px] bg-[#5a25eb] text-white">
+                            {chatMode}
+                          </span>
+                        )}
+                      </button>
+
+                      {/* Tools Popover Dropdown */}
+                      <AnimatePresence>
+                        {isToolsOpen && (
+                          <motion.div
+                            initial={{ opacity: 0, y: 8, scale: 0.96 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: 8, scale: 0.96 }}
+                            className="absolute bottom-full left-0 mb-2.5 w-64 p-2 rounded-2xl bg-white/95 dark:bg-[#10101c]/95 backdrop-blur-2xl border border-blue-200/80 dark:border-white/15 shadow-2xl z-40 space-y-1"
+                          >
+                            <div className="px-2.5 py-1 text-[10px] font-mono text-zinc-400 font-bold uppercase tracking-wider">
+                              AI Mode & Tools
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => { setChatMode('normal'); setIsToolsOpen(false); }}
+                              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all text-left cursor-pointer ${
+                                chatMode === 'normal'
+                                    ? 'bg-[#5a25eb] text-white shadow-xs'
+                                  : 'text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-white/10'
+                              }`}
+                            >
+                              <QuestionIcon className="w-4 h-4 shrink-0" />
+                              <div className="flex-1 min-w-0">
+                                <span className="block font-bold">Normal Mode</span>
+                                <span className={`text-[10px] block truncate ${chatMode === 'normal' ? 'text-white/80' : 'text-zinc-400'}`}>Zero-knowledge retrieval</span>
+                              </div>
+                              {chatMode === 'normal' && <Check className="w-3.5 h-3.5" />}
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => { setChatMode('save'); setIsToolsOpen(false); }}
+                              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all text-left cursor-pointer ${
+                                chatMode === 'save'
+                                  ? 'bg-emerald-600 text-white shadow-xs'
+                                  : 'text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-white/10'
+                              }`}
+                            >
+                              <Save className="w-4 h-4 shrink-0" />
+                              <div className="flex-1 min-w-0">
+                                <span className="block font-bold">Save Record</span>
+                                <span className={`text-[10px] block truncate ${chatMode === 'save' ? 'text-white/80' : 'text-zinc-400'}`}>Encrypt to personal vault</span>
+                              </div>
+                              {chatMode === 'save' && <Check className="w-3.5 h-3.5" />}
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => { setChatMode('share'); setIsToolsOpen(false); }}
+                              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all text-left cursor-pointer ${
+                                chatMode === 'share'
+                                  ? 'bg-[#8a54ff] text-white shadow-xs'
+                                  : 'text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-white/10'
+                              }`}
+                            >
+                              <Share2 className="w-4 h-4 shrink-0" />
+                              <div className="flex-1 min-w-0">
+                                <span className="block font-bold">Selective Share</span>
+                                <span className={`text-[10px] block truncate ${chatMode === 'share' ? 'text-white/80' : 'text-zinc-400'}`}>Scoped zk-SNARK link</span>
+                              </div>
+                              {chatMode === 'share' && <Check className="w-3.5 h-3.5" />}
+                            </button>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 text-[10px] text-zinc-400">
+                    {/* Global Mute Toggle Button */}
+                    <button
+                      type="button"
+                      onClick={toggleMute}
+                      className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium transition-all cursor-pointer ${
+                        isMuted
+                          ? 'bg-red-500/15 text-red-500 border border-red-500/30'
+                          : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/10'
+                      }`}
+                      title={isMuted ? 'Voice is Muted (Click to Unmute)' : 'Mute AI Voice Speech Output'}
+                    >
+                      {isMuted ? <VolumeX className="w-3.5 h-3.5 text-red-500" /> : <Volume2 className="w-3.5 h-3.5" />}
+                      <span>{isMuted ? 'Muted' : 'Mute'}</span>
+                    </button>
+
+                    {isSpeakingVoice && (
+                      <button
+                        onClick={stopAudio}
+                        className="p-1 rounded-lg text-red-500 hover:bg-red-500/10 transition-colors cursor-pointer"
+                        title="Stop Current Audio"
+                      >
+                        <VolumeX className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    {messages.length > 0 && (
+                      <button
+                        onClick={handleResetChat}
+                        className="flex items-center gap-1 px-2 py-0.8 rounded-lg text-zinc-500 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                        title="Clear Chat History"
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                        <span className="text-[10px]">Clear</span>
+                      </button>
+                    )}
+                    <div className="hidden sm:flex items-center gap-1 text-[10px] text-zinc-400">
+                      <ShieldCheck className="w-3 h-3 text-emerald-500" />
+                      <span>Encrypted</span>
+                    </div>
+                  </div>
                 </div>
 
               </div>
@@ -1104,7 +1209,7 @@ export const ChatPage: React.FC = () => {
             </p>
           </div>
         </div>
+
       </div>
-    </div>
-  );
-};
+    );
+  };
