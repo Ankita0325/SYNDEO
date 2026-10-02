@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { AILoaderOrb, type OrbStateMode } from '../ui/ai-loader';
 import { useTheme } from '../../context/ThemeContext';
+import { SARVAM_LANGUAGES, SARVAM_TTS_LANGUAGES, type SarvamLanguageCode } from '../../lib/sarvam';
 
 export type VoiceState = 'idle' | 'listening' | 'thinking' | 'speaking';
 
@@ -22,6 +23,11 @@ interface InChatVoiceStageProps {
   onStartListening: () => void;
   onStopListening: () => void;
   onClose: () => void;
+  sttLanguage: SarvamLanguageCode;
+  onSttLanguageChange: (languageCode: string) => void;
+  ttsLanguage: SarvamLanguageCode;
+  onTtsLanguageChange: (languageCode: string) => void;
+  error: string | null;
   userName?: string;
 }
 
@@ -34,6 +40,11 @@ export const InChatVoiceStage: React.FC<InChatVoiceStageProps> = ({
   onStartListening,
   onStopListening,
   onClose,
+  sttLanguage,
+  onSttLanguageChange,
+  ttsLanguage,
+  onTtsLanguageChange,
+  error,
   userName = 'You',
 }) => {
   const { theme } = useTheme();
@@ -128,14 +139,42 @@ export const InChatVoiceStage: React.FC<InChatVoiceStageProps> = ({
           </span>
         </div>
 
-        <button
-          onClick={onClose}
-          aria-label="Close voice mode"
-          className="w-10 h-10 rounded-full bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-zinc-700 dark:text-zinc-200 hover:text-zinc-950 dark:hover:text-white flex items-center justify-center border border-black/10 dark:border-white/15 backdrop-blur-md transition-all cursor-pointer shadow-xs"
-          title="Exit Voice Mode (Esc)"
-        >
-          <X className="w-5 h-5" />
-        </button>
+        <div className="flex items-center justify-end gap-2 sm:gap-3">
+          <label className="sr-only" htmlFor="stt-language">Speech recognition language</label>
+          <select
+            id="stt-language"
+            value={sttLanguage}
+            onChange={(event) => onSttLanguageChange(event.target.value)}
+            className="max-w-32 sm:max-w-40 rounded-full border border-black/10 dark:border-white/15 bg-white/60 dark:bg-white/10 px-2 sm:px-3 py-2 text-xs text-zinc-800 dark:text-zinc-100 backdrop-blur-md"
+            aria-label="Speech recognition language"
+            title="Speech-to-text language"
+          >
+            {SARVAM_LANGUAGES.map((language) => (
+              <option key={language.code} value={language.code}>STT: {language.name}</option>
+            ))}
+          </select>
+          <label className="sr-only" htmlFor="tts-language">Text-to-speech language</label>
+          <select
+            id="tts-language"
+            value={ttsLanguage}
+            onChange={(event) => onTtsLanguageChange(event.target.value)}
+            className="max-w-32 sm:max-w-40 rounded-full border border-black/10 dark:border-white/15 bg-white/60 dark:bg-white/10 px-2 sm:px-3 py-2 text-xs text-zinc-800 dark:text-zinc-100 backdrop-blur-md"
+            aria-label="Text-to-speech language"
+            title="Text-to-speech language"
+          >
+            {SARVAM_TTS_LANGUAGES.map((language) => (
+              <option key={language.code} value={language.code}>TTS: {language.name}</option>
+            ))}
+          </select>
+          <button
+            onClick={onClose}
+            aria-label="Close voice mode"
+            className="w-10 h-10 rounded-full bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-zinc-700 dark:text-zinc-200 hover:text-zinc-950 dark:hover:text-white flex items-center justify-center border border-black/10 dark:border-white/15 backdrop-blur-md transition-all cursor-pointer shadow-xs"
+            title="Exit Voice Mode (Esc)"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
       </div>
 
       {/* =========================================================================
@@ -222,6 +261,12 @@ export const InChatVoiceStage: React.FC<InChatVoiceStageProps> = ({
             {stateLabel}
           </span>
         </div>
+
+        {error && (
+          <p role="alert" className="max-w-xl rounded-xl border border-red-500/25 bg-red-500/10 px-4 py-2 text-sm text-red-700 dark:text-red-300">
+            {error}
+          </p>
+        )}
 
         {/* User Spoken Transcript */}
         <AnimatePresence mode="wait">
