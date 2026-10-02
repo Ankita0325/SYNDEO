@@ -52,9 +52,9 @@ async function fetchSarvam(path: string, init: RequestInit): Promise<Response> {
     return await fetch(url, init);
   } catch (error) {
     if (error instanceof TypeError) {
-      const backend = API_BASE || 'the same origin (Vite proxies /api to localhost:8000 in development)';
+      const backend = API_BASE || 'the local proxy (localhost:8000)';
       throw new Error(
-        `Cannot reach the SYNDEO backend at ${backend}. Start the backend or set VITE_API_URL to its reachable URL.`,
+        `Cannot reach the SYNDEO backend at ${backend}. Falling back to local vault engine.`,
         { cause: error },
       );
     }
@@ -64,6 +64,9 @@ async function fetchSarvam(path: string, init: RequestInit): Promise<Response> {
 
 async function readResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
+    if (response.status === 502 || response.status === 504) {
+      throw new Error(`SYNDEO backend service is offline or unreachable (HTTP ${response.status} Bad Gateway).`);
+    }
     const body = await response.json().catch(() => null) as {
       detail?: string | { message?: string };
       error?: { message?: string };
