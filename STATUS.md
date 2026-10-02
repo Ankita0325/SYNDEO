@@ -50,7 +50,15 @@ SYNDEO is an end-to-end multi-agent, policy-governed personal identity vault and
 
 ---
 
-### 3. High-Performance Multimodal AI & Voice Chat
+### 3. High-Performance Multimodal AI, OCR & Voice Chat
+- **Document & OCR Ingestion Pipeline**:
+  - Full client-side & backend OCR extraction (`runLocalOcr` with Tesseract.js / PDF.js and backend `DocumentAgent`).
+  - Automatically computes SHA-256 cryptographic hashes on uploaded documents, extracts text claims, and indexes them into Neo4j Aura in real-time.
+  - Passes extracted OCR content and tamper-evident hashes directly into Gemini prompt context for grounded citations.
+- **Multi-Agent Orchestration Flow Card with White Glowing Orbs**:
+  - Live animated visual pipeline in dark glass with pure-white glowing animated orbs (`ThinkingOrb`).
+  - Tracks 4 sequential neural stages: **Document Agent (OCR & Hash)** -> **Policy Gatekeeper** -> **Graph Indexer (Neo4j)** -> **Reasoning Agent (Gemini Flash Lite)**.
+  - Shows real-time stage statuses (`Active`, `Done`, `Queued`), live claim metrics, and glowing laser tracks.
 - **Google Gemini 2.5 (`gemini-flash-lite-latest`)**:
   - Primary reasoning engine connected directly to verified Neo4j vault records with ~1.3s response times.
   - Strict 3.5s timeout with automatic cascading fallback to **Sarvam 105B** and deterministic **Neo4j Cypher resolution**.
@@ -59,7 +67,7 @@ SYNDEO is an end-to-end multi-agent, policy-governed personal identity vault and
   - Words appear on screen in real time with 0ms visual delay as the user speaks.
 - **Sarvam AI Integration**:
   - **Speech-to-Text (`saaras:v3`)**: High-accuracy speech transcription across 12 Indian languages.
-  - **Text-to-Speech (`bulbul:v2`)**: 10 Indian voice personas (`shubh`, `meera`, `pavithra`, `maitreyi`, `arvind`, `amartya`, `aditi`, `priya`, `ratan`, `varun`).
+  - **Text-to-Speech (`bulbul:v3`)**: 10 Indian voice personas (`shubh`, `meera`, `pavithra`, `maitreyi`, `arvind`, `amartya`, `aditi`, `priya`, `ratan`, `varun`).
   - **Translation Engine**: Multi-lingual chat support across 12 BCP-47 Indian language codes.
 
 ---

@@ -54,6 +54,9 @@ export interface SarvamChatAttachment {
   name: string;
   type: string;
   size: string;
+  extractedText?: string;
+  sha256?: string;
+  category?: string;
 }
 
 interface SarvamTranslationResponse {

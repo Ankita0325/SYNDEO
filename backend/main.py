@@ -367,12 +367,14 @@ async def ai_chat(req: SarvamChatRequest):
     )
     user_message = message
     if req.attachment:
-        safe_attachment = {
-            key: value[:256] for key, value in req.attachment.items()
-            if key in {"name", "type", "size"}
-        }
+        safe_attachment = {}
+        for key, value in req.attachment.items():
+            if key in {"name", "type", "size", "sha256", "category"}:
+                safe_attachment[key] = str(value)[:256]
+            elif key == "extractedText":
+                safe_attachment[key] = str(value)[:4000]
         user_message += (
-            "\n\n[Attached file metadata: "
+            "\n\n[Attached Document Context & OCR Extracted Claims: "
             f"{safe_attachment}]"
         )
     messages.append({"role": "user", "content": user_message})
