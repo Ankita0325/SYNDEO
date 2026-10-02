@@ -284,7 +284,40 @@ class MemoryFillAgent:
             if c:
                 return c, c.field_value, 0.97, "Matched Date of Birth", None
 
+        # 24. General Date / Start / End Date Fields
+        if input_type in ["date", "month", "datetime-local"] or any(k in combined_norm for k in ["date", "passing date", "issue date", "effective date"]):
+            grad_claim = self._find_claim(["graduation year", "batch"], active_claims)
+            if grad_claim:
+                formatted = self._parse_date_to_iso(grad_claim.field_value, input_type)
+                return grad_claim, formatted, 0.90, "Matched Date Claim", None
+
         return None, None, 0.0, "No confident match in personal graph", None
+
+    def _parse_date_to_iso(self, date_str: str, input_type: str = "date") -> str:
+        if not date_str:
+            return ""
+        raw = date_str.strip()
+        if re.match(r"^\d{4}-\d{2}-\d{2}$", raw):
+            return raw[:7] if input_type == "month" else raw
+
+        year_match = re.search(r"\b(19\d{2}|20\d{2})\b", raw)
+        if year_match and len(raw) <= 10:
+            yyyy = year_match.group(1)
+            if input_type == "month":
+                return f"{yyyy}-01"
+            elif input_type == "date":
+                return f"{yyyy}-01-01"
+
+        for fmt in ["%d %b %Y", "%d %B %Y", "%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y", "%d-%m-%Y"]:
+            try:
+                dt = datetime.strptime(raw, fmt)
+                if input_type == "month":
+                    return dt.strftime("%Y-%m")
+                return dt.strftime("%Y-%m-%d")
+            except ValueError:
+                continue
+
+        return raw
 
     def generate_mapping(
         self,
@@ -315,6 +348,32 @@ class MemoryFillAgent:
                 assurance = matched_claim.assurance_level if matched_claim else "LEVEL_1_USER_ASSERTED"
                 evidence_doc = matched_claim.evidence_doc_name if matched_claim else None
                 fill_value = custom_val if custom_val is not None else (matched_claim.field_value if matched_claim else "")
+
+                # If field has explicit options (select, radio, checkbox), match against options
+                field_options = field.get("options") or []
+                if field_options and fill_value:
+                    val_norm = self._normalize_text(str(fill_value))
+                    best_opt_val = None
+                    best_opt_score = 0.0
+
+                    for opt in field_options:
+                        opt_val = str(opt.get("value") or "").strip()
+                        opt_lbl = str(opt.get("label") or "").strip()
+                        opt_norm = self._normalize_text(f"{opt_val} {opt_lbl}")
+
+                        if val_norm == opt_norm or val_norm == self._normalize_text(opt_val) or val_norm == self._normalize_text(opt_lbl):
+                            best_opt_val = opt_val or opt_lbl
+                            best_opt_score = 1.0
+                            break
+
+                        if val_norm in opt_norm or opt_norm in val_norm:
+                            score = len(val_norm) / max(len(opt_norm), 1)
+                            if score > best_opt_score:
+                                best_opt_score = score
+                                best_opt_val = opt_val or opt_lbl
+
+                    if best_opt_val and best_opt_score >= 0.3:
+                        fill_value = best_opt_val
 
                 sensitivity = get_field_sensitivity(claim_name)
 

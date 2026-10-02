@@ -883,19 +883,91 @@
 
       const tag = targetEl.tagName.toLowerCase();
       const type = (targetEl.getAttribute('type') || 'text').toLowerCase();
-      const valueStr = String(val ?? '');
+      const role = (targetEl.getAttribute('role') || '').toLowerCase();
+      let valueStr = String(val ?? '');
 
       try {
-        if (tag === 'select') {
-          // Select dropdown
+        // -----------------------------------------------------------------------
+        // A. DATE & TIME INPUTS (date, month, datetime-local, time)
+        // -----------------------------------------------------------------------
+        if (type === 'date' || type === 'month' || type === 'datetime-local' || type === 'time') {
+          const formattedDate = (function normalizeDate(raw, dateType) {
+            if (!raw) return '';
+            const str = String(raw).trim();
+
+            if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+              return dateType === 'month' ? str.slice(0, 7) : str;
+            }
+
+            // Check standard JS date parse
+            const d = new Date(str);
+            if (!isNaN(d.getTime())) {
+              const yyyy = d.getFullYear();
+              const mm = String(d.getMonth() + 1).padStart(2, '0');
+              const dd = String(d.getDate()).padStart(2, '0');
+              if (dateType === 'month') return `${yyyy}-${mm}`;
+              if (dateType === 'datetime-local') return `${yyyy}-${mm}-${dd}T09:00`;
+              return `${yyyy}-${mm}-${dd}`;
+            }
+
+            // DD/MM/YYYY or DD-MM-YYYY
+            const dmy = str.match(/^(\d{1,2})[\/\.-](\d{1,2})[\/\.-](\d{4})$/);
+            if (dmy) {
+              const dd = dmy[1].padStart(2, '0');
+              const mm = dmy[2].padStart(2, '0');
+              const yyyy = dmy[3];
+              if (dateType === 'month') return `${yyyy}-${mm}`;
+              return `${yyyy}-${mm}-${dd}`;
+            }
+
+            // 4-digit Year fallback (e.g. "2024" or "Class of 2024")
+            const yr = str.match(/\b(19\d{2}|20\d{2})\b/);
+            if (yr) {
+              const yyyy = yr[1];
+              if (dateType === 'month') return `${yyyy}-01`;
+              return `${yyyy}-01-01`;
+            }
+
+            return str;
+          })(valueStr, type);
+
+          try { targetEl.focus(); } catch {}
+          const inputProto = window.HTMLInputElement.prototype;
+          const valSetter = Object.getOwnPropertyDescriptor(inputProto, 'value')?.set;
+          if (valSetter) {
+            valSetter.call(targetEl, formattedDate);
+          } else {
+            targetEl.value = formattedDate;
+          }
+
+          targetEl.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+          targetEl.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+          targetEl.dispatchEvent(new Event('blur', { bubbles: true, composed: true }));
+
+          const verified = Boolean(targetEl.value);
+          fillResults.push({
+            field_id: fid,
+            memory_path: inst.memory_path,
+            status: verified ? 'FILLED' : 'VALUE_MISMATCH',
+            reason: verified ? `Date filled as ${targetEl.value}` : 'Date assignment rejected by browser format constraint',
+          });
+          if (verified) filledCount++;
+
+        // -----------------------------------------------------------------------
+        // B. SELECT DROPDOWNS (<select> or <select multiple>)
+        // -----------------------------------------------------------------------
+        } else if (tag === 'select') {
           let optionMatched = false;
+          const searchNorm = valueStr.trim().toLowerCase();
+          const searchTokens = searchNorm.split(/[\s,/-]+/).filter((t) => t.length > 2);
+
+          // 1. Direct value / label match
           for (let i = 0; i < targetEl.options.length; i++) {
             const opt = targetEl.options[i];
             const optVal = (opt.value || '').trim().toLowerCase();
             const optText = (opt.text || '').trim().toLowerCase();
-            const searchVal = valueStr.trim().toLowerCase();
 
-            if (optVal === searchVal || optText === searchVal || optText.includes(searchVal) || searchVal.includes(optText)) {
+            if (optVal === searchNorm || optText === searchNorm || optText.includes(searchNorm) || searchNorm.includes(optText)) {
               targetEl.selectedIndex = i;
               opt.selected = true;
               optionMatched = true;
@@ -903,7 +975,25 @@
             }
           }
 
-          // Framework setter for select
+          // 2. Token overlap fallback if direct match not found
+          if (!optionMatched && searchTokens.length > 0) {
+            let maxOverlap = 0;
+            let bestIndex = -1;
+            for (let i = 0; i < targetEl.options.length; i++) {
+              const optText = (targetEl.options[i].text || '').trim().toLowerCase();
+              const overlap = searchTokens.filter((token) => optText.includes(token)).length;
+              if (overlap > maxOverlap) {
+                maxOverlap = overlap;
+                bestIndex = i;
+              }
+            }
+            if (bestIndex >= 0 && maxOverlap > 0) {
+              targetEl.selectedIndex = bestIndex;
+              targetEl.options[bestIndex].selected = true;
+              optionMatched = true;
+            }
+          }
+
           const selectProto = window.HTMLSelectElement.prototype;
           const selectSetter = Object.getOwnPropertyDescriptor(selectProto, 'value')?.set;
           if (selectSetter && optionMatched) {
@@ -918,64 +1008,129 @@
             field_id: fid,
             memory_path: inst.memory_path,
             status: optionMatched ? 'FILLED' : 'VALUE_MISMATCH',
-            reason: optionMatched ? 'Option selected successfully' : 'No matching select option found',
+            reason: optionMatched ? `Selected option "${targetEl.options[targetEl.selectedIndex]?.text}"` : 'No matching select option found',
           });
           if (optionMatched) filledCount++;
-        } else if (type === 'checkbox') {
-          // Checkbox
-          const boolVal = Boolean(val === true || val === 'true' || val === '1' || val === 'yes');
-          const inputProto = window.HTMLInputElement.prototype;
-          const checkSetter = Object.getOwnPropertyDescriptor(inputProto, 'checked')?.set;
-          if (checkSetter) {
-            checkSetter.call(targetEl, boolVal);
-          } else {
-            targetEl.checked = boolVal;
-          }
 
-          targetEl.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
-          targetEl.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
-          targetEl.dispatchEvent(new Event('blur', { bubbles: true, composed: true }));
+        // -----------------------------------------------------------------------
+        // C. CHECKBOXES (<input type="checkbox"> or group)
+        // -----------------------------------------------------------------------
+        } else if (type === 'checkbox') {
+          const groupName = targetEl.name;
+          const searchNorm = valueStr.trim().toLowerCase();
+
+          // Check if there are sibling checkboxes sharing this name (multi-choice checkbox list)
+          const checkboxGroup = groupName
+            ? Array.from(document.querySelectorAll(`input[type="checkbox"][name="${CSS.escape(groupName)}"]`))
+            : [targetEl];
+
+          let anyChecked = false;
+
+          if (checkboxGroup.length > 1) {
+            // Group multi-choice checkbox
+            for (const chk of checkboxGroup) {
+              const cVal = (chk.value || '').trim().toLowerCase();
+              const cLbl = resolveOptionLabel(chk).toLowerCase();
+              const shouldCheck = searchNorm.includes(cVal) || searchNorm.includes(cLbl) || cVal.includes(searchNorm) || cLbl.includes(searchNorm);
+
+              const checkSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'checked')?.set;
+              if (checkSetter) checkSetter.call(chk, shouldCheck);
+              else chk.checked = shouldCheck;
+
+              chk.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+              chk.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+              if (shouldCheck) {
+                try { chk.click(); } catch {}
+                anyChecked = true;
+              }
+            }
+          } else {
+            // Standalone boolean checkbox
+            const boolVal = Boolean(val === true || val === 'true' || val === '1' || val === 'yes' || searchNorm === 'on');
+            const checkSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'checked')?.set;
+            if (checkSetter) checkSetter.call(targetEl, boolVal);
+            else targetEl.checked = boolVal;
+
+            targetEl.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+            targetEl.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+            targetEl.dispatchEvent(new Event('blur', { bubbles: true, composed: true }));
+            anyChecked = true;
+          }
 
           fillResults.push({
             field_id: fid,
             memory_path: inst.memory_path,
             status: 'FILLED',
-            reason: `Checkbox set to ${boolVal}`,
+            reason: `Checkbox options updated`,
           });
           filledCount++;
-        } else if (type === 'radio') {
-          // Radio button group
+
+        // -----------------------------------------------------------------------
+        // D. RADIO BUTTON GROUPS (<input type="radio"> or custom ARIA radios)
+        // -----------------------------------------------------------------------
+        } else if (type === 'radio' || role === 'radiogroup' || role === 'radio') {
           let radioMatched = false;
-          try {
-            const radioGroup = document.querySelectorAll(`input[type="radio"][name="${CSS.escape(targetEl.name)}"]`);
-            for (const radio of radioGroup) {
-              const rVal = (radio.value || '').trim().toLowerCase();
-              if (rVal === valueStr.trim().toLowerCase()) {
-                const checkSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'checked')?.set;
-                if (checkSetter) checkSetter.call(radio, true);
-                else radio.checked = true;
-                radio.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
-                radio.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
-                radio.dispatchEvent(new Event('blur', { bubbles: true, composed: true }));
+          const searchNorm = valueStr.trim().toLowerCase();
+          const searchTokens = searchNorm.split(/[\s,/-]+/).filter((t) => t.length > 2);
+
+          // 1. Find standard radio buttons
+          const groupName = targetEl.name;
+          const radioGroup = groupName
+            ? Array.from(document.querySelectorAll(`input[type="radio"][name="${CSS.escape(groupName)}"]`))
+            : Array.from(targetEl.closest('fieldset, form, [role="radiogroup"], [role="group"]')?.querySelectorAll('input[type="radio"]') || [targetEl]);
+
+          for (const radio of radioGroup) {
+            const rVal = (radio.value || '').trim().toLowerCase();
+            const rLbl = resolveOptionLabel(radio).toLowerCase();
+
+            if (rVal === searchNorm || rLbl === searchNorm || rLbl.includes(searchNorm) || searchNorm.includes(rLbl) || searchTokens.some((t) => rLbl.includes(t))) {
+              const checkSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'checked')?.set;
+              if (checkSetter) checkSetter.call(radio, true);
+              else radio.checked = true;
+
+              try { radio.click(); } catch {}
+              radio.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+              radio.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+              radio.dispatchEvent(new Event('blur', { bubbles: true, composed: true }));
+              radioMatched = true;
+              break;
+            }
+          }
+
+          // 2. Fallback to custom ARIA radio buttons (e.g. Google Forms / React UI)
+          if (!radioMatched) {
+            const ariaRadios = Array.from(
+              targetEl.closest('[role="radiogroup"], [role="group"], .freebirdFormviewerViewNumberedItemContainer')?.querySelectorAll('[role="radio"], [role="checkbox"]') || []
+            );
+            for (const aRadio of ariaRadios) {
+              const aLbl = (aRadio.getAttribute('aria-label') || aRadio.textContent || '').trim().toLowerCase();
+              if (aLbl === searchNorm || aLbl.includes(searchNorm) || searchNorm.includes(aLbl)) {
+                try {
+                  aRadio.click();
+                  aRadio.setAttribute('aria-checked', 'true');
+                } catch {}
+                aRadio.dispatchEvent(new Event('click', { bubbles: true, composed: true }));
                 radioMatched = true;
                 break;
               }
             }
-          } catch {}
+          }
 
           fillResults.push({
             field_id: fid,
             memory_path: inst.memory_path,
             status: radioMatched ? 'FILLED' : 'VALUE_MISMATCH',
-            reason: radioMatched ? 'Radio choice selected' : 'No matching radio option in group',
+            reason: radioMatched ? `Multiple choice selection filled` : 'No matching choice option in radio group',
           });
           if (radioMatched) filledCount++;
+
+        // -----------------------------------------------------------------------
+        // E. STANDARD TEXT / NUMBER / TEXTAREA INPUTS
+        // -----------------------------------------------------------------------
         } else {
-          // Text-like inputs and Textareas
           const proto = tag === 'textarea' ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
           const valSetter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
 
-          // Focus first
           try { targetEl.focus(); } catch {}
 
           if (valSetter) {
