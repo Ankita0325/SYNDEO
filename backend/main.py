@@ -273,12 +273,13 @@ async def sarvam_speech_to_text(
     return await sarvam_request("POST", "speech-to-text", files=fields, data=form)
 
 async def generate_gemini_chat_response(system_instruction: str, messages: List[Dict[str, str]], user_message: str) -> Optional[str]:
-    """Generates reasoning response using Google Gemini LLM."""
+    """Generates ultra-fast reasoning response using Google Gemini LLM."""
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
         return None
 
-    candidate_models = ["gemini-flash-latest", "gemini-3.8-flash", "gemini-2.5-pro"]
+    # Verified ultra-fast active model on Google Generative AI
+    candidate_models = ["models/gemini-flash-lite-latest", "models/gemini-flash-latest", "gemini-flash-lite-latest"]
     
     contents = []
     for msg in messages:
@@ -295,15 +296,15 @@ async def generate_gemini_chat_response(system_instruction: str, messages: List[
         "contents": contents,
         "generationConfig": {
             "temperature": 0.2,
-            "maxOutputTokens": 600,
+            "maxOutputTokens": 500,
         }
     }
 
     headers = {"Content-Type": "application/json"}
     for model in candidate_models:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+        url = f"https://generativelanguage.googleapis.com/v1beta/{model}:generateContent?key={api_key}" if not model.startswith("http") else model
         try:
-            async with httpx.AsyncClient(timeout=12.0) as client:
+            async with httpx.AsyncClient(timeout=3.5) as client:
                 res = await client.post(url, json=payload, headers=headers)
                 if res.status_code == 200:
                     data = res.json()
@@ -315,7 +316,7 @@ async def generate_gemini_chat_response(system_instruction: str, messages: List[
                             if text:
                                 return text
         except Exception as err:
-            logger.debug(f"Gemini {model} call failed: {err}")
+            logger.debug(f"Gemini {model} call note: {err}")
             continue
 
     return None
@@ -376,10 +377,10 @@ async def ai_chat(req: SarvamChatRequest):
         )
     messages.append({"role": "user", "content": user_message})
 
-    # 1. Primary Engine: Google Gemini LLM
+    # 1. Primary Engine: Google Gemini LLM (Ultra-Fast)
     gemini_answer = await generate_gemini_chat_response(system_message, messages, user_message)
     if gemini_answer:
-        return {"answer": gemini_answer, "model": "gemini-flash-latest", "request_id": "gemini-live"}
+        return {"answer": gemini_answer, "model": "gemini-flash-lite-latest", "request_id": "gemini-live"}
 
     # 2. Fallback Engine: Sarvam 105B LLM
     try:
@@ -397,7 +398,7 @@ async def ai_chat(req: SarvamChatRequest):
         if isinstance(answer, str) and answer.strip():
             return {"answer": answer.strip(), "model": response.get("model", "sarvam-105b"), "request_id": response.get("id")}
     except Exception as error:
-        logger.warning(f"Sarvam chat fallback failed: {error}")
+        logger.warning(f"Sarvam chat fallback note: {error}")
 
     # 3. Deterministic Graph Resolution Fallback
     matched_nodes = graph_store.query_graph_by_keyword(user_message)

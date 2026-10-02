@@ -240,8 +240,8 @@ export const SharePage: React.FC = () => {
   const [shareCreationError, setShareCreationError] = useState<string | null>(null);
   const [isCreatingShare, setIsCreatingShare] = useState(false);
 
-  // Link History
-  const [sharedLinks, setSharedLinks] = useState<SharedLink[]>(() => loadSharedLinks(initialSharedLinks));
+  // Link History - Starts clean with real user shares
+  const [sharedLinks, setSharedLinks] = useState<SharedLink[]>(() => loadSharedLinks([]));
 
   useEffect(() => {
     saveSharedLinks(sharedLinks);
@@ -353,19 +353,18 @@ export const SharePage: React.FC = () => {
         .order('created_at', { ascending: false });
       if (!active) return;
       if (error) {
-        const sampleDocuments = initialDocuments.slice(0, 2);
-        setVaultDocuments(sampleDocuments);
-        setSelectedFieldIds(new Set(sampleDocuments.map((document) => document.id)));
-        setIsUsingSampleDocuments(true);
+        setVaultDocuments([]);
+        setSelectedFieldIds(new Set());
+        setIsUsingSampleDocuments(false);
         setDocumentLoadError(error.message);
+        setIsInitialLoading(false);
         return;
       }
 
       const savedDocuments = (data || []).map((row) => mapSupabaseDocument(row as SupabaseDocumentRow));
-      const documents = savedDocuments.length ? savedDocuments : initialDocuments.slice(0, 2);
-      setVaultDocuments(documents);
-      setSelectedFieldIds(new Set(documents.slice(0, 2).map((document) => document.id)));
-      setIsUsingSampleDocuments(savedDocuments.length === 0);
+      setVaultDocuments(savedDocuments);
+      setSelectedFieldIds(new Set(savedDocuments.slice(0, 2).map((document) => document.id)));
+      setIsUsingSampleDocuments(false);
       setDocumentLoadError(null);
       setIsInitialLoading(false);
     })();
@@ -766,17 +765,35 @@ export const SharePage: React.FC = () => {
           </p>
         </div>
 
-        {/* Top Corner Button */}
-        <button
-          onClick={() => {
-            setShareCreationError(null);
-            setIsCreatePanelOpen(true);
-          }}
-          className="px-5 py-2.5 rounded-xl bg-[#5a25eb] hover:bg-[#6b37fa] text-white font-semibold text-sm transition-all shadow-md shadow-[#5a25eb]/20 flex items-center justify-center gap-2 cursor-pointer shrink-0 self-start sm:self-auto"
-        >
-          <Plus className="w-4 h-4 stroke-[2.5]" />
-          Create Share Link
-        </button>
+        {/* Top Corner Action Buttons */}
+        <div className="flex items-center gap-2.5">
+          <button
+            onClick={() => {
+              if (sharedLinks.length > 0) {
+                setSharedLinks([]);
+                saveSharedLinks([]);
+              } else {
+                setSharedLinks(initialSharedLinks);
+                saveSharedLinks(initialSharedLinks);
+              }
+            }}
+            className="px-4 py-2.5 rounded-xl border border-zinc-200 dark:border-[#2b2b3a] bg-zinc-100 dark:bg-[#161622] hover:bg-zinc-200 dark:hover:bg-[#202030] text-zinc-700 dark:text-[#cbbeff] text-xs font-semibold transition-all cursor-pointer shadow-xs flex items-center gap-1.5"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>{sharedLinks.length > 0 ? 'Clear Demo Shares' : 'Load Demo Shares'}</span>
+          </button>
+
+          <button
+            onClick={() => {
+              setShareCreationError(null);
+              setIsCreatePanelOpen(true);
+            }}
+            className="px-5 py-2.5 rounded-xl bg-[#5a25eb] hover:bg-[#6b37fa] text-white font-semibold text-sm transition-all shadow-md shadow-[#5a25eb]/20 flex items-center justify-center gap-2 cursor-pointer shrink-0"
+          >
+            <Plus className="w-4 h-4 stroke-[2.5]" />
+            <span>Create Share Link</span>
+          </button>
+        </div>
       </div>
 
       {/* Redesigned Active & Past Shared Links with Accordion Toggle Drawers */}
@@ -790,14 +807,25 @@ export const SharePage: React.FC = () => {
           </h2>
         </div>
 
-        <div className="space-y-3">
-          {sharedLinks.map((link) => {
-            const isExpanded = expandedLinkId === link.id;
-            const viewers = link.viewers || [];
-            const requests = link.accessRequests || [];
-            const pendingRequests = requests.filter((r) => r.status === 'pending');
+        {sharedLinks.length === 0 ? (
+          <div className="p-10 text-center rounded-3xl bg-white dark:bg-[#0c0c12] border border-dashed border-zinc-300 dark:border-[#242330] space-y-3">
+            <Share2 className="w-8 h-8 text-zinc-400 mx-auto" />
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-zinc-900 dark:text-white">No active share links</p>
+              <p className="text-xs text-zinc-500 dark:text-[#8c879a]">
+                You have not shared any credentials yet. Click "Create Share Link" to create a selective disclosure token or "Load Demo Shares" to preview sample shares.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {sharedLinks.map((link) => {
+              const isExpanded = expandedLinkId === link.id;
+              const viewers = link.viewers || [];
+              const requests = link.accessRequests || [];
+              const pendingRequests = requests.filter((r) => r.status === 'pending');
 
-            return (
+              return (
               <div
                 key={link.id}
                 className={`rounded-2xl border transition-all duration-200 overflow-hidden bg-white dark:bg-[#131317] ${
@@ -1122,6 +1150,7 @@ export const SharePage: React.FC = () => {
             );
           })}
         </div>
+      )}
       </div>
 
       {/* CREATE SHARE MODAL / SLIDE-OVER PANEL */}

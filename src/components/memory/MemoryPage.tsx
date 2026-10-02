@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { LifeStageCategory, RecordField, DocumentItem, OCRDocumentResult } from '../../types';
+import { initialRecords, initialDocuments } from '../../data/mockData';
 import { fetchRecordsFromBackend, fetchDocumentsFromBackend, addClaimToBackend, uploadDocumentToBackend, clearMemoryStore } from '../../lib/api';
 import { runLocalOcr } from '../../lib/ocrClient';
 import { StatusBadge } from '../common/Badge';
@@ -30,7 +31,6 @@ import {
   Eye,
   ShieldCheck,
   MessageSquare,
-  RotateCcw,
 } from 'lucide-react';
 
 type ViewMode = 'graph' | 'cards' | 'documents';
@@ -85,6 +85,11 @@ export const MemoryPage: React.FC = () => {
     setLocalDocuments([]);
     setOcrRecords([]);
     await clearMemoryStore();
+  };
+
+  const handleLoadDemoVault = () => {
+    setRecords(initialRecords);
+    setDocuments(initialDocuments);
   };
 
 
@@ -192,12 +197,12 @@ export const MemoryPage: React.FC = () => {
         {/* Action Buttons */}
         <div className="flex items-center gap-2">
           <button
-            onClick={handleClearVault}
-            title="Reset vault and wipe all records to start fresh"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-100 dark:bg-[#14141e] hover:bg-red-500/10 hover:text-red-500 dark:hover:bg-red-500/15 border border-zinc-200 dark:border-[#272736] text-xs font-medium text-zinc-600 dark:text-[#8c879a] transition-colors cursor-pointer shadow-2xs"
+            onClick={records.length > 0 ? handleClearVault : handleLoadDemoVault}
+            title={records.length > 0 ? 'Reset vault and wipe all records' : 'Load sample demo claims and documents'}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-100 dark:bg-[#14141e] hover:bg-zinc-200 dark:hover:bg-[#1c1c28] border border-zinc-200 dark:border-[#272736] text-xs font-medium text-zinc-700 dark:text-[#cbbeff] transition-colors cursor-pointer shadow-2xs"
           >
-            <RotateCcw className="w-3.5 h-3.5" />
-            <span>Reset Vault</span>
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>{records.length > 0 ? 'Reset Vault' : 'Load Demo Vault'}</span>
           </button>
           <button
             onClick={() => setIsAddInfoOpen(true)}

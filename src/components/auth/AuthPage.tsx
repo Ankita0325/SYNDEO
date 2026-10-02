@@ -11,7 +11,7 @@ import { motion } from 'framer-motion';
 import { SyndeoPageLoader } from '../ui/SkeletonLoader';
 
 export const AuthPage: React.FC = () => {
-  const { navigate, authLoading, needsProfile, authError, signInWithGoogle, createProfile } = useNavigation();
+  const { navigate, authLoading, needsProfile, authError, signInWithGoogle, signInAsGuest, createProfile } = useNavigation();
   const { theme, toggleTheme } = useTheme();
   const [fullName, setFullName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -26,6 +26,10 @@ export const AuthPage: React.FC = () => {
       setError(authError instanceof Error ? authError.message : 'Google sign-in failed. Please try again.');
       setIsLoading(false);
     }
+  };
+
+  const handleSkip = () => {
+    signInAsGuest('Guest Explorer');
   };
 
   const handleProfileSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -122,24 +126,41 @@ export const AuthPage: React.FC = () => {
               </button>
             </form>
           ) : (
-            <button
-              onClick={handleGoogleAuth}
-              type="button"
-              disabled={isLoading}
-              className="w-full flex items-center justify-center gap-2.5 py-2.5 px-4 rounded-xl border border-zinc-200 dark:border-[#2b2b3a] bg-zinc-50 dark:bg-[#15151f] hover:bg-zinc-100 dark:hover:bg-[#1d1d2b] text-xs font-semibold text-zinc-800 dark:text-[#e4e1e8] transition-all disabled:opacity-60"
-            >
-              {isLoading ? (
-                <span className="w-4 h-4 rounded-full border-2 border-zinc-300 border-t-[#5a25eb] animate-spin" />
-              ) : (
-                <svg className="w-4 h-4" viewBox="0 0 24 24" aria-hidden="true">
-                  <path fill="#EA4335" d="M12 5c1.6 0 3 .6 4.1 1.6l3.1-3.1C17.3 1.7 14.8 1 12 1 7.5 1 3.7 3.6 1.9 7.4l3.7 2.9C6.5 7.4 9 5 12 5z" />
-                  <path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5c-.3 1.5-1.1 2.8-2.4 3.7l3.7 2.9c2.2-2 3.7-5 3.7-8.8z" />
-                  <path fill="#FBBC05" d="M5.6 14.7c-.2-.7-.4-1.5-.4-2.7s.1-2 .4-2.7L1.9 6.4C.7 8.8 0 10.3 0 12s.7 3.2 1.9 5.6l3.7-2.9z" />
-                  <path fill="#34A853" d="M12 23c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3 0-5.5-2-6.4-4.8L1.9 16.4C3.7 20.2 7.5 23 12 23z" />
-                </svg>
-              )}
-              <span>Continue with Google</span>
-            </button>
+            <div className="space-y-3">
+              <button
+                onClick={handleGoogleAuth}
+                type="button"
+                disabled={isLoading}
+                className="w-full flex items-center justify-center gap-2.5 py-2.5 px-4 rounded-xl border border-zinc-200 dark:border-[#2b2b3a] bg-zinc-50 dark:bg-[#15151f] hover:bg-zinc-100 dark:hover:bg-[#1d1d2b] text-xs font-semibold text-zinc-800 dark:text-[#e4e1e8] transition-all disabled:opacity-60 cursor-pointer shadow-2xs"
+              >
+                {isLoading ? (
+                  <span className="w-4 h-4 rounded-full border-2 border-zinc-300 border-t-[#5a25eb] animate-spin" />
+                ) : (
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" aria-hidden="true">
+                    <path fill="#EA4335" d="M12 5c1.6 0 3 .6 4.1 1.6l3.1-3.1C17.3 1.7 14.8 1 12 1 7.5 1 3.7 3.6 1.9 7.4l3.7 2.9C6.5 7.4 9 5 12 5z" />
+                    <path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5c-.3 1.5-1.1 2.8-2.4 3.7l3.7 2.9c2.2-2 3.7-5 3.7-8.8z" />
+                    <path fill="#FBBC05" d="M5.6 14.7c-.2-.7-.4-1.5-.4-2.7s.1-2 .4-2.7L1.9 6.4C.7 8.8 0 10.3 0 12s.7 3.2 1.9 5.6l3.7-2.9z" />
+                    <path fill="#34A853" d="M12 23c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3 0-5.5-2-6.4-4.8L1.9 16.4C3.7 20.2 7.5 23 12 23z" />
+                  </svg>
+                )}
+                <span>Continue with Google</span>
+              </button>
+
+              <div className="relative flex items-center justify-center my-3">
+                <div className="w-full border-t border-zinc-200 dark:border-white/10" />
+                <span className="absolute bg-white dark:bg-[#0c0c12] px-2 text-[10px] uppercase font-mono tracking-wider text-zinc-400">
+                  or
+                </span>
+              </div>
+
+              <button
+                onClick={handleSkip}
+                type="button"
+                className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl border border-[#5a25eb]/30 bg-[#5a25eb]/10 hover:bg-[#5a25eb]/20 text-[#5a25eb] dark:text-[#cbbeff] text-xs font-semibold transition-all cursor-pointer shadow-2xs"
+              >
+                <span>Skip & Continue as Guest →</span>
+              </button>
+            </div>
           )}
 
           {(error || authError) && (

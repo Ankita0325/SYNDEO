@@ -34,7 +34,7 @@ export const HomePage: React.FC = () => {
 
   // In-Page Memory Category Filter
   const [memoryTab, setMemoryTab] = useState<LifeStageCategory | 'all'>('all');
-  const [inPageRecords, setInPageRecords] = useState<RecordField[]>(initialRecords);
+  const [inPageRecords, setInPageRecords] = useState<RecordField[]>([]);
   const [isAddRecordOpen, setIsAddRecordOpen] = useState<boolean>(false);
   const [newFieldName, setNewFieldName] = useState<string>('');
   const [newFieldValue, setNewFieldValue] = useState<string>('');
@@ -655,13 +655,28 @@ export const HomePage: React.FC = () => {
             </p>
           </div>
 
-          <button
-            onClick={() => setIsAddRecordOpen(true)}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#5a25eb] hover:bg-[#6b37fa] text-white text-xs font-semibold shadow-md shadow-[#5a25eb]/20 cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Add Record In-Place</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                if (inPageRecords.length > 0) {
+                  setInPageRecords([]);
+                } else {
+                  setInPageRecords(initialRecords);
+                }
+              }}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-zinc-100 dark:bg-[#161622] hover:bg-zinc-200 dark:hover:bg-[#202030] border border-zinc-200 dark:border-[#28283a] text-zinc-700 dark:text-[#cbbeff] text-xs font-semibold transition-all cursor-pointer shadow-xs"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>{inPageRecords.length > 0 ? 'Clear Demo Vault' : 'Load Demo Vault'}</span>
+            </button>
+            <button
+              onClick={() => setIsAddRecordOpen(true)}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#5a25eb] hover:bg-[#6b37fa] text-white text-xs font-semibold shadow-md shadow-[#5a25eb]/20 cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add Record In-Place</span>
+            </button>
+          </div>
         </div>
 
         {/* Category Tabs */}
@@ -688,36 +703,48 @@ export const HomePage: React.FC = () => {
           ))}
         </div>
 
-        {/* Records Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredMemoryRecords.map((rec) => (
-            <div
-              key={rec.id}
-              className="p-5 rounded-2xl bg-white dark:bg-[#08080c] border border-zinc-200 dark:border-[#1c1c28] hover:border-[#5a25eb]/50 transition-all space-y-3 flex flex-col justify-between shadow-sm dark:shadow-none"
-            >
-              <div>
-                <div className="flex items-start justify-between gap-2 mb-2">
-                  <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-500 dark:text-[#71717a]">
-                    {rec.fieldName}
-                  </span>
-                  <StatusBadge type={rec.confidence} label={rec.source} size="sm" />
-                </div>
-                <p className="text-sm font-bold text-zinc-900 dark:text-white leading-snug">{rec.value}</p>
-                {rec.evidenceDocName && (
-                  <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-mono mt-2 flex items-center gap-1">
-                    <FileCheck className="w-3.5 h-3.5" />
-                    <span>{rec.evidenceDocName}</span>
-                  </p>
-                )}
-              </div>
-
-              <div className="pt-2 border-t border-zinc-100 dark:border-[#14141e] flex items-center justify-between text-[10px] text-zinc-400 dark:text-[#52525b] font-mono">
-                <span className="capitalize">{rec.category}</span>
-                <span>Synced: {rec.lastUpdated}</span>
-              </div>
+        {/* Records Grid or Empty State */}
+        {filteredMemoryRecords.length === 0 ? (
+          <div className="p-8 text-center rounded-3xl bg-zinc-50 dark:bg-[#08080c] border border-dashed border-zinc-300 dark:border-[#222232] space-y-3">
+            <Database className="w-8 h-8 text-zinc-400 mx-auto" />
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-zinc-900 dark:text-white">Vault is empty</p>
+              <p className="text-xs text-zinc-500 dark:text-[#71717a]">
+                No mock data loaded. Click "Load Demo Vault" to preview sample records or "Add Record In-Place" to add yours.
+              </p>
             </div>
-          ))}
-        </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filteredMemoryRecords.map((rec) => (
+              <div
+                key={rec.id}
+                className="p-5 rounded-2xl bg-white dark:bg-[#08080c] border border-zinc-200 dark:border-[#1c1c28] hover:border-[#5a25eb]/50 transition-all space-y-3 flex flex-col justify-between shadow-sm dark:shadow-none"
+              >
+                <div>
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-500 dark:text-[#71717a]">
+                      {rec.fieldName}
+                    </span>
+                    <StatusBadge type={rec.confidence} label={rec.source} size="sm" />
+                  </div>
+                  <p className="text-sm font-bold text-zinc-900 dark:text-white leading-snug">{rec.value}</p>
+                  {rec.evidenceDocName && (
+                    <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-mono mt-2 flex items-center gap-1">
+                      <FileCheck className="w-3.5 h-3.5" />
+                      <span>{rec.evidenceDocName}</span>
+                    </p>
+                  )}
+                </div>
+
+                <div className="pt-2 border-t border-zinc-100 dark:border-[#14141e] flex items-center justify-between text-[10px] text-zinc-400 dark:text-[#52525b] font-mono">
+                  <span className="capitalize">{rec.category}</span>
+                  <span>Synced: {rec.lastUpdated}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
       {/* 6. Interactive Sandbox 3: Selective Disclosure & QR Simulator */}

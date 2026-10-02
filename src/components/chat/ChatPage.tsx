@@ -648,7 +648,7 @@ export const ChatPage: React.FC = () => {
         setIsTyping(false);
         setOrbState('idle');
       }
-    }, 60);
+    }, 20);
   };
 
   const generateFallbackResponse = (

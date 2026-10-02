@@ -14,6 +14,7 @@ interface NavigationContextType {
   userName: string;
   userEmail: string;
   signInWithGoogle: () => Promise<void>;
+  signInAsGuest: (guestName?: string) => void;
   createProfile: (fullName: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
@@ -190,6 +191,13 @@ export const NavigationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     navigate('/memory');
   };
 
+  const signInAsGuest = (guestName = 'Guest Explorer') => {
+    setUserName(guestName);
+    setProfileExists(true);
+    setIsAuthenticated(true);
+    navigate('/chat');
+  };
+
   const signOut = async () => {
     if (supabase) {
       try {
@@ -217,6 +225,7 @@ export const NavigationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         userName,
         userEmail,
         signInWithGoogle,
+        signInAsGuest,
         createProfile,
         signOut,
       }}
