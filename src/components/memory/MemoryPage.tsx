@@ -1,13 +1,13 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { initialDocuments, initialRecords } from '../../data/mockData';
-import type { LifeStageCategory, RecordField, DocumentItem } from '../../types';
+import type { LifeStageCategory, RecordField, DocumentItem, OCRDocumentResult } from '../../types';
 import { fetchRecordsFromBackend, fetchDocumentsFromBackend, addClaimToBackend } from '../../lib/api';
 import { supabase } from '../../lib/supabase';
 import { mapSupabaseDocument, type SupabaseDocumentRow } from '../../lib/documents';
+import { runLocalOcr } from '../../lib/ocrClient';
 import { StatusBadge } from '../common/Badge';
 import { Modal } from '../common/Modal';
 import { ObsidianGraphView } from './ObsidianGraphView';
-import { MemoryPageSkeleton } from '../ui/SkeletonLoader';
 import {
   Database,
   FileText,
@@ -21,29 +21,38 @@ import {
   Wallet,
   HeartPulse,
   Search,
-  CheckCircle2,
   FileCheck,
-  ArrowRight,
   Network,
   LayoutGrid,
   Copy,
   Check,
+  FileType,
+  X,
+  Loader2,
+  Eye,
 } from 'lucide-react';
 
 type ViewMode = 'graph' | 'cards' | 'documents';
+type OCRRecordField = RecordField & { ocrDocument: OCRDocumentResult };
+type LocalDocument = DocumentItem & { fileUrl: string; ocrResult: OCRDocumentResult };
 
 export const MemoryPage: React.FC = () => {
-  const [isInitialLoading, setIsInitialLoading] = useState<boolean>(true);
   const [records, setRecords] = useState<RecordField[]>(initialRecords);
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
+  const [localDocuments, setLocalDocuments] = useState<LocalDocument[]>([]);
+  const [ocrRecords, setOcrRecords] = useState<OCRRecordField[]>([]);
+  const localFileUrls = useRef<string[]>([]);
   const [documentLoadError, setDocumentLoadError] = useState<string | null>(null);
   const [isUsingSampleDocuments, setIsUsingSampleDocuments] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<LifeStageCategory | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [viewMode, setViewMode] = useState<ViewMode>('graph');
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [selectedOcrRecord, setSelectedOcrRecord] = useState<OCRRecordField | null>(null);
+  const [isOcrViewerOpen, setIsOcrViewerOpen] = useState(false);
+  const useSupabaseForDocuments = import.meta.env.VITE_USE_SUPABASE_DOCUMENTS !== 'false';
 
-  const loadSampleDocuments = useCallback((error?: string) => {
+  const showSampleDocuments = useCallback((error?: string) => {
     setDocuments(initialDocuments.slice(0, 2));
     setIsUsingSampleDocuments(true);
     setDocumentLoadError(error || null);
@@ -61,14 +70,14 @@ export const MemoryPage: React.FC = () => {
         }
       }
 
-      if (supabase) {
+      if (supabase && useSupabaseForDocuments) {
         const { data: { user }, error: userError } = await supabase.auth.getUser();
         if (userError) {
-          if (active) loadSampleDocuments(userError.message);
+          if (active) showSampleDocuments(userError.message);
           return;
         }
         if (!user) {
-          if (active) loadSampleDocuments('Sign in to load your vault documents.');
+          if (active) showSampleDocuments('Sign in to load your vault documents.');
           return;
         }
 
@@ -78,7 +87,7 @@ export const MemoryPage: React.FC = () => {
           .eq('auth_user_id', user.id)
           .single();
         if (profileError) {
-          if (active) loadSampleDocuments(profileError.message);
+          if (active) showSampleDocuments(profileError.message);
           return;
         }
 
@@ -89,12 +98,12 @@ export const MemoryPage: React.FC = () => {
           .order('created_at', { ascending: false });
         if (!active) return;
         if (error) {
-          loadSampleDocuments(error.message);
+          showSampleDocuments(error.message);
           return;
         }
         const savedDocuments = (data || []).map((row) => mapSupabaseDocument(row as SupabaseDocumentRow));
         if (savedDocuments.length === 0) {
-          loadSampleDocuments();
+          showSampleDocuments();
         } else {
           setDocuments(savedDocuments);
           setIsUsingSampleDocuments(false);
@@ -107,18 +116,15 @@ export const MemoryPage: React.FC = () => {
           setDocuments(backendDocs);
           setIsUsingSampleDocuments(false);
         } else {
-          loadSampleDocuments();
+          showSampleDocuments();
         }
-      }
-      if (active) {
-        setIsInitialLoading(false);
       }
     })();
 
     return () => {
       active = false;
     };
-  }, [loadSampleDocuments]);
+  }, [showSampleDocuments, useSupabaseForDocuments]);
 
 
   // Modals state
@@ -127,7 +133,10 @@ export const MemoryPage: React.FC = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadCategory, setUploadCategory] = useState<LifeStageCategory>('education');
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
+  const [ocrResult, setOcrResult] = useState<OCRDocumentResult | null>(null);
+  const [isOcrRunning, setIsOcrRunning] = useState(false);
+  const [ocrProgress, setOcrProgress] = useState(0);
+  const [ocrProgressStatus, setOcrProgressStatus] = useState('');
 
   // Add Info Form state
   const [newCategory, setNewCategory] = useState<LifeStageCategory>('identity');
@@ -135,8 +144,9 @@ export const MemoryPage: React.FC = () => {
   const [newValue, setNewValue] = useState<string>('');
   const [newSourceType, setNewSourceType] = useState<'Confirmed by you' | 'Extracted from document'>('Confirmed by you');
 
-  // Upload Document Flow state
-  const [uploadStep, setUploadStep] = useState<1 | 2 | 3 | 4>(1);
+  useEffect(() => () => {
+    localFileUrls.current.forEach((fileUrl) => URL.revokeObjectURL(fileUrl));
+  }, []);
 
   const categories: { id: LifeStageCategory; label: string; icon: React.FC<{ className?: string }> }[] = [
     { id: 'identity', label: 'Identity', icon: Fingerprint },
@@ -154,6 +164,15 @@ export const MemoryPage: React.FC = () => {
       (r.evidenceDocName && r.evidenceDocName.toLowerCase().includes(searchQuery.toLowerCase()));
     return matchesCategory && matchesSearch;
   });
+
+  const filteredOcrRecords = ocrRecords.filter((record) => {
+    const matchesCategory = selectedCategory === 'all' || record.category === selectedCategory;
+    const matchesSearch = record.fieldName.toLowerCase().includes(searchQuery.toLowerCase())
+      || record.value.toLowerCase().includes(searchQuery.toLowerCase())
+      || Boolean(record.evidenceDocName?.toLowerCase().includes(searchQuery.toLowerCase()));
+    return matchesCategory && matchesSearch;
+  });
+  const allRecords = [...filteredOcrRecords, ...filteredRecords];
 
   const handleCopy = (id: string, text: string) => {
     navigator.clipboard.writeText(text);
@@ -189,96 +208,7 @@ export const MemoryPage: React.FC = () => {
     });
   };
 
-  const handleFinishUpload = async () => {
-    if (!selectedFile) {
-      setUploadError('Choose a PDF or image file first.');
-      setUploadStep(1);
-      return;
-    }
-    if (selectedFile.size > 25 * 1024 * 1024) {
-      setUploadError('Choose a file smaller than 25 MB.');
-      setUploadStep(1);
-      return;
-    }
-    if (!supabase) {
-      setUploadError('Supabase is not configured. Check the VITE Supabase URL and anon key.');
-      return;
-    }
-
-    setIsUploading(true);
-    setUploadError(null);
-    let storagePath: string | null = null;
-
-    try {
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      if (userError) throw userError;
-      if (!user) throw new Error('Sign in before uploading documents.');
-
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('auth_user_id', user.id)
-        .single();
-      if (profileError) throw profileError;
-
-      const safeFileName = selectedFile.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-      const extension = selectedFile.name.split('.').pop()?.toLowerCase();
-      const mimeType = selectedFile.type || (extension === 'pdf' ? 'application/pdf' : extension === 'png' ? 'image/png' : extension === 'jpg' || extension === 'jpeg' ? 'image/jpeg' : '');
-      if (!['application/pdf', 'image/png', 'image/jpeg'].includes(mimeType)) {
-        throw new Error('Only PDF, PNG, and JPEG documents are supported.');
-      }
-      storagePath = `${profile.id}/${crypto.randomUUID()}-${safeFileName}`;
-      const { error: storageError } = await supabase.storage
-        .from('documents')
-        .upload(storagePath, selectedFile, {
-          contentType: mimeType,
-          upsert: false,
-        });
-      if (storageError) throw storageError;
-
-      const bytes = await selectedFile.arrayBuffer();
-      const hashBytes = await crypto.subtle.digest('SHA-256', bytes);
-      const sha256Hash = Array.from(new Uint8Array(hashBytes), (byte) => byte.toString(16).padStart(2, '0')).join('');
-      const { data: insertedDocument, error: documentError } = await supabase
-        .from('documents')
-        .insert({
-          profile_id: profile.id,
-          file_name: selectedFile.name,
-          storage_path: storagePath,
-          document_type: extension || 'unknown',
-          category: uploadCategory,
-          mime_type: mimeType,
-          file_size: selectedFile.size,
-          sha256_hash: sha256Hash,
-          processing_status: 'PENDING',
-        })
-        .select('id, file_name, category, document_type, mime_type, file_size, processing_status, created_at')
-        .single();
-      if (documentError) throw documentError;
-
-      const newDocument = mapSupabaseDocument(insertedDocument as SupabaseDocumentRow);
-      setDocuments((previous) => [newDocument, ...(isUsingSampleDocuments ? [] : previous.filter((document) => document.id !== newDocument.id))]);
-      setIsUsingSampleDocuments(false);
-      setDocumentLoadError(null);
-      setIsUploadDocOpen(false);
-      setUploadStep(1);
-      setSelectedFile(null);
-    } catch (error) {
-      if (storagePath) {
-        await supabase.storage.from('documents').remove([storagePath]);
-      }
-      const message = error instanceof Error ? error.message : 'Document upload failed.';
-      setUploadError(message.toLowerCase().includes('bucket not found')
-        ? 'Supabase Storage bucket "documents" is missing. Run supabase_documents.sql in the Supabase SQL Editor, then retry.'
-        : message);
-    } finally {
-      setIsUploading(false);
-    }
-  };
-
-  if (isInitialLoading) {
-    return <MemoryPageSkeleton />;
-  }
+  const visibleDocuments = [...localDocuments, ...documents];
 
   return (
     <div className="max-w-6xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-6 text-zinc-900 dark:text-[#f4f4f6]">
@@ -309,7 +239,6 @@ export const MemoryPage: React.FC = () => {
           </button>
           <button
             onClick={() => {
-              setUploadStep(1);
               setUploadError(null);
               setIsUploadDocOpen(true);
             }}
@@ -336,7 +265,7 @@ export const MemoryPage: React.FC = () => {
             <span>Source Docs</span>
             <FileText className="w-3.5 h-3.5 text-emerald-500" />
           </div>
-          <p className="text-lg sm:text-xl font-bold text-zinc-900 dark:text-white">{documents.length}</p>
+          <p className="text-lg sm:text-xl font-bold text-zinc-900 dark:text-white">{visibleDocuments.length}</p>
         </div>
 
         <div className="p-3 rounded-2xl border border-zinc-200 dark:border-[#1c1c28] bg-white dark:bg-[#07070a] shadow-2xs">
@@ -378,10 +307,10 @@ export const MemoryPage: React.FC = () => {
                 ? 'bg-[#5a25eb] text-white shadow-xs'
                 : 'text-zinc-600 dark:text-[#8c879a] hover:text-zinc-900 dark:hover:text-white'
             }`}
-          >
-            <LayoutGrid className="w-3.5 h-3.5" />
-            <span>Cards Grid ({records.length})</span>
-          </button>
+              >
+                <LayoutGrid className="w-3.5 h-3.5" />
+                <span>Cards Grid ({allRecords.length})</span>
+              </button>
 
           <button
             onClick={() => setViewMode('documents')}
@@ -392,7 +321,7 @@ export const MemoryPage: React.FC = () => {
             }`}
           >
             <FileText className="w-3.5 h-3.5" />
-            <span>Evidence Files ({documents.length})</span>
+            <span>Evidence Files ({visibleDocuments.length})</span>
           </button>
         </div>
 
@@ -434,11 +363,12 @@ export const MemoryPage: React.FC = () => {
                   : 'bg-zinc-100 dark:bg-[#12121a] text-zinc-600 dark:text-[#a29db0] hover:text-zinc-900 dark:hover:text-white'
               }`}
             >
-              All ({records.length})
+              All ({records.length + ocrRecords.length})
             </button>
             {categories.map((cat) => {
               const Icon = cat.icon;
-              const count = records.filter((r) => r.category === cat.id).length;
+              const count = records.filter((r) => r.category === cat.id).length
+                + ocrRecords.filter((r) => r.category === cat.id).length;
               const isSelected = selectedCategory === cat.id;
               return (
                 <button
@@ -460,14 +390,23 @@ export const MemoryPage: React.FC = () => {
 
           {/* Cards Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {filteredRecords.map((record) => {
+            {allRecords.map((record) => {
               const catMeta = categories.find((c) => c.id === record.category);
               const Icon = catMeta?.icon || FileText;
 
               return (
                 <div
                   key={record.id}
-                  className="p-4 rounded-2xl border border-zinc-200 dark:border-[#1c1c28] bg-white dark:bg-[#07070a] hover:border-[#5a25eb]/40 transition-all space-y-2.5 flex flex-col justify-between shadow-2xs group"
+                  onClick={() => {
+                    const ocrRecord = ocrRecords.find((item) => item.id === record.id);
+                    if (ocrRecord) {
+                      setSelectedOcrRecord(ocrRecord);
+                      setIsOcrViewerOpen(true);
+                    }
+                  }}
+                  className={`p-4 rounded-2xl border border-zinc-200 dark:border-[#1c1c28] bg-white dark:bg-[#07070a] hover:border-[#5a25eb]/40 transition-all space-y-2.5 flex flex-col justify-between shadow-2xs group ${
+                    ocrRecords.some((item) => item.id === record.id) ? 'cursor-pointer' : ''
+                  }`}
                 >
                   <div>
                     <div className="flex items-center justify-between gap-2 mb-1.5">
@@ -484,16 +423,32 @@ export const MemoryPage: React.FC = () => {
 
                     <div className="pl-8 space-y-1">
                       <div className="flex items-center justify-between gap-2">
-                        <p className="text-sm sm:text-base font-semibold text-zinc-900 dark:text-[#e4e1e8]">
+                        <p className="text-sm sm:text-base font-semibold text-zinc-900 dark:text-[#e4e1e8] line-clamp-3">
                           {record.value}
                         </p>
-                        <button
-                          onClick={() => handleCopy(record.id, record.value)}
-                          className="p-1 rounded text-zinc-400 hover:text-zinc-900 dark:hover:text-white cursor-pointer"
-                          title="Copy"
-                        >
-                          {copiedId === record.id ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
-                        </button>
+                        <div className="flex items-center gap-1">
+                          {ocrRecords.some((item) => item.id === record.id) && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const ocrRecord = ocrRecords.find((item) => item.id === record.id);
+                                if (ocrRecord) setSelectedOcrRecord(ocrRecord);
+                                setIsOcrViewerOpen(true);
+                              }}
+                              className="p-1 rounded text-zinc-400 hover:text-[#5a25eb] cursor-pointer"
+                              title="View OCR JSON"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                          <button
+                            onClick={() => handleCopy(record.id, record.value)}
+                            className="p-1 rounded text-zinc-400 hover:text-zinc-900 dark:hover:text-white cursor-pointer"
+                            title="Copy"
+                          >
+                            {copiedId === record.id ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                          </button>
+                        </div>
                       </div>
 
                       {record.evidenceDocName && (
@@ -514,7 +469,7 @@ export const MemoryPage: React.FC = () => {
             })}
           </div>
 
-          {filteredRecords.length === 0 && (
+          {allRecords.length === 0 && (
             <div className="p-8 text-center border border-dashed border-zinc-300 dark:border-[#2d2b38] rounded-2xl bg-white dark:bg-[#07070a]">
               <Database className="w-6 h-6 text-zinc-400 mx-auto mb-1.5" />
               <p className="text-xs text-zinc-500">No matching records found.</p>
@@ -523,12 +478,75 @@ export const MemoryPage: React.FC = () => {
         </div>
       )}
 
+      {/* OCR Record Viewer Modal */}
+      <Modal
+        isOpen={isOcrViewerOpen}
+        onClose={() => {
+          setIsOcrViewerOpen(false);
+          setSelectedOcrRecord(null);
+        }}
+        title={selectedOcrRecord ? `OCR Evidence: ${selectedOcrRecord.evidenceDocName || selectedOcrRecord.fieldName}` : 'OCR Evidence'}
+        subtitle="View extracted OCR text and JSON"
+        maxWidth="max-w-2xl"
+      >
+        {selectedOcrRecord && (
+          <div className="space-y-3 text-xs">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="p-3 rounded-xl border border-zinc-200 dark:border-[#222230] bg-zinc-50 dark:bg-[#0c0c12]">
+                <span className="text-[10px] text-zinc-500">Field Name</span>
+                <p className="text-xs font-semibold text-zinc-900 dark:text-white">{selectedOcrRecord.fieldName}</p>
+              </div>
+              <div className="p-3 rounded-xl border border-zinc-200 dark:border-[#222230] bg-zinc-50 dark:bg-[#0c0c12]">
+                <span className="text-[10px] text-zinc-500">Source</span>
+                <p className="text-xs font-semibold text-zinc-900 dark:text-white">{selectedOcrRecord.source}</p>
+              </div>
+              <div className="p-3 rounded-xl border border-zinc-200 dark:border-[#222230] bg-zinc-50 dark:bg-[#0c0c12]">
+                <span className="text-[10px] text-zinc-500">Category</span>
+                <p className="text-xs font-semibold text-zinc-900 dark:text-white capitalize">{selectedOcrRecord.category}</p>
+              </div>
+              <div className="p-3 rounded-xl border border-zinc-200 dark:border-[#222230] bg-zinc-50 dark:bg-[#0c0c12]">
+                <span className="text-[10px] text-zinc-500">Last Updated</span>
+                <p className="text-xs font-semibold text-zinc-900 dark:text-white">{selectedOcrRecord.lastUpdated}</p>
+              </div>
+            </div>
+            <div className="p-3 rounded-xl border border-zinc-200 dark:border-[#222230] bg-zinc-50 dark:bg-[#0c0c12]">
+              <span className="text-[10px] text-zinc-500">Extracted Value</span>
+              <p className="text-xs font-semibold text-zinc-900 dark:text-white whitespace-pre-wrap">{selectedOcrRecord.value}</p>
+            </div>
+            {selectedOcrRecord.evidenceDocName && (
+              <div className="p-3 rounded-xl border border-zinc-200 dark:border-[#222230] bg-zinc-50 dark:bg-[#0c0c12]">
+                <span className="text-[10px] text-zinc-500">Evidence Document</span>
+                <p className="text-xs font-semibold text-zinc-900 dark:text-white font-mono">{selectedOcrRecord.evidenceDocName}</p>
+              </div>
+            )}
+            <details className="text-[10px] text-zinc-600 dark:text-zinc-300">
+              <summary className="cursor-pointer text-[#5a25eb]">View full OCR JSON</summary>
+              <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-white dark:bg-[#18171f] p-2 text-[10px] text-zinc-800 dark:text-zinc-200 border border-zinc-200 dark:border-[#2d2b38]">
+                {JSON.stringify(selectedOcrRecord.ocrDocument, null, 2)}
+              </pre>
+            </details>
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsOcrViewerOpen(false);
+                  setSelectedOcrRecord(null);
+                }}
+                className="px-4 py-1.5 rounded-full bg-[#5a25eb] text-white text-xs font-medium cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
       {/* VIEW 3: EVIDENCE FILES */}
       {viewMode === 'documents' && (
         <div className="space-y-3">
           {isUsingSampleDocuments && (
             <p role="status" className="rounded-lg border border-sky-300 bg-sky-50 px-3 py-2 text-xs text-sky-800 dark:border-sky-900 dark:bg-sky-950/30 dark:text-sky-300">
-              Showing two sample documents for testing. Upload a file after configuring the Supabase documents bucket to save your own.
+              Showing sample documents. Files you add from your device stay in this page only and are not sent to a server.
             </p>
           )}
           {documentLoadError && (
@@ -536,13 +554,15 @@ export const MemoryPage: React.FC = () => {
               Could not load vault documents: {documentLoadError}
             </p>
           )}
-          {documents.length === 0 && !documentLoadError && (
+          {visibleDocuments.length === 0 && !documentLoadError && (
             <p className="rounded-lg border border-dashed border-zinc-300 p-6 text-center text-xs text-zinc-500 dark:border-[#2d2b38]">
               No documents uploaded yet.
             </p>
           )}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {documents.map((doc) => (
+          {visibleDocuments.map((doc) => {
+            const localDocument = localDocuments.find((localDoc) => localDoc.id === doc.id);
+            return (
             <div
               key={doc.id}
               className="p-3.5 rounded-2xl border border-zinc-200 dark:border-[#1c1c28] bg-white dark:bg-[#07070a] flex flex-col justify-between hover:border-[#5a25eb]/40 transition-colors shadow-2xs space-y-2.5"
@@ -557,19 +577,35 @@ export const MemoryPage: React.FC = () => {
                     <p className="text-[10px] text-zinc-400">{doc.fileSize} • {doc.uploadDate}</p>
                   </div>
                 </div>
-                <span className="px-1.5 py-0.2 rounded text-[9px] font-mono bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                <span className={`px-1.5 py-0.2 rounded text-[9px] font-mono border ${
+                  doc.status === 'Stored locally'
+                    ? 'bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20'
+                    : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+                }`}>
                   {doc.status}
                 </span>
               </div>
 
               <div className="pt-2 border-t border-zinc-100 dark:border-[#14141e] flex items-center justify-between text-[10px] text-zinc-400">
-                <span className="font-mono text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                  <FileCheck className="w-3 h-3" /> {doc.extractedFieldsCount} fields verified
-                </span>
+                {localDocument ? (
+                  <a
+                    href={localDocument.fileUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-mono text-sky-600 dark:text-sky-400 flex items-center gap-1 hover:underline"
+                  >
+                    <FileText className="w-3 h-3" /> Open local file
+                  </a>
+                ) : (
+                  <span className="font-mono text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                    <FileCheck className="w-3 h-3" /> {doc.extractedFieldsCount} fields verified
+                  </span>
+                )}
                 <span className="capitalize">{doc.category}</span>
               </div>
             </div>
-          ))}
+            );
+          })}
           </div>
         </div>
       )}
@@ -671,9 +707,16 @@ export const MemoryPage: React.FC = () => {
       {/* Document Ingestion Flow Modal */}
       <Modal
         isOpen={isUploadDocOpen}
-        onClose={() => setIsUploadDocOpen(false)}
+        onClose={() => {
+          if (isOcrRunning) return;
+          setIsUploadDocOpen(false);
+          setUploadError(null);
+          setSelectedFile(null);
+          setOcrResult(null);
+          setIsOcrRunning(false);
+        }}
         title="Document Ingestion"
-        subtitle="Extract & verify records from official documents"
+        subtitle="Add a file from your device for this page only. It will not be sent to a server."
         maxWidth="max-w-md"
       >
         <div className="space-y-4 text-xs">
@@ -682,132 +725,230 @@ export const MemoryPage: React.FC = () => {
               {uploadError}
             </p>
           )}
-          <div className="grid grid-cols-4 gap-1.5 text-center text-[10px] font-mono">
-            {['Select', 'Review', 'Confirm', 'Save'].map((label, idx) => (
-              <div
-                key={idx}
-                className={`p-1.5 rounded-lg border ${
-                  uploadStep === idx + 1
-                    ? 'border-[#5a25eb] bg-[#5a25eb]/15 text-[#5a25eb] font-bold'
-                    : uploadStep > idx + 1
-                    ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-500 font-semibold'
-                    : 'border-zinc-200 dark:border-[#222230] text-zinc-400'
-                }`}
-              >
-                {label}
-              </div>
-            ))}
-          </div>
-
-          {uploadStep === 1 && (
-            <div className="space-y-3 text-center">
-              <div className="border border-dashed border-zinc-300 dark:border-[#2d2b38] rounded-2xl p-6 space-y-2">
-                <UploadCloud className="w-8 h-8 text-[#5a25eb] mx-auto" />
-                <p className="font-semibold text-zinc-800 dark:text-zinc-200">Select Document</p>
-                <input
-                  type="file"
-                  accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
-                  onChange={(event) => {
-                    const file = event.currentTarget.files?.[0] || null;
-                    if (file && file.size > 25 * 1024 * 1024) {
-                      setSelectedFile(null);
-                      setUploadError('Choose a file smaller than 25 MB.');
-                      return;
-                    }
-                    setSelectedFile(file);
-                    setUploadError(null);
-                  }}
-                  className="block w-full text-xs text-zinc-600 file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-100 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-zinc-700 hover:file:bg-zinc-200 dark:text-zinc-300 dark:file:bg-[#23222c] dark:file:text-zinc-200"
-                />
-                {selectedFile && (
+          <div className="space-y-3 text-center">
+            <div className="border border-dashed border-zinc-300 dark:border-[#2d2b38] rounded-2xl p-6 space-y-2">
+              <UploadCloud className="w-8 h-8 text-[#5a25eb] mx-auto" />
+              <p className="font-semibold text-zinc-800 dark:text-zinc-200">Select Document</p>
+              <input
+                type="file"
+                accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/*"
+                disabled={isOcrRunning}
+                onChange={(event) => {
+                  const file = event.currentTarget.files?.[0] || null;
+                  event.currentTarget.value = '';
+                  if (file && file.size > 25 * 1024 * 1024) {
+                    setSelectedFile(null);
+                    setUploadError('Choose a file that is 25 MB or smaller.');
+                    return;
+                  }
+                  setSelectedFile(file);
+                  setUploadError(null);
+                  setOcrResult(null);
+                  setOcrProgress(0);
+                  setOcrProgressStatus('');
+                }}
+                className="block w-full text-xs text-zinc-600 file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-100 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-zinc-700 hover:file:bg-zinc-200 dark:text-zinc-300 dark:file:bg-[#23222c] dark:file:text-zinc-200"
+              />
+              <p className="text-[10px] text-zinc-500">PDF / image OCR, DOCX text extraction · 25 MB max · available until you leave this page</p>
+              {selectedFile && (
+                <div className="flex items-center justify-center gap-2">
                   <span className="inline-block max-w-full break-all rounded bg-zinc-100 px-2.5 py-1 font-mono text-[10px] text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
                     {selectedFile.name} · {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB
                   </span>
-                )}
-              </div>
-              <label className="block space-y-1 text-left text-[11px] font-semibold text-zinc-600 dark:text-zinc-300">
-                Document category
-                <select
-                  value={uploadCategory}
-                  onChange={(event) => setUploadCategory(event.target.value as LifeStageCategory)}
-                  className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs dark:border-[#2d2b38] dark:bg-[#18171f]"
-                >
-                  {categories.map((category) => <option key={category.id} value={category.id}>{category.label}</option>)}
-                </select>
-              </label>
+                  <button
+                    type="button"
+                    disabled={isOcrRunning}
+                    onClick={() => {
+                      setSelectedFile(null);
+                      setOcrResult(null);
+                      setUploadError(null);
+                    }}
+                    className="rounded-full p-1 text-zinc-400 hover:text-red-500 cursor-pointer"
+                    title="Remove file"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+            </div>
+            <label className="block space-y-1 text-left text-[11px] font-semibold text-zinc-600 dark:text-zinc-300">
+              Document category
+              <select
+                value={uploadCategory}
+                disabled={isOcrRunning}
+                onChange={(event) => setUploadCategory(event.target.value as LifeStageCategory)}
+                className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs dark:border-[#2d2b38] dark:bg-[#18171f]"
+              >
+                {categories.map((category) => <option key={category.id} value={category.id}>{category.label}</option>)}
+              </select>
+            </label>
+            {(!ocrResult || ocrResult.status === 'failed') && !isOcrRunning && (
               <div className="flex justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => setIsUploadDocOpen(false)}
+                  onClick={() => {
+                    setIsUploadDocOpen(false);
+                    setUploadError(null);
+                    setSelectedFile(null);
+                  }}
                   className="px-3 py-1.5 rounded-full bg-zinc-100 dark:bg-[#14141e] text-xs cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="button"
-                  onClick={() => setUploadStep(2)}
+                  onClick={async () => {
+                    if (!selectedFile) {
+                      setUploadError('Choose a file first.');
+                      return;
+                    }
+                    setIsOcrRunning(true);
+                    setUploadError(null);
+                    setOcrProgress(0);
+                    setOcrProgressStatus('Starting text extraction');
+                    setOcrResult(null);
+                    try {
+                      const result = await runLocalOcr(selectedFile, (progress, status) => {
+                        setOcrProgress(Math.round(progress * 100));
+                        setOcrProgressStatus(status);
+                      });
+                      setOcrResult({
+                        documentId: `local-${crypto.randomUUID()}`,
+                        fileName: selectedFile.name,
+                        fileType: selectedFile.type || selectedFile.name.split('.').pop() || 'file',
+                        fileSize: selectedFile.size,
+                        uploadedAt: new Date().toISOString(),
+                        status: 'completed',
+                        pages: result.pages,
+                        fullText: result.fullText,
+                        extractionMethod: result.extractionMethod,
+                        processingTimeMs: result.processingTimeMs,
+                      });
+                    } catch (error) {
+                      setUploadError(error instanceof Error ? error.message : 'OCR failed');
+                      setOcrResult({
+                        documentId: `local-${crypto.randomUUID()}`,
+                        fileName: selectedFile.name,
+                        fileType: selectedFile.type || selectedFile.name.split('.').pop() || 'file',
+                        fileSize: selectedFile.size,
+                        uploadedAt: new Date().toISOString(),
+                        status: 'failed',
+                        pages: [],
+                        fullText: '',
+                        error: error instanceof Error ? error.message : 'OCR failed',
+                      });
+                    } finally {
+                      setIsOcrRunning(false);
+                    }
+                  }}
                   disabled={!selectedFile}
-                  className="px-4 py-1.5 rounded-full bg-[#5a25eb] text-white text-xs font-medium flex items-center gap-1 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+                  className="px-4 py-1.5 rounded-full bg-[#5a25eb] text-white text-xs font-medium cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 inline-flex items-center gap-1"
                 >
-                  <span>Extract</span>
-                  <ArrowRight className="w-3 h-3" />
+                  <FileType className="w-3.5 h-3.5" />
+                  <span>Extract Text</span>
                 </button>
               </div>
-            </div>
-          )}
-
-          {uploadStep === 2 && (
-            <div className="space-y-3">
-              <div className="p-3 rounded-xl bg-zinc-50 dark:bg-[#0c0c12] border border-zinc-200 dark:border-[#222230] space-y-2">
-                <p className="font-semibold text-zinc-900 dark:text-white">File selected</p>
-                <p className="break-all text-zinc-600 dark:text-zinc-300">{selectedFile?.name}</p>
-                <p className="text-zinc-500 dark:text-zinc-400">The original file will be stored privately in your vault.</p>
+            )}
+            {isOcrRunning && (
+              <div className="space-y-2 py-3">
+                <div className="flex items-center justify-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin text-[#5a25eb]" />
+                  <span className="text-[11px] text-zinc-600 dark:text-zinc-300">{ocrProgressStatus} · {ocrProgress}%</span>
+                </div>
+                <div className="h-1.5 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-700">
+                  <div className="h-full rounded-full bg-[#5a25eb] transition-all" style={{ width: `${ocrProgress}%` }} />
+                </div>
               </div>
-              <div className="flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setUploadStep(3)}
-                  className="px-4 py-1.5 rounded-full bg-[#5a25eb] text-white text-xs font-medium cursor-pointer"
-                >
-                  Review Candidate Fields
-                </button>
+            )}
+            {ocrResult && (
+              <div className="space-y-2 rounded-xl border border-zinc-200 dark:border-[#222230] bg-zinc-50 dark:bg-[#0c0c12] p-3 text-left">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-semibold text-zinc-700 dark:text-zinc-200">OCR Result</span>
+                  <span className={`px-1.5 py-0.2 rounded text-[9px] font-mono border ${
+                    ocrResult.status === 'completed'
+                      ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+                      : 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20'
+                  }`}>
+                    {ocrResult.status === 'completed' ? 'Completed' : 'Failed'}
+                  </span>
+                </div>
+                {ocrResult.status === 'completed' && (
+                  <>
+                    <p className="text-[10px] text-zinc-500">
+                      Pages: {ocrResult.pages.length} · {ocrResult.extractionMethod === 'document-text' ? 'Word text extraction' : 'OCR'} · {ocrResult.processingTimeMs} ms
+                    </p>
+                    <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-white dark:bg-[#18171f] p-2 text-[10px] text-zinc-800 dark:text-zinc-200 border border-zinc-200 dark:border-[#2d2b38]">
+                      {ocrResult.fullText}
+                    </pre>
+                    <details className="text-[10px] text-zinc-600 dark:text-zinc-300">
+                      <summary className="cursor-pointer text-[#5a25eb]">View JSON</summary>
+                      <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-white dark:bg-[#18171f] p-2 text-[10px] text-zinc-800 dark:text-zinc-200 border border-zinc-200 dark:border-[#2d2b38]">
+                        {JSON.stringify(ocrResult, null, 2)}
+                      </pre>
+                    </details>
+                  </>
+                )}
+                {ocrResult.status === 'failed' && (
+                  <p className="text-[10px] text-red-600 dark:text-red-400">{ocrResult.error || 'Unknown error'}</p>
+                )}
+                <div className="flex justify-end gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOcrResult(null);
+                      setSelectedFile(null);
+                    }}
+                    className="px-3 py-1.5 rounded-full bg-zinc-100 dark:bg-[#14141e] text-xs cursor-pointer"
+                  >
+                    Clear
+                  </button>
+                  {ocrResult.status === 'completed' && selectedFile && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!selectedFile || ocrResult.status !== 'completed') return;
+                        const fileUrl = URL.createObjectURL(selectedFile);
+                        localFileUrls.current.push(fileUrl);
+                        const newRecords: OCRRecordField[] = ocrResult.pages.map((page) => ({
+                          id: `ocr-${ocrResult.documentId}-page-${page.pageNumber}`,
+                          category: uploadCategory,
+                          fieldName: `OCR Text - Page ${page.pageNumber}`,
+                          value: page.text,
+                          source: 'Extracted from document',
+                          evidenceDocName: selectedFile.name,
+                          lastUpdated: 'Just now',
+                          confidence: 'evidence-backed',
+                          ocrDocument: ocrResult,
+                        }));
+                        setOcrRecords((previous) => [...newRecords, ...previous]);
+                        setLocalDocuments((previous) => [{
+                          id: ocrResult.documentId,
+                          name: selectedFile.name,
+                          category: uploadCategory,
+                          fileType: ocrResult.fileType.split('/').pop()?.toUpperCase() || 'FILE',
+                          fileSize: selectedFile.size < 1024 * 1024
+                            ? `${(selectedFile.size / 1024).toFixed(0)} KB`
+                            : `${(selectedFile.size / (1024 * 1024)).toFixed(1)} MB`,
+                          uploadDate: new Date().toLocaleDateString(),
+                          extractedFieldsCount: ocrResult.pages.length,
+                          status: 'Stored locally',
+                          fileUrl,
+                          ocrResult,
+                        }, ...previous]);
+                        setIsUploadDocOpen(false);
+                        setUploadError(null);
+                        setSelectedFile(null);
+                        setOcrResult(null);
+                      }}
+                      className="px-4 py-1.5 rounded-full bg-[#5a25eb] text-white text-xs font-medium cursor-pointer"
+                    >
+                      Save to Memory
+                    </button>
+                  )}
+                </div>
               </div>
-            </div>
-          )}
-
-          {uploadStep === 3 && (
-            <div className="space-y-3">
-              <div className="p-3 rounded-xl border border-zinc-200 dark:border-[#222230] bg-zinc-50 dark:bg-[#0c0c12] space-y-1">
-                <span className="text-[10px] text-zinc-400">Document details</span>
-                <p className="break-all font-semibold text-zinc-900 dark:text-white">{selectedFile?.name}</p>
-                <p className="font-mono text-[#5a25eb] text-xs">{categories.find((item) => item.id === uploadCategory)?.label} · {selectedFile ? (selectedFile.size / 1024).toFixed(0) : 0} KB</p>
-              </div>
-              <div className="flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setUploadStep(4)}
-                  className="px-4 py-1.5 rounded-full bg-[#5a25eb] text-white text-xs font-medium cursor-pointer"
-                >
-                  Confirm & Commit
-                </button>
-              </div>
-            </div>
-          )}
-
-          {uploadStep === 4 && (
-            <div className="space-y-3 text-center py-2">
-              <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto" />
-              <p className="font-semibold text-zinc-900 dark:text-white">Ready to lock into private vault</p>
-              <button
-                type="button"
-                onClick={handleFinishUpload}
-                disabled={isUploading}
-                className="px-5 py-2 rounded-full bg-[#5a25eb] text-white text-xs font-medium cursor-pointer shadow-xs disabled:cursor-wait disabled:opacity-60"
-              >
-                {isUploading ? 'Uploading...' : 'Save to Memory'}
-              </button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </Modal>
     </div>

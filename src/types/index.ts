@@ -22,7 +22,7 @@ export interface DocumentItem {
   fileSize: string;
   uploadDate: string;
   extractedFieldsCount: number;
-  status: 'Parsed' | 'Processing' | 'Needs Review';
+  status: 'Parsed' | 'Processing' | 'Needs Review' | 'Stored locally';
 }
 
 export interface ChatMessage {
@@ -123,4 +123,32 @@ export interface ShareRequest {
     defaultValue: string;
     isEvidenceBacked: boolean;
   }[];
+}
+
+export interface OCRTextBlock {
+  text: string;
+  confidence: number;
+  bbox: [number, number, number, number];
+}
+
+export interface OCRPageResult {
+  pageNumber: number;
+  text: string;
+  confidence: number;
+  blocks: OCRTextBlock[];
+  method?: 'ocr' | 'document-text';
+}
+
+export interface OCRDocumentResult {
+  documentId: string;
+  fileName: string;
+  fileType: string;
+  fileSize: number;
+  uploadedAt: string;
+  status: 'processing' | 'completed' | 'failed';
+  pages: OCRPageResult[];
+  fullText: string;
+  extractionMethod?: 'ocr' | 'document-text' | 'mixed';
+  processingTimeMs?: number;
+  error?: string;
 }
