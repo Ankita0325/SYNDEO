@@ -828,6 +828,63 @@ export const ChatPage: React.FC = () => {
 
   return (
     <div className="w-full max-w-5xl xl:max-w-6xl 2xl:max-w-7xl mx-auto flex-1 flex flex-col h-full min-h-0 relative z-10 px-2 sm:px-4">
+      {/* Outer Floating Ambient Background Particles (Pure Glowing White in Dark Theme) */}
+      <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
+        {[
+          { top: '10%', left: '6%', size: 4, duration: 6.2, delay: 0 },
+          { top: '20%', left: '88%', size: 5, duration: 7.5, delay: 0.8 },
+          { top: '42%', left: '12%', size: 3.5, duration: 6.8, delay: 1.4 },
+          { top: '65%', left: '92%', size: 5, duration: 8.0, delay: 0.4 },
+          { top: '82%', left: '8%', size: 4, duration: 7.0, delay: 2.1 },
+          { top: '86%', left: '84%', size: 3.5, duration: 6.6, delay: 1.0 },
+          { top: '16%', left: '48%', size: 3, duration: 7.2, delay: 1.8 },
+          { top: '74%', left: '50%', size: 4.5, duration: 8.4, delay: 2.6 },
+          { top: '34%', left: '94%', size: 3, duration: 6.0, delay: 0.5 },
+          { top: '56%', left: '5%', size: 4, duration: 7.8, delay: 1.2 },
+        ].map((particle, idx) => {
+          const particleColor =
+            theme === 'dark'
+              ? 'rgba(255, 255, 255, 0.92)'
+              : idx % 3 === 0
+              ? 'rgba(90, 37, 235, 0.55)'
+              : idx % 3 === 1
+              ? 'rgba(56, 189, 248, 0.65)'
+              : 'rgba(217, 70, 239, 0.55)';
+
+          const particleGlow =
+            theme === 'dark'
+              ? '0 0 14px rgba(255, 255, 255, 0.95), 0 0 24px rgba(255, 255, 255, 0.5)'
+              : `0 0 10px ${particleColor}`;
+
+          return (
+            <motion.div
+              key={idx}
+              animate={{
+                y: [0, -18, 0],
+                x: [0, idx % 2 === 0 ? 10 : -10, 0],
+                opacity: theme === 'dark' ? [0.25, 0.85, 0.25] : [0.15, 0.6, 0.15],
+                scale: [0.85, 1.25, 0.85],
+              }}
+              transition={{
+                duration: particle.duration,
+                repeat: Infinity,
+                ease: 'easeInOut',
+                delay: particle.delay,
+              }}
+              className="absolute rounded-full pointer-events-none blur-[0.4px]"
+              style={{
+                top: particle.top,
+                left: particle.left,
+                width: particle.size,
+                height: particle.size,
+                backgroundColor: particleColor,
+                boxShadow: particleGlow,
+              }}
+            />
+          );
+        })}
+      </div>
+
       {/* Full-Screen Immersive Voice Overlay */}
       <AnimatePresence>
         {isVoiceModalOpen && (
@@ -1205,60 +1262,6 @@ export const ChatPage: React.FC = () => {
                     : 'radial-gradient(circle at 20% 0%, rgba(210, 225, 255, 0.48), transparent 50%), radial-gradient(circle at 85% 100%, rgba(230, 215, 255, 0.40), transparent 55%), linear-gradient(135deg, rgba(252, 253, 255, 0.97), rgba(244, 246, 255, 0.94))',
               }}
             >
-              {/* Floating Ambient Glowing White Particles */}
-              <div className="absolute inset-0 pointer-events-none z-0 overflow-hidden">
-                {[
-                  { top: '18%', left: '12%', size: 4, duration: 4.2, delay: 0 },
-                  { top: '70%', left: '28%', size: 5, duration: 5.5, delay: 0.8 },
-                  { top: '30%', left: '55%', size: 3.5, duration: 4.8, delay: 1.4 },
-                  { top: '75%', left: '78%', size: 5, duration: 6.0, delay: 0.4 },
-                  { top: '22%', left: '88%', size: 4, duration: 5.0, delay: 2.1 },
-                  { top: '55%', left: '42%', size: 3.5, duration: 4.6, delay: 1.0 },
-                  { top: '15%', left: '68%', size: 3, duration: 5.2, delay: 1.8 },
-                ].map((particle, idx) => {
-                  const particleColor =
-                    theme === 'dark'
-                      ? 'rgba(255, 255, 255, 0.95)'
-                      : idx % 3 === 0
-                      ? 'rgba(90, 37, 235, 0.7)'
-                      : idx % 3 === 1
-                      ? 'rgba(56, 189, 248, 0.8)'
-                      : 'rgba(217, 70, 239, 0.7)';
-
-                  const particleGlow =
-                    theme === 'dark'
-                      ? '0 0 12px rgba(255, 255, 255, 0.95), 0 0 20px rgba(255, 255, 255, 0.5)'
-                      : `0 0 10px ${particleColor}`;
-
-                  return (
-                    <motion.div
-                      key={idx}
-                      animate={{
-                        y: [0, -10, 0],
-                        x: [0, (idx % 2 === 0 ? 6 : -6), 0],
-                        opacity: theme === 'dark' ? [0.35, 0.95, 0.35] : [0.25, 0.8, 0.25],
-                        scale: [0.85, 1.3, 0.85],
-                      }}
-                      transition={{
-                        duration: particle.duration,
-                        repeat: Infinity,
-                        ease: 'easeInOut',
-                        delay: particle.delay,
-                      }}
-                      className="absolute rounded-full pointer-events-none blur-[0.4px]"
-                      style={{
-                        top: particle.top,
-                        left: particle.left,
-                        width: particle.size,
-                        height: particle.size,
-                        backgroundColor: particleColor,
-                        boxShadow: particleGlow,
-                      }}
-                    />
-                  );
-                })}
-              </div>
-
               {/* Elevated Inner Input Surface with Laser Edge Beam */}
               <div className="relative rounded-[20px] sm:rounded-[22px] p-[1.5px] overflow-hidden group/input z-10">
                 {/* Moving Border Laser Glow Line on Input Form (Radiant White in Dark Theme) */}
