@@ -128,6 +128,8 @@ export const ChatPage: React.FC = () => {
   const sttLanguageRef = useRef<SarvamLanguageCode>('en-IN');
   const ttsLanguageRef = useRef<SarvamLanguageCode>('en-IN');
   const speakerRef = useRef<SarvamVoiceSpeaker>('shubh');
+  const liveTranscriptRef = useRef<string>('');
+  const isListeningRef = useRef<boolean>(false);
 
   const [thinkingStepIndex, setThinkingStepIndex] = useState<number>(0);
 
@@ -183,6 +185,20 @@ export const ChatPage: React.FC = () => {
     let stream: MediaStream | null = null;
     try {
       setVoiceError(null);
+      liveTranscriptRef.current = '';
+      setVoiceTranscript('');
+      isListeningRef.current = true;
+
+      // Start live real-time browser speech recognition for word-by-word feedback
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.lang = sttLanguageRef.current || 'en-IN';
+          recognitionRef.current.start();
+        } catch {
+          // Recognition might already be active
+        }
+      }
+
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mimeType = ['audio/webm;codecs=opus', 'audio/ogg;codecs=opus', 'audio/mp4']
         .find((candidate) => MediaRecorder.isTypeSupported(candidate));
@@ -208,16 +224,24 @@ export const ChatPage: React.FC = () => {
           setOrbState('thinking');
           const result = await transcribeWithSarvam(audioBlob, sttLanguageRef.current, `recording.${extension}`);
           transcript = result.transcript.trim();
-          setInputText(transcript);
-          setVoiceTranscript(transcript);
+          if (transcript) {
+            setInputText(transcript);
+            setVoiceTranscript(transcript);
+          } else if (liveTranscriptRef.current.trim()) {
+            transcript = liveTranscriptRef.current.trim();
+          }
         } catch (error) {
-          const message = error instanceof Error ? error.message : 'Speech recognition failed.';
-          setVoiceError(message);
-          setVoiceTranscript('');
+          const message = error instanceof Error ? error.message : 'Speech recognition fallback used.';
+          console.warn('Sarvam transcription fallback to live recognition:', message);
+          if (liveTranscriptRef.current.trim()) {
+            transcript = liveTranscriptRef.current.trim();
+          } else {
+            setVoiceError(message);
+          }
         } finally {
           setVoiceState('idle');
           setOrbState('idle');
-          sarvamStopResolveRef.current?.(transcript);
+          sarvamStopResolveRef.current?.(transcript || liveTranscriptRef.current.trim());
           sarvamStopResolveRef.current = null;
           sarvamStopPromiseRef.current = null;
         }
@@ -229,6 +253,16 @@ export const ChatPage: React.FC = () => {
     } catch (err) {
       stream?.getTracks().forEach((track) => track.stop());
       console.warn('Microphone access failed:', err);
+      // Resilient fallback to browser SpeechRecognition if MediaRecorder is blocked
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.lang = sttLanguageRef.current || 'en-IN';
+          recognitionRef.current.start();
+          return true;
+        } catch {
+          // ignore
+        }
+      }
       setVoiceError(err instanceof Error ? err.message : 'Microphone access is required for voice chat.');
       return false;
     }
@@ -248,21 +282,21 @@ export const ChatPage: React.FC = () => {
       mediaRecorderRef.current.stop();
     } else {
       sarvamStopPromiseRef.current = null;
-      resolveRecording('');
+      resolveRecording(liveTranscriptRef.current.trim());
     }
     return recording;
   };
 
-  // Always initialize browser-native Web Speech API as resilient fallback
+  // Always initialize browser-native Web Speech API with continuous interim streaming
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const SpeechRecognition =
         (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
       if (SpeechRecognition) {
         const recognition = new SpeechRecognition();
-        recognition.continuous = false;
+        recognition.continuous = true;
         recognition.interimResults = true;
-        recognition.lang = 'en-US';
+        recognition.lang = sttLanguage || 'en-IN';
 
         recognition.onstart = () => {
           setVoiceState('listening');
@@ -270,27 +304,37 @@ export const ChatPage: React.FC = () => {
         };
 
         recognition.onresult = (event: any) => {
-          const transcript = Array.from(event.results)
-            .map((result: any) => (result as any)[0].transcript)
-            .join('');
-          setInputText(transcript);
-          setVoiceTranscript(transcript);
+          let fullTranscript = '';
+          for (let i = 0; i < event.results.length; i++) {
+            fullTranscript += event.results[i][0].transcript;
+          }
+          const cleaned = fullTranscript.trimStart();
+          if (cleaned) {
+            liveTranscriptRef.current = cleaned;
+            setInputText(cleaned);
+            setVoiceTranscript(cleaned);
+          }
         };
 
-        recognition.onerror = () => {
-          setVoiceState('idle');
-          setOrbState('idle');
+        recognition.onerror = (e: any) => {
+          console.debug('Recognition error / status:', e);
         };
 
         recognition.onend = () => {
-          setVoiceState('idle');
-          setOrbState('idle');
+          // If still marked as listening, keep speech recognition alive
+          if (isListeningRef.current && recognitionRef.current) {
+            try {
+              recognitionRef.current.start();
+            } catch {
+              // ignore
+            }
+          }
         };
 
         recognitionRef.current = recognition;
       }
     }
-  }, []);
+  }, [sttLanguage]);
 
   const playSarvamAudio = (base64Audio: string, onFallback?: () => void): void => {
     if (!base64Audio) {
@@ -446,39 +490,44 @@ export const ChatPage: React.FC = () => {
     setIsVoiceModalOpen(true);
     setVoiceTranscript('');
     setAssistantVoiceResponse('');
+    liveTranscriptRef.current = '';
 
-    if (isSarvamAvailable()) {
-      const started = await startSarvamRecording();
-      if (started) {
-        setVoiceState('listening');
-        setOrbState('listening');
-      }
-    } else if (recognitionRef.current) {
-      try {
-        recognitionRef.current.start();
-        setVoiceState('listening');
-        setOrbState('listening');
-      } catch (e) {
-        console.warn('Speech recognition start failed', e);
-      }
-    }
+    await startVoiceListening();
   };
 
   const closeVoiceModal = () => {
-    if (isSarvamAvailable()) {
-      stopSarvamRecording();
-    } else if (voiceState === 'listening' && recognitionRef.current) {
+    isListeningRef.current = false;
+    if (recognitionRef.current) {
       try {
         recognitionRef.current.stop();
       } catch (err) {
         console.debug('Recognition stop ignored:', err);
       }
     }
+    if (isSarvamAvailable()) {
+      stopSarvamRecording();
+    }
     stopAudio();
     setIsVoiceModalOpen(false);
   };
 
   const startVoiceListening = async () => {
+    stopAudio();
+    setVoiceError(null);
+    liveTranscriptRef.current = '';
+    setVoiceTranscript('');
+    isListeningRef.current = true;
+
+    // Start live native SpeechRecognition immediately for real-time word-by-word streaming
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.lang = sttLanguageRef.current || 'en-IN';
+        recognitionRef.current.start();
+      } catch (e) {
+        console.debug('Live recognition start note:', e);
+      }
+    }
+
     if (isSarvamAvailable()) {
       const started = await startSarvamRecording();
       if (started) {
@@ -489,28 +538,17 @@ export const ChatPage: React.FC = () => {
     }
 
     if (!recognitionRef.current) {
-      alert('Speech recognition is not supported in this browser.');
+      setVoiceError('Speech recognition is not supported in this browser.');
+      isListeningRef.current = false;
       return;
     }
-    stopAudio();
-    try {
-      recognitionRef.current.start();
-      setVoiceState('listening');
-      setOrbState('listening');
-    } catch (e) {
-      console.warn('Recognition start', e);
-    }
+
+    setVoiceState('listening');
+    setOrbState('listening');
   };
 
   const stopVoiceListening = async () => {
-    if (isSarvamAvailable()) {
-      const transcript = await stopSarvamRecording();
-      setVoiceState('idle');
-      setOrbState('idle');
-      if (transcript.trim()) handleSendMessage(transcript);
-      return;
-    }
-
+    isListeningRef.current = false;
     if (recognitionRef.current) {
       try {
         recognitionRef.current.stop();
@@ -518,10 +556,23 @@ export const ChatPage: React.FC = () => {
         console.debug('Recognition stop ignored:', err);
       }
     }
+
+    if (isSarvamAvailable()) {
+      const transcript = await stopSarvamRecording();
+      setVoiceState('idle');
+      setOrbState('idle');
+      const finalTranscript = transcript.trim() || liveTranscriptRef.current.trim() || voiceTranscript.trim();
+      if (finalTranscript) {
+        handleSendMessage(finalTranscript);
+      }
+      return;
+    }
+
     setVoiceState('idle');
     setOrbState('idle');
-    if (voiceTranscript.trim()) {
-      handleSendMessage(voiceTranscript);
+    const finalTranscript = liveTranscriptRef.current.trim() || voiceTranscript.trim();
+    if (finalTranscript) {
+      handleSendMessage(finalTranscript);
     }
   };
 

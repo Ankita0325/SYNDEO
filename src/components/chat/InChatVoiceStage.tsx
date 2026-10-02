@@ -302,39 +302,62 @@ export const InChatVoiceStage: React.FC<InChatVoiceStageProps> = ({
           </p>
         )}
 
-        {/* User Spoken Transcript */}
-        <AnimatePresence mode="wait">
-          {transcript && (
+        {/* User Spoken Transcript with Live Word-by-Word Streaming */}
+        <AnimatePresence>
+          {transcript ? (
             <motion.div
-              key={transcript}
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -6 }}
-              transition={{ duration: 0.2 }}
-              className="max-w-xl mx-auto px-4"
+              key="voice-transcript-card"
+              initial={{ opacity: 0, scale: 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.96 }}
+              transition={{ duration: 0.15 }}
+              className="max-w-xl mx-auto px-5 py-3 rounded-2xl bg-white/60 dark:bg-white/10 border border-black/5 dark:border-white/15 backdrop-blur-md shadow-sm"
             >
-              <span className="text-[11px] font-mono font-bold uppercase text-cyan-600 dark:text-cyan-400 tracking-wider">
-                {userName} said:
-              </span>
-              <p className="text-base sm:text-lg font-medium text-zinc-900 dark:text-white mt-1 leading-relaxed">
+              <div className="flex items-center justify-center gap-1.5 mb-1">
+                <span className={`w-2 h-2 rounded-full ${voiceState === 'listening' ? 'bg-cyan-500 animate-ping' : 'bg-emerald-500'}`} />
+                <span className="text-[11px] font-mono font-bold uppercase text-cyan-600 dark:text-cyan-400 tracking-wider">
+                  {userName} {voiceState === 'listening' ? 'is speaking...' : 'said:'}
+                </span>
+              </div>
+              <p className="text-base sm:text-lg md:text-xl font-medium text-zinc-900 dark:text-white leading-relaxed text-center">
                 "{transcript}"
+                {voiceState === 'listening' && (
+                  <span className="inline-block w-1.5 h-4 sm:h-5 ml-1.5 align-middle bg-cyan-500 animate-pulse rounded-full" />
+                )}
               </p>
             </motion.div>
-          )}
+          ) : voiceState === 'listening' ? (
+            <motion.div
+              key="voice-listening-indicator"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="text-xs sm:text-sm font-medium text-zinc-400 dark:text-zinc-500 italic flex items-center justify-center gap-2"
+            >
+              <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
+              <span>Listening... Speak naturally into your microphone</span>
+            </motion.div>
+          ) : null}
         </AnimatePresence>
 
         {/* AI Spoken Response */}
-        <AnimatePresence mode="wait">
+        <AnimatePresence>
           {assistantResponse && (
             <motion.div
-              key={assistantResponse}
+              key="voice-assistant-card"
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.25 }}
-              className="max-w-2xl mx-auto px-4 pt-1"
+              transition={{ duration: 0.2 }}
+              className="max-w-2xl mx-auto px-5 py-3 rounded-2xl bg-[#5a25eb]/10 dark:bg-white/5 border border-[#5a25eb]/20 dark:border-white/10 backdrop-blur-md"
             >
-              <p className="text-sm sm:text-base text-zinc-700 dark:text-zinc-200 leading-relaxed font-normal">
+              <div className="flex items-center justify-center gap-1.5 mb-1">
+                <Sparkles className="w-3.5 h-3.5 text-[#5a25eb] dark:text-[#cbbeff]" />
+                <span className="text-[11px] font-mono font-bold uppercase text-[#5a25eb] dark:text-[#cbbeff] tracking-wider">
+                  SYNDEO Response
+                </span>
+              </div>
+              <p className="text-sm sm:text-base text-zinc-800 dark:text-zinc-200 leading-relaxed font-normal text-center">
                 {assistantResponse}
               </p>
             </motion.div>
