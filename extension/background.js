@@ -3,12 +3,48 @@
  *
  * Responsibilities:
  * - Extension orchestration and background messaging.
- * - Authenticated API communication with the SYNDEO backend.
+ * - Authenticated API communication with local and cloud SYNDEO backends (automatic failover).
  * - Origin validation and active tab isolation.
  * - Audit recording for policy compliance.
  */
 
-const BACKEND_BASE_URL = 'http://127.0.0.1:8000';
+const BACKEND_CANDIDATES = [
+  'http://127.0.0.1:8000',
+  'http://localhost:8000',
+  'https://syndeo-backend-wks3.onrender.com'
+];
+
+async function fetchFromSyndeoBackend(path, options = {}) {
+  let lastError = null;
+
+  for (const base of BACKEND_CANDIDATES) {
+    try {
+      const url = `${base}${path}`;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
+
+      const response = await fetch(url, {
+        ...options,
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
+      if (response.ok) {
+        return await response.json();
+      }
+
+      // If client-side policy block (e.g. 403, 400), don't failover to next backend
+      if (response.status < 500) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `Request failed with HTTP ${response.status}`);
+      }
+    } catch (err) {
+      lastError = err;
+    }
+  }
+
+  throw lastError || new Error('Could not connect to SYNDEO backend.');
+}
 
 // Listen for messages from popup and content scripts
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -18,23 +54,15 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
   // 1. Check Authenticated Session Status
   if (request.action === 'GET_AUTH_STATUS') {
-    fetch(`${BACKEND_BASE_URL}/api/v1/extension/auth/status`)
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.json();
-      })
-      .then((data) => {
-        sendResponse({ success: true, data });
-      })
-      .catch((err) => {
-        sendResponse({ success: false, error: err.message });
-      });
+    fetchFromSyndeoBackend('/api/v1/extension/auth/status')
+      .then((data) => sendResponse({ success: true, data }))
+      .catch((err) => sendResponse({ success: false, error: err.message }));
     return true; // Keep channel open for async response
   }
 
   // 2. Request Field Mapping from MemoryFill Agent
   if (request.action === 'MAP_FIELDS') {
-    fetch(`${BACKEND_BASE_URL}/api/v1/extension/map`, {
+    fetchFromSyndeoBackend('/api/v1/extension/map', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -42,22 +70,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         fields: request.fields,
       }),
     })
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.json();
-      })
-      .then((data) => {
-        sendResponse({ success: true, data });
-      })
-      .catch((err) => {
-        sendResponse({ success: false, error: err.message });
-      });
+      .then((data) => sendResponse({ success: true, data }))
+      .catch((err) => sendResponse({ success: false, error: err.message }));
     return true;
   }
 
   // 3. Request Authorized Values for User-Approved Fields
   if (request.action === 'GET_APPROVED_FILL_VALUES') {
-    fetch(`${BACKEND_BASE_URL}/api/v1/extension/fill`, {
+    fetchFromSyndeoBackend('/api/v1/extension/fill', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -66,22 +86,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         approved_field_ids: request.approved_field_ids,
       }),
     })
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.json();
-      })
-      .then((data) => {
-        sendResponse({ success: true, data });
-      })
-      .catch((err) => {
-        sendResponse({ success: false, error: err.message });
-      });
+      .then((data) => sendResponse({ success: true, data }))
+      .catch((err) => sendResponse({ success: false, error: err.message }));
     return true;
   }
 
   // 4. Log Client Audit Event
   if (request.action === 'LOG_EXTENSION_AUDIT') {
-    fetch(`${BACKEND_BASE_URL}/api/v1/extension/audit`, {
+    fetchFromSyndeoBackend('/api/v1/extension/audit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -91,7 +103,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         result: request.result || 'SUCCESS',
       }),
     })
-      .then((res) => res.json())
       .then((data) => sendResponse({ success: true, data }))
       .catch((err) => sendResponse({ success: false, error: err.message }));
     return true;

@@ -815,7 +815,15 @@
       
       // Locate the matching element from scanned fields
       let targetEl = null;
-      const matchedField = scannedFields.find((f) => f.id === fid || f.name === fid || `f_${String(f.index).padStart(3, '0')}` === fid);
+      const matchedField = scannedFields.find(
+        (f) =>
+          f.id === fid ||
+          f.name === fid ||
+          f.field_id === fid ||
+          `f_${String(f.index).padStart(3, '0')}` === fid ||
+          `f_${f.index}` === fid ||
+          f.index === parseInt(String(fid).replace('f_', ''), 10)
+      );
 
       if (matchedField) {
         if (matchedField.id) {

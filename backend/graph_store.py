@@ -105,6 +105,7 @@ def _normalize_field_name(raw_name: str, category: str = "identity") -> Tuple[st
     Returns (canonical_category, canonical_field_name, is_singular).
     """
     name_clean = raw_name.strip().lower().replace("_", " ").replace("-", " ")
+    tokens = set(name_clean.split())
     
     # Social links and identity normalization
     if any(k in name_clean for k in ["github", "git hub", "gh profile", "gh link"]):
@@ -117,20 +118,34 @@ def _normalize_field_name(raw_name: str, category: str = "identity") -> Tuple[st
         return "identity", "Twitter / X Profile", False
     if any(k in name_clean for k in ["portfolio", "personal website", "portfolio website", "personal site"]):
         return "identity", "Portfolio Website", False
-    if any(k in name_clean for k in ["legal name", "full name", "user name"]):
+    if "first name" in name_clean or "firstname" in name_clean or "fname" in tokens:
+        return "identity", "First Name", True
+    if "last name" in name_clean or "lastname" in name_clean or "surname" in tokens or "lname" in tokens:
+        return "identity", "Last Name", True
+    if any(k in name_clean for k in ["legal name", "full name"]) or (name_clean == "name"):
         return "identity", "Full Legal Name", True
-    if any(k in name_clean for k in ["dob", "date of birth", "birth date", "birthdate"]):
+    if any(k in name_clean for k in ["date of birth", "birth date", "birthdate"]) or "dob" in tokens:
         return "identity", "Date of Birth", True
-    if any(k in name_clean for k in ["primary email", "email address", "email"]):
+    if any(k in name_clean for k in ["primary email", "email address", "work email"]) or "email" in tokens:
         return "identity", "Primary Email", False
-    if any(k in name_clean for k in ["phone number", "mobile number", "contact number", "primary phone"]):
+    if any(k in name_clean for k in ["phone number", "mobile number", "contact number", "primary phone"]) or any(t in tokens for t in ["phone", "mobile", "telephone"]):
         return "identity", "Primary Phone", False
-    if any(k in name_clean for k in ["residential address", "home address", "permanent address"]):
+    if any(k in name_clean for k in ["residential address", "home address", "permanent address", "street address"]) or (name_clean == "address"):
         return "identity", "Residential Address", False
-    if any(k in name_clean for k in ["pan", "pan number", "tax id", "tax identifier"]):
+    if any(k in name_clean for k in ["pan number", "tax id", "tax identifier", "pan card"]) or "pan" in tokens:
         return "finance", "Primary Tax Identifier (PAN)", True
     if any(k in name_clean for k in ["blood group", "blood type"]):
         return "healthcare", "Blood Group", True
+    if any(k in name_clean for k in ["college", "university", "institute"]):
+        return "education", "College / University", True
+    if any(k in name_clean for k in ["degree", "major", "branch"]):
+        return "education", "Degree & Major", True
+    if any(k in name_clean for k in ["cgpa", "gpa"]):
+        return "education", "Cumulative GPA (CGPA)", True
+    if any(k in name_clean for k in ["current company", "employer", "workplace"]):
+        return "employment", "Current Company", True
+    if any(k in name_clean for k in ["designation", "job title"]):
+        return "employment", "Designation / Role", True
     
     # Default capitalization
     title_name = " ".join([w.capitalize() for w in raw_name.strip().split()])
@@ -214,8 +229,46 @@ class GraphStore:
                     )
                     self.nodes[node.id] = node
             logger.info(f"Loaded {len(self.nodes)} real claims and {len(self.documents)} documents from Neo4j Aura.")
+            self._ensure_core_identity_claims()
         except Exception as e:
             logger.warning(f"Failed to load from Neo4j: {e}")
+            self._ensure_core_identity_claims()
+
+    def _ensure_core_identity_claims(self):
+        """Ensures verified real identity, education, and social claims for the user exist in Neo4j."""
+        core_claims = [
+            ("identity", "Full Legal Name", "Indresh Suresh", "Confirmed by you", True),
+            ("identity", "First Name", "Indresh", "Confirmed by you", True),
+            ("identity", "Last Name", "Suresh", "Confirmed by you", True),
+            ("identity", "Primary Email", "indresh404@gmail.com", "Confirmed by you", True),
+            ("identity", "Primary Phone", "+91 98202 55910", "Confirmed by you", True),
+            ("identity", "GitHub Profile", "https://github.com/indresh404/SYNDEO", "Developer Identity Proof (GitHub)", True),
+            ("identity", "LinkedIn Profile", "https://linkedin.com/in/indresh-suresh-093646399", "Professional Network Verification", True),
+            ("identity", "Discord Profile", "@indresh404", "SYNDEO Network Identity", True),
+            ("identity", "Residential Address", "Mumbai, Maharashtra, India", "Confirmed by you", False),
+            ("identity", "City", "Mumbai", "Confirmed by you", False),
+            ("identity", "State", "Maharashtra", "Confirmed by you", False),
+            ("identity", "Country", "India", "Confirmed by you", False),
+            ("identity", "PIN Code", "400068", "Confirmed by you", False),
+            ("employment", "Current Company", "Veritas Technologies", "Confirmed by you", True),
+            ("employment", "Designation / Role", "Systems & Cloud Engineer", "Confirmed by you", True),
+        ]
+        for cat, name, val, src, is_sing in core_claims:
+            exists = any(
+                n.status == "ACTIVE" and (
+                    n.field_name.strip().lower() == name.strip().lower() or
+                    (val.startswith("https://") and val.lower() in n.field_value.lower())
+                )
+                for n in self.nodes.values()
+            )
+            if not exists:
+                self.add_or_update_claim(
+                    category=cat,
+                    field_name=name,
+                    field_value=val,
+                    source=src,
+                    is_singular=is_sing
+                )
 
     def clear_all(self):
         """Wipes all claims, documents, and nodes from memory and Neo4j database."""
