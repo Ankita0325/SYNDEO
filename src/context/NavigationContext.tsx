@@ -15,6 +15,7 @@ interface NavigationContextType {
   userEmail: string;
   signInWithGoogle: () => Promise<void>;
   createProfile: (fullName: string) => Promise<void>;
+  signOut: () => Promise<void>;
 }
 
 const NavigationContext = createContext<NavigationContextType | undefined>(undefined);
@@ -176,6 +177,21 @@ export const NavigationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     navigate('/memory');
   };
 
+  const signOut = async () => {
+    if (supabase) {
+      try {
+        await supabase.auth.signOut();
+      } catch (err) {
+        console.warn('Sign out error:', err);
+      }
+    }
+    setAuthUser(null);
+    setProfileExists(null);
+    setIsAuthenticated(false);
+    setUserName('');
+    navigate('/');
+  };
+
   return (
     <NavigationContext.Provider
       value={{
@@ -189,6 +205,7 @@ export const NavigationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         userEmail,
         signInWithGoogle,
         createProfile,
+        signOut,
       }}
     >
       {children}

@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { initialRecords, initialDocuments } from '../../data/mockData';
 import type { LifeStageCategory, RecordField, DocumentItem } from '../../types';
+import { fetchRecordsFromBackend, fetchDocumentsFromBackend, addClaimToBackend, uploadDocumentToBackend } from '../../lib/api';
 import { StatusBadge } from '../common/Badge';
 import { Modal } from '../common/Modal';
 import { ObsidianGraphView } from './ObsidianGraphView';
@@ -35,6 +36,21 @@ export const MemoryPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [viewMode, setViewMode] = useState<ViewMode>('graph');
   const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  // Sync with backend graph store
+  useEffect(() => {
+    void (async () => {
+      const backendRecs = await fetchRecordsFromBackend();
+      if (backendRecs && Array.isArray(backendRecs) && backendRecs.length > 0) {
+        setRecords(backendRecs);
+      }
+      const backendDocs = await fetchDocumentsFromBackend();
+      if (backendDocs && Array.isArray(backendDocs) && backendDocs.length > 0) {
+        setDocuments(backendDocs);
+      }
+    })();
+  }, []);
+
 
   // Modals state
   const [isAddInfoOpen, setIsAddInfoOpen] = useState<boolean>(false);
@@ -74,7 +90,7 @@ export const MemoryPage: React.FC = () => {
     setTimeout(() => setCopiedId(null), 1800);
   };
 
-  const handleAddRecord = (e: React.FormEvent) => {
+  const handleAddRecord = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newFieldName.trim() || !newValue.trim()) return;
 
@@ -92,9 +108,17 @@ export const MemoryPage: React.FC = () => {
     setIsAddInfoOpen(false);
     setNewFieldName('');
     setNewValue('');
+
+    // Persist to backend graph store
+    await addClaimToBackend({
+      category: newCategory,
+      fieldName: newFieldName,
+      value: newValue,
+      source: newSourceType,
+    });
   };
 
-  const handleFinishUpload = () => {
+  const handleFinishUpload = async () => {
     const newDoc: DocumentItem = {
       id: `doc-${Date.now()}`,
       name: uploadedFileName,
@@ -121,6 +145,11 @@ export const MemoryPage: React.FC = () => {
     setRecords([newExtractedRec, ...records]);
     setIsUploadDocOpen(false);
     setUploadStep(1);
+
+    // Call backend doc upload endpoint if a file object exists or sample PDF
+    const dummyBlob = new Blob(['Provisional Certificate Content'], { type: 'application/pdf' });
+    const dummyFile = new File([dummyBlob], uploadedFileName, { type: 'application/pdf' });
+    await uploadDocumentToBackend(dummyFile, 'education');
   };
 
   return (

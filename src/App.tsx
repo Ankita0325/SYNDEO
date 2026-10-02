@@ -9,10 +9,37 @@ import { MemoryPage } from './components/memory/MemoryPage';
 import { SharePage } from './components/share/SharePage';
 import { SettingsPage } from './components/settings/SettingsPage';
 
+import { SharedLinkViewer } from './components/share/SharedLinkViewer';
+
 const AppContent: React.FC = () => {
-  const { currentPath } = useNavigation();
+  const { currentPath, navigate } = useNavigation();
+  const [shareParamToken, setShareParamToken] = React.useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const token = params.get('share');
+      if (token) return token;
+      const pathMatch = window.location.pathname.match(/^\/p\/(.+)/);
+      if (pathMatch) return pathMatch[1];
+    }
+    return null;
+  });
 
   const renderCurrentPage = () => {
+    if (shareParamToken) {
+      return (
+        <SharedLinkViewer
+          token={shareParamToken}
+          onBack={() => {
+            setShareParamToken(null);
+            if (typeof window !== 'undefined') {
+              window.history.pushState({}, '', '/share');
+            }
+            navigate('/share');
+          }}
+        />
+      );
+    }
+
     switch (currentPath) {
       case '/':
         return <HomePage />;
