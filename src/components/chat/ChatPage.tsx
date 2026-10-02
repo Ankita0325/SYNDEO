@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import type { ChatMessage } from '../../types';
+import { queryGraphMemory, addClaimToBackend } from '../../lib/api';
 import { AILoaderOrb, type OrbStateMode } from '../ui/ai-loader';
 import { ThinkingOrb, type OrbState } from '../ui/thinking-orbs';
 import { useNavigation } from '../../context/NavigationContext';
