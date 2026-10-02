@@ -198,7 +198,8 @@ export const ChatPage: React.FC = () => {
 
       mediaRecorder.onstop = async () => {
         stream?.getTracks().forEach((track) => track.stop());
-        const audioBlob = new Blob(audioChunksRef.current, { type: recordingType });
+        const baseMimeType = (recordingType || 'audio/webm').split(';')[0].trim().toLowerCase();
+        const audioBlob = new Blob(audioChunksRef.current, { type: baseMimeType || 'audio/webm' });
         let transcript = '';
 
         try {

@@ -244,11 +244,27 @@ async def sarvam_speech_to_text(
     if len(content) > 25 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="The recording exceeds the 25 MB limit.")
 
+    # Normalize MIME type by stripping codecs parameters (e.g. 'audio/webm;codecs=opus' -> 'audio/webm')
+    raw_content_type = file.content_type or "audio/webm"
+    base_content_type = raw_content_type.split(";")[0].strip().lower()
+    
+    allowed_audio_types = {
+        "audio/webm", "video/webm", "audio/ogg", "audio/opus", "audio/wav",
+        "audio/x-wav", "audio/wave", "audio/mpeg", "audio/mp3", "audio/mp4",
+        "audio/x-m4a", "audio/aac", "audio/flac", "application/octet-stream"
+    }
+    if base_content_type not in allowed_audio_types:
+        base_content_type = "audio/webm"
+
+    clean_filename = file.filename or "recording.webm"
+    if not any(clean_filename.lower().endswith(ext) for ext in [".webm", ".ogg", ".wav", ".mp3", ".mp4", ".m4a"]):
+        clean_filename = f"{clean_filename}.webm"
+
     fields = {
         "file": (
-            file.filename or "recording.webm",
+            clean_filename,
             content,
-            file.content_type or "application/octet-stream",
+            base_content_type,
         )
     }
     form = {"model": "saaras:v3", "mode": "transcribe"}

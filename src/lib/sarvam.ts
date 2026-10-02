@@ -125,8 +125,11 @@ export async function transcribeWithSarvam(
   if (!audioBlob || !audioBlob.size || audioBlob.size < 100) {
     return { transcript: '', language_code: languageCode };
   }
+  const baseMime = (audioBlob.type || 'audio/webm').split(';')[0].trim().toLowerCase() || 'audio/webm';
+  const cleanBlob = audioBlob.type === baseMime ? audioBlob : new Blob([audioBlob], { type: baseMime });
+
   const formData = new FormData();
-  formData.append('file', audioBlob, fileName);
+  formData.append('file', cleanBlob, fileName);
   formData.append('language_code', languageCode);
 
   const response = await fetchSarvam('/api/sarvam/speech-to-text', {
