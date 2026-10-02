@@ -1165,15 +1165,15 @@ export const ChatPage: React.FC = () => {
           {/* Intelligent Control Panel / Composer with Animated Border Beam & Floating Particles */}
           <div className="relative w-full max-w-[1050px] mx-auto rounded-[30px] sm:rounded-[34px] p-[2px] overflow-hidden group select-none">
             
-            {/* Primary Rotating Conic Glow Beam */}
+            {/* Primary Rotating Conic Glow Beam (Pure White Glow in Dark Theme) */}
             <motion.div
               animate={{ rotate: 360 }}
               transition={{ duration: 7, repeat: Infinity, ease: 'linear' }}
-              className="absolute -inset-[180%] w-[460%] h-[460%] left-[-180%] top-[-180%] pointer-events-none z-0 opacity-90 group-hover:opacity-100 transition-opacity"
+              className="absolute -inset-[180%] w-[460%] h-[460%] left-[-180%] top-[-180%] pointer-events-none z-0 opacity-95 group-hover:opacity-100 transition-opacity"
               style={{
                 background:
                   theme === 'dark'
-                    ? 'conic-gradient(from 0deg, transparent 0deg, transparent 60deg, rgba(90, 37, 235, 0.85) 110deg, rgba(56, 189, 248, 0.95) 160deg, rgba(236, 72, 153, 0.8) 210deg, rgba(203, 190, 255, 0.9) 260deg, transparent 320deg, transparent 360deg)'
+                    ? 'conic-gradient(from 0deg, transparent 0deg, transparent 50deg, rgba(255, 255, 255, 0.45) 100deg, rgba(255, 255, 255, 1) 160deg, rgba(220, 235, 255, 0.95) 210deg, rgba(255, 255, 255, 0.5) 260deg, transparent 320deg, transparent 360deg)'
                     : 'conic-gradient(from 0deg, transparent 0deg, transparent 60deg, rgba(90, 37, 235, 0.65) 110deg, rgba(56, 189, 248, 0.8) 160deg, rgba(217, 70, 239, 0.65) 210deg, rgba(140, 110, 255, 0.7) 260deg, transparent 320deg, transparent 360deg)',
               }}
             />
@@ -1182,11 +1182,11 @@ export const ChatPage: React.FC = () => {
             <motion.div
               animate={{ rotate: -360 }}
               transition={{ duration: 11, repeat: Infinity, ease: 'linear' }}
-              className="absolute -inset-[150%] w-[400%] h-[400%] left-[-150%] top-[-150%] pointer-events-none z-0 opacity-50 blur-[6px]"
+              className="absolute -inset-[150%] w-[400%] h-[400%] left-[-150%] top-[-150%] pointer-events-none z-0 opacity-60 blur-[6px]"
               style={{
                 background:
                   theme === 'dark'
-                    ? 'conic-gradient(from 180deg, transparent 0deg, rgba(56, 189, 248, 0.5) 120deg, rgba(147, 51, 234, 0.6) 240deg, transparent 360deg)'
+                    ? 'conic-gradient(from 180deg, transparent 0deg, rgba(255, 255, 255, 0.5) 120deg, rgba(255, 255, 255, 0.8) 180deg, rgba(200, 220, 255, 0.4) 240deg, transparent 360deg)'
                     : 'conic-gradient(from 180deg, transparent 0deg, rgba(90, 70, 255, 0.35) 120deg, rgba(56, 189, 248, 0.4) 240deg, transparent 360deg)',
               }}
             />
@@ -1194,65 +1194,82 @@ export const ChatPage: React.FC = () => {
             {/* Inner Composer Body Surface */}
             <div
               className="w-full rounded-[28px] sm:rounded-[32px] p-2.5 sm:p-3.5 relative z-10 transition-all
-                         border border-white/70 dark:border-white/10
+                         border border-white/70 dark:border-white/20
                          shadow-[0_12px_45px_rgba(90,70,255,0.14)]
-                         dark:shadow-[0_12px_45px_rgba(0,0,0,0.5)]
+                         dark:shadow-[0_15px_50px_rgba(0,0,0,0.6),0_0_20px_rgba(255,255,255,0.08)]
                          backdrop-blur-2xl overflow-hidden"
               style={{
                 background:
                   theme === 'dark'
-                    ? 'radial-gradient(circle at 20% 0%, rgba(90, 37, 235, 0.22), transparent 50%), radial-gradient(circle at 85% 100%, rgba(56, 189, 248, 0.16), transparent 55%), linear-gradient(135deg, rgba(20, 18, 36, 0.96), rgba(12, 11, 24, 0.94))'
+                    ? 'radial-gradient(circle at 20% 0%, rgba(255, 255, 255, 0.08), transparent 50%), radial-gradient(circle at 85% 100%, rgba(255, 255, 255, 0.05), transparent 55%), linear-gradient(135deg, rgba(18, 17, 30, 0.96), rgba(10, 9, 18, 0.94))'
                     : 'radial-gradient(circle at 20% 0%, rgba(210, 225, 255, 0.48), transparent 50%), radial-gradient(circle at 85% 100%, rgba(230, 215, 255, 0.40), transparent 55%), linear-gradient(135deg, rgba(252, 253, 255, 0.97), rgba(244, 246, 255, 0.94))',
               }}
             >
-              {/* Floating Ambient Glowing Particles */}
+              {/* Floating Ambient Glowing White Particles */}
               <div className="absolute inset-0 pointer-events-none z-0 overflow-hidden">
                 {[
-                  { top: '18%', left: '12%', size: 4, color: 'rgba(90, 37, 235, 0.7)', duration: 4.2, delay: 0 },
-                  { top: '70%', left: '28%', size: 5, color: 'rgba(56, 189, 248, 0.8)', duration: 5.5, delay: 0.8 },
-                  { top: '30%', left: '55%', size: 3, color: 'rgba(236, 72, 153, 0.7)', duration: 4.8, delay: 1.4 },
-                  { top: '75%', left: '78%', size: 5, color: 'rgba(147, 51, 234, 0.75)', duration: 6.0, delay: 0.4 },
-                  { top: '22%', left: '88%', size: 4, color: 'rgba(56, 189, 248, 0.7)', duration: 5.0, delay: 2.1 },
-                  { top: '55%', left: '42%', size: 3.5, color: 'rgba(90, 37, 235, 0.6)', duration: 4.6, delay: 1.0 },
-                ].map((particle, idx) => (
-                  <motion.div
-                    key={idx}
-                    animate={{
-                      y: [0, -10, 0],
-                      x: [0, (idx % 2 === 0 ? 6 : -6), 0],
-                      opacity: [0.25, 0.8, 0.25],
-                      scale: [0.85, 1.25, 0.85],
-                    }}
-                    transition={{
-                      duration: particle.duration,
-                      repeat: Infinity,
-                      ease: 'easeInOut',
-                      delay: particle.delay,
-                    }}
-                    className="absolute rounded-full pointer-events-none blur-[0.5px]"
-                    style={{
-                      top: particle.top,
-                      left: particle.left,
-                      width: particle.size,
-                      height: particle.size,
-                      backgroundColor: particle.color,
-                      boxShadow: `0 0 10px ${particle.color}`,
-                    }}
-                  />
-                ))}
+                  { top: '18%', left: '12%', size: 4, duration: 4.2, delay: 0 },
+                  { top: '70%', left: '28%', size: 5, duration: 5.5, delay: 0.8 },
+                  { top: '30%', left: '55%', size: 3.5, duration: 4.8, delay: 1.4 },
+                  { top: '75%', left: '78%', size: 5, duration: 6.0, delay: 0.4 },
+                  { top: '22%', left: '88%', size: 4, duration: 5.0, delay: 2.1 },
+                  { top: '55%', left: '42%', size: 3.5, duration: 4.6, delay: 1.0 },
+                  { top: '15%', left: '68%', size: 3, duration: 5.2, delay: 1.8 },
+                ].map((particle, idx) => {
+                  const particleColor =
+                    theme === 'dark'
+                      ? 'rgba(255, 255, 255, 0.95)'
+                      : idx % 3 === 0
+                      ? 'rgba(90, 37, 235, 0.7)'
+                      : idx % 3 === 1
+                      ? 'rgba(56, 189, 248, 0.8)'
+                      : 'rgba(217, 70, 239, 0.7)';
+
+                  const particleGlow =
+                    theme === 'dark'
+                      ? '0 0 12px rgba(255, 255, 255, 0.95), 0 0 20px rgba(255, 255, 255, 0.5)'
+                      : `0 0 10px ${particleColor}`;
+
+                  return (
+                    <motion.div
+                      key={idx}
+                      animate={{
+                        y: [0, -10, 0],
+                        x: [0, (idx % 2 === 0 ? 6 : -6), 0],
+                        opacity: theme === 'dark' ? [0.35, 0.95, 0.35] : [0.25, 0.8, 0.25],
+                        scale: [0.85, 1.3, 0.85],
+                      }}
+                      transition={{
+                        duration: particle.duration,
+                        repeat: Infinity,
+                        ease: 'easeInOut',
+                        delay: particle.delay,
+                      }}
+                      className="absolute rounded-full pointer-events-none blur-[0.4px]"
+                      style={{
+                        top: particle.top,
+                        left: particle.left,
+                        width: particle.size,
+                        height: particle.size,
+                        backgroundColor: particleColor,
+                        boxShadow: particleGlow,
+                      }}
+                    />
+                  );
+                })}
               </div>
 
               {/* Elevated Inner Input Surface with Laser Edge Beam */}
               <div className="relative rounded-[20px] sm:rounded-[22px] p-[1.5px] overflow-hidden group/input z-10">
-                {/* Moving Border Laser Glow Line on Input Form */}
+                {/* Moving Border Laser Glow Line on Input Form (Radiant White in Dark Theme) */}
                 <motion.div
                   animate={{ rotate: 360 }}
                   transition={{ duration: 5.5, repeat: Infinity, ease: 'linear' }}
-                  className="absolute -inset-[150%] w-[400%] h-[400%] left-[-150%] top-[-150%] pointer-events-none z-0 opacity-70 group-focus-within/input:opacity-100 transition-opacity"
+                  className="absolute -inset-[150%] w-[400%] h-[400%] left-[-150%] top-[-150%] pointer-events-none z-0 opacity-75 group-focus-within/input:opacity-100 transition-opacity"
                   style={{
                     background:
                       theme === 'dark'
-                        ? 'conic-gradient(from 0deg, transparent 0deg, transparent 80deg, rgba(56, 189, 248, 0.9) 140deg, rgba(168, 85, 247, 0.9) 180deg, rgba(236, 72, 153, 0.85) 220deg, transparent 280deg, transparent 360deg)'
+                        ? 'conic-gradient(from 0deg, transparent 0deg, transparent 80deg, rgba(255, 255, 255, 0.6) 130deg, #ffffff 180deg, rgba(255, 255, 255, 0.7) 230deg, transparent 290deg, transparent 360deg)'
                         : 'conic-gradient(from 0deg, transparent 0deg, transparent 80deg, rgba(90, 37, 235, 0.7) 140deg, rgba(56, 189, 248, 0.8) 180deg, rgba(217, 70, 239, 0.7) 220deg, transparent 280deg, transparent 360deg)',
                   }}
                 />
@@ -1263,11 +1280,12 @@ export const ChatPage: React.FC = () => {
                     handleSendMessage();
                   }}
                   className="relative flex items-center
-                             bg-white/85 dark:bg-[#090814]/90
+                             bg-white/85 dark:bg-[#07060f]/95
                              rounded-[18px] sm:rounded-[20px]
-                             border border-[#96aaff]/20 dark:border-white/10
-                             shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]
-                             focus-within:border-[#6e5aff]/60 focus-within:shadow-[0_0_28px_rgba(110,90,255,0.18)]
+                             border border-[#96aaff]/20 dark:border-white/15
+                             shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.1)]
+                             focus-within:border-[#6e5aff]/60 dark:focus-within:border-white/50
+                             focus-within:shadow-[0_0_28px_rgba(110,90,255,0.18)] dark:focus-within:shadow-[0_0_24px_rgba(255,255,255,0.18)]
                              transition-all p-1.5 z-10 backdrop-blur-md"
                 >
                   <input
