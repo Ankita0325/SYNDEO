@@ -56,6 +56,29 @@ export interface AccessViewer {
   viewedAt: string;
   ipLocation: string;
   verificationStatus: 'zk-verified' | 'authorized';
+  email?: string;
+}
+
+export type OrganizationType =
+  | 'Company'
+  | 'University/College'
+  | 'Hospital/Healthcare'
+  | 'Bank/Financial'
+  | 'Government'
+  | 'NGO'
+  | 'Other';
+
+export type SharePurpose = 'Hiring' | 'Verification' | 'Admissions' | 'Healthcare' | 'Financial services' | 'Other';
+
+export interface OrganizationAccessProfile {
+  fullName: string;
+  workEmail: string;
+  organizationName: string;
+  organizationType: OrganizationType;
+  role: string;
+  department: string;
+  website: string;
+  purpose: SharePurpose;
 }
 
 export interface AccessRequestItem {
@@ -65,11 +88,15 @@ export interface AccessRequestItem {
   requestedFields: string[];
   purpose: string;
   requestedAt: string;
-  status: 'pending' | 'approved' | 'declined';
+  status: 'pending' | 'approved' | 'declined' | 'revoked';
+  profile?: OrganizationAccessProfile;
+  organizationId?: string;
+  organizationMemberId?: string;
 }
 
 export interface SharedLink {
   id: string;
+  shareId?: string;
   recipient: string;
   recipientLogo?: string;
   fieldsShared: string[];
@@ -79,6 +106,8 @@ export interface SharedLink {
   accessCount: number;
   viewers?: AccessViewer[];
   accessRequests?: AccessRequestItem[];
+  sharedDocumentIds?: string[];
+  sharedDocuments?: DocumentItem[];
 }
 
 export interface ShareRequest {
