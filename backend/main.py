@@ -486,6 +486,8 @@ def get_personal_memory_store():
             "categoriesCount": len(set(r["category"] for r in records)),
             "auditStatus": integrity_msg
         }
+    }
+
 @app.post("/api/memory/clear")
 @app.delete("/api/memory/clear")
 def clear_memory_store():
