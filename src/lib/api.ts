@@ -94,7 +94,7 @@ export async function queryGraphMemory(question: string) {
 export async function composeSelectiveProof(shareRequest: {
   recipient: string;
   purpose: string;
-  requestedFields: any[];
+  requestedFields: Record<string, unknown>[];
   expiryHours?: number;
 }) {
   try {
@@ -129,7 +129,7 @@ export async function fetchAuditLogs() {
     const res = await fetch(`${API_BASE}/api/audit`);
     if (!res.ok) throw new Error('Failed to fetch audit log');
     return await res.json();
-  } catch (err) {
+  } catch {
     return null;
   }
 }

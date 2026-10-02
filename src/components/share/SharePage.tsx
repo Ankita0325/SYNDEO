@@ -418,46 +418,54 @@ export const SharePage: React.FC = () => {
         subtitle="Point physical camera to view only the approved fields."
       >
         <div className="space-y-5 text-center py-2">
-          {/* Static SVG QR Code Visual */}
+          {/* QR Code Visual */}
           <div className="p-6 bg-white rounded-2xl w-56 h-56 mx-auto flex items-center justify-center shadow-lg">
-            <svg
-              className="w-full h-full"
-              viewBox="0 0 100 100"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <rect width="100" height="100" fill="white" />
-              {/* Corner 1 */}
-              <rect x="10" y="10" width="25" height="25" fill="#131317" rx="3" />
-              <rect x="15" y="15" width="15" height="15" fill="white" rx="1" />
-              <rect x="18" y="18" width="9" height="9" fill="#5a25eb" />
-              {/* Corner 2 */}
-              <rect x="65" y="10" width="25" height="25" fill="#131317" rx="3" />
-              <rect x="70" y="15" width="15" height="15" fill="white" rx="1" />
-              <rect x="73" y="18" width="9" height="9" fill="#5a25eb" />
-              {/* Corner 3 */}
-              <rect x="10" y="65" width="25" height="25" fill="#131317" rx="3" />
-              <rect x="15" y="70" width="15" height="15" fill="white" rx="1" />
-              <rect x="18" y="73" width="9" height="9" fill="#5a25eb" />
-              {/* Matrix Dots */}
-              <rect x="42" y="12" width="6" height="6" fill="#131317" />
-              <rect x="52" y="12" width="6" height="6" fill="#131317" />
-              <rect x="42" y="24" width="6" height="6" fill="#5a25eb" />
-              <rect x="52" y="32" width="6" height="6" fill="#131317" />
-              <rect x="12" y="42" width="6" height="6" fill="#131317" />
-              <rect x="24" y="42" width="6" height="6" fill="#5a25eb" />
-              <rect x="34" y="42" width="6" height="6" fill="#131317" />
-              <rect x="45" y="45" width="10" height="10" fill="#5a25eb" rx="2" />
-              <rect x="62" y="42" width="6" height="6" fill="#131317" />
-              <rect x="74" y="42" width="6" height="6" fill="#131317" />
-              <rect x="84" y="42" width="6" height="6" fill="#5a25eb" />
-              <rect x="42" y="62" width="6" height="6" fill="#131317" />
-              <rect x="52" y="72" width="6" height="6" fill="#5a25eb" />
-              <rect x="65" y="65" width="6" height="6" fill="#131317" />
-              <rect x="78" y="65" width="6" height="6" fill="#131317" />
-              <rect x="65" y="78" width="6" height="6" fill="#5a25eb" />
-              <rect x="78" y="78" width="6" height="6" fill="#131317" />
-            </svg>
+            {qrCodeImage ? (
+              <img
+                src={qrCodeImage}
+                alt="Selective Access QR Code"
+                className="w-full h-full object-contain"
+              />
+            ) : (
+              <svg
+                className="w-full h-full"
+                viewBox="0 0 100 100"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <rect width="100" height="100" fill="white" />
+                {/* Corner 1 */}
+                <rect x="10" y="10" width="25" height="25" fill="#131317" rx="3" />
+                <rect x="15" y="15" width="15" height="15" fill="white" rx="1" />
+                <rect x="18" y="18" width="9" height="9" fill="#5a25eb" />
+                {/* Corner 2 */}
+                <rect x="65" y="10" width="25" height="25" fill="#131317" rx="3" />
+                <rect x="70" y="15" width="15" height="15" fill="white" rx="1" />
+                <rect x="73" y="18" width="9" height="9" fill="#5a25eb" />
+                {/* Corner 3 */}
+                <rect x="10" y="65" width="25" height="25" fill="#131317" rx="3" />
+                <rect x="15" y="70" width="15" height="15" fill="white" rx="1" />
+                <rect x="18" y="73" width="9" height="9" fill="#5a25eb" />
+                {/* Matrix Dots */}
+                <rect x="42" y="12" width="6" height="6" fill="#131317" />
+                <rect x="52" y="12" width="6" height="6" fill="#131317" />
+                <rect x="42" y="24" width="6" height="6" fill="#5a25eb" />
+                <rect x="52" y="32" width="6" height="6" fill="#131317" />
+                <rect x="12" y="42" width="6" height="6" fill="#131317" />
+                <rect x="24" y="42" width="6" height="6" fill="#5a25eb" />
+                <rect x="34" y="42" width="6" height="6" fill="#131317" />
+                <rect x="45" y="45" width="10" height="10" fill="#5a25eb" rx="2" />
+                <rect x="62" y="42" width="6" height="6" fill="#131317" />
+                <rect x="74" y="42" width="6" height="6" fill="#131317" />
+                <rect x="84" y="42" width="6" height="6" fill="#5a25eb" />
+                <rect x="42" y="62" width="6" height="6" fill="#131317" />
+                <rect x="52" y="72" width="6" height="6" fill="#5a25eb" />
+                <rect x="65" y="65" width="6" height="6" fill="#131317" />
+                <rect x="78" y="65" width="6" height="6" fill="#131317" />
+                <rect x="65" y="78" width="6" height="6" fill="#5a25eb" />
+                <rect x="78" y="78" width="6" height="6" fill="#131317" />
+              </svg>
+            )}
           </div>
 
           <div>

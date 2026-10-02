@@ -1,5 +1,92 @@
-# Logs
-logs
+# ==========================================
+# Dependencies & Package Managers
+# ==========================================
+node_modules/
+.pnp
+.pnp.js
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+.pnpm-store
+
+# ==========================================
+# Production & Build Artifacts
+# ==========================================
+dist/
+dist-ssr/
+build/
+out/
+.vercel
+.turbo
+
+# ==========================================
+# Environment Variables & Secrets
+# ==========================================
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env*.local
+backend/.env
+backend/.env.*
+*.pem
+*.key
+*.cert
+
+# ==========================================
+# Python & Backend Virtual Environments
+# ==========================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.venv/
+.venv*/
+develop-eggs/
+dist-python/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ==========================================
+# Logs & Runtime Dumps
+# ==========================================
+logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
@@ -7,28 +94,29 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
-*.local
-# Environment variables
-.env
-.env.local
-.env.*.local
-
-# Editor directories and files
-# Python cache
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.pytest_cache/
-
-!.vscode/extensions.json
-.idea
+# ==========================================
+# OS & Editor Files
+# ==========================================
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+[Dd]esktop.ini
+
+.idea/
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+*.bak
+
+# VS Code settings
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
