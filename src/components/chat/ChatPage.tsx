@@ -10,6 +10,7 @@ import {
   MicOff,
   Save,
   Share2,
+  HelpCircle as QuestionIcon,
   RotateCcw,
   Volume2,
   VolumeX,
@@ -17,14 +18,13 @@ import {
   Check,
   ArrowUp,
   ShieldCheck,
+  Sparkles,
+  GraduationCap,
+  Globe,
   ExternalLink,
   Paperclip,
   FileText,
   X,
-  SlidersHorizontal,
-  Zap,
-  Star,
-  FileSearch,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -58,7 +58,6 @@ export const ChatPage: React.FC = () => {
   const [streamingText, setStreamingText] = useState<string>('');
   const [isStreaming, setIsStreaming] = useState<boolean>(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [isToolsMenuOpen, setIsToolsMenuOpen] = useState<boolean>(false);
 
   interface AttachedFile {
     name: string;
@@ -68,7 +67,6 @@ export const ChatPage: React.FC = () => {
   }
   const [attachedFile, setAttachedFile] = useState<AttachedFile | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const formatFileSize = (bytes: number): string => {
     if (bytes < 1024) return `${bytes} B`;
@@ -90,6 +88,7 @@ export const ChatPage: React.FC = () => {
   };
 
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
   const streamIntervalRef = useRef<any>(null);
   const timeoutsRef = useRef<any[]>([]);
@@ -272,7 +271,7 @@ export const ChatPage: React.FC = () => {
         setIsTyping(false);
         setOrbState('idle');
       }
-    }, 55);
+    }, 60);
   };
 
   const handleSendMessage = (textToSend?: string) => {
@@ -314,7 +313,7 @@ export const ChatPage: React.FC = () => {
 
     const t1 = setTimeout(() => {
       setOrbState('generating');
-    }, 1200);
+    }, 1500);
 
     const t2 = setTimeout(() => {
       let botResponse: ChatMessage;
@@ -326,7 +325,7 @@ export const ChatPage: React.FC = () => {
           sender: 'assistant',
           content:
             chatMode === 'save'
-              ? `📄 **Document Verified & Encrypted**\n\nI have parsed and indexed **${currentAttached.name}** (${currentAttached.formattedSize}) into your zero-knowledge vault.\n- **Extracted Records**: Evidence-backed Credentials\n- **Vault Security**: AES-256-GCM Envelope Sealed\n- **Graph Indexing**: Attached to your personal life-stage network.`
+              ? `📄 **Document Verified & Encrypted**\n\nI have processed and indexed **${currentAttached.name}** (${currentAttached.formattedSize}) into your zero-knowledge vault.\n- **Extracted Records**: Evidence-backed Credentials\n- **Vault Security**: AES-256-GCM Envelope Sealed\n- **Graph Indexing**: Attached to your personal life-stage network.`
               : `📄 **Attached Document Analyzed**\n\nI have parsed **${currentAttached.name}** (${currentAttached.formattedSize}). All cryptographic signatures and metadata match your verified records.`,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           sourceType: 'evidence-backed',
@@ -349,43 +348,80 @@ export const ChatPage: React.FC = () => {
           content: `🔗 **Selective Share Link Generated**\n\n- **Recipient**: 24h Scoped Access Link\n- **Fields**: ${messageContent}\n- **Proof**: zk-SNARK Verified`,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           sourceType: 'evidence-backed',
-          sourceNote: 'zk-SNARK Selective Proof',
+          sourceNote: 'Selective Disclosure Grant',
+          evidenceDoc: 'Scope_Access_Envelope.json',
         };
-      } else if (lower.includes('college') || lower.includes('degree') || lower.includes('education') || lower.includes('slrtce') || lower.includes('collaborator')) {
+      } else if (
+        lower.includes('social') ||
+        lower.includes('github') ||
+        lower.includes('linkedin') ||
+        lower.includes('discord') ||
+        lower.includes('link') ||
+        lower.includes('profile')
+      ) {
         botResponse = {
           id: `m-bot-${Date.now()}`,
           sender: 'assistant',
-          content: `You attended **SLRTCE (Shree L. R. Tiwari College of Engineering)** where you earned your **Bachelor of Engineering in Computer Science** with a **CGPA of 8.45 / 10.0**.\n\nYour capstone collaborator was **Divya** (Lead System Architect). Verified via SLRTCE Degree Registrar record.`,
+          content: `Here are all your verified **Social & Developer Links**:\n\n- **GitHub**: https://github.com/indresh404/SYNDEO\n- **LinkedIn**: https://linkedin.com/in/indresh-suresh-093646399\n- **Discord**: **@indresh404** (SYNDEO Network)\n\nAll cryptographic signatures and repository links are verified on the network.`,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           sourceType: 'evidence-backed',
-          sourceNote: 'Degree_Certificate_SLRTCE_2024.pdf',
+          sourceNote: 'Cryptographic Developer Credentials & Social Identity',
+          evidenceDoc: 'Developer_Social_Proofs.json',
+        };
+      } else if (
+        lower.includes('education') ||
+        lower.includes('college') ||
+        lower.includes('slrtce') ||
+        lower.includes('degree') ||
+        lower.includes('engineering') ||
+        lower.includes('university') ||
+        lower.includes('cgpa') ||
+        lower.includes('study')
+      ) {
+        botResponse = {
+          id: `m-bot-${Date.now()}`,
+          sender: 'assistant',
+          content: `Your verified **Education Status**:\n\n- **Degree**: **B.E. in Computer Science & Engineering**\n- **Institution**: **SLRTCE (University of Mumbai)**\n- **CGPA**: **8.45 / 10.0** (First Class with Distinction)\n- **Batch**: **2020 – 2024**\n- **Capstone Collaborator**: **Divya**\n- **Evidence**: Verified by SLRTCE Academic Registry envelope.`,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          sourceType: 'evidence-backed',
+          sourceNote: 'SLRTCE Degree Certificate & Transcript',
           evidenceDoc: 'Degree_Certificate_SLRTCE_2024.pdf',
         };
-      } else if (lower.includes('github') || lower.includes('linkedin') || lower.includes('social') || lower.includes('links')) {
+      } else if (lower.includes('work') || lower.includes('company') || lower.includes('job') || lower.includes('veritas') || lower.includes('role')) {
         botResponse = {
           id: `m-bot-${Date.now()}`,
           sender: 'assistant',
-          content: `Here are your verified identity & developer records:\n\n• **GitHub:** https://github.com/indresh404/SYNDEO\n• **LinkedIn:** https://linkedin.com/in/indresh-suresh-093646399\n• **Discord:** @indresh404\n• **Portfolio:** https://indresh.dev`,
+          content: `You are currently employed at **Veritas Technologies** as a **Systems & Cloud Engineer**. Your peer reviewer is **Monish**.`,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           sourceType: 'evidence-backed',
-          sourceNote: 'GitHub GPG Key & Verified Profiles',
-          evidenceDoc: 'GitHub_GPG_Key_Signature.asc',
+          sourceNote: 'Employment Offer Letter & Peer Confirmation',
+          evidenceDoc: 'Employment_Offer_Letter_Veritas.pdf',
         };
-      } else if (lower.includes('blood') || lower.includes('medical') || lower.includes('health')) {
+      } else if (lower.includes('blood') || lower.includes('medical') || lower.includes('health') || lower.includes('ankita')) {
         botResponse = {
           id: `m-bot-${Date.now()}`,
           sender: 'assistant',
-          content: `Your blood group is **O-Positive (O+)**. Emergency contact: **Ankita** (+91 98201 55910). Insurance: **Star Health & Allied (Policy #SH-88921-99)**.`,
+          content: `Your blood group is **O-Positive (O+)**. Emergency kin and health proxy: **Ankita** (Sister, +91 98202 55910). Verified by CityCare Diagnostics.`,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           sourceType: 'evidence-backed',
-          sourceNote: 'Annual Health Checkup Lab Report',
-          evidenceDoc: 'Annual_Health_Checkup_LabReport.pdf',
+          sourceNote: 'Annual Health Checkup & Family Proxy Declaration',
+          evidenceDoc: 'Medical_Summary_2024.pdf',
+        };
+      } else if (lower.includes('credit') || lower.includes('bank') || lower.includes('tax') || lower.includes('pan') || lower.includes('score')) {
+        botResponse = {
+          id: `m-bot-${Date.now()}`,
+          sender: 'assistant',
+          content: `Your verified **CIBIL Score is 785**. PAN: **ABCDE1234F**, Primary Bank: **HDFC Bank**.`,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          sourceType: 'evidence-backed',
+          sourceNote: 'ITR-V Acknowledgement & Experian Credit Report',
+          evidenceDoc: 'ITR_Acknowledgement_AY2024.pdf',
         };
       } else {
         botResponse = {
           id: `m-bot-${Date.now()}`,
           sender: 'assistant',
-          content: `I retrieved your records for "${messageContent}". Your sovereign vault confirms your identity as **${userName || 'Indresh'}** across Identity, Education (SLRTCE), Finance (HDFC Bank), and Healthcare records.`,
+          content: `I retrieved your records for "${messageContent}". Your verified vault confirms your identity as **${userName}** across Identity, Education (SLRTCE), Employment (Veritas), and Healthcare.`,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           sourceType: 'user-confirmed',
           sourceNote: 'Personal vault query response',
@@ -393,7 +429,7 @@ export const ChatPage: React.FC = () => {
       }
 
       streamAIResponse(botResponse);
-    }, 2800);
+    }, 3500);
 
     timeoutsRef.current.push(t1, t2);
   };
@@ -412,6 +448,21 @@ export const ChatPage: React.FC = () => {
     setOrbState('idle');
     setMessages([]);
   };
+
+  const quickPrompts = [
+    {
+      title: "What's my education status?",
+      subtitle: 'SLRTCE B.E. Degree & CGPA',
+      text: "What's my education status?",
+      icon: GraduationCap,
+    },
+    {
+      title: 'Show all social links',
+      subtitle: 'GitHub, LinkedIn & Discord',
+      text: 'Show all my social links',
+      icon: Globe,
+    },
+  ];
 
   const currentOrbState: OrbStateMode = isSpeakingVoice
     ? 'speaking'
@@ -548,319 +599,184 @@ export const ChatPage: React.FC = () => {
     );
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSendMessage();
-    }
-  };
-
   return (
-    <div className="relative flex-1 flex flex-col h-full min-h-0 bg-[#06060c] text-slate-100 overflow-hidden select-none">
-      {/* Dynamic Moving Atmospheric Ambient Background Glow (Professional light blue & violet) */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden -z-10">
-        <div
-          className="absolute -top-32 left-1/4 w-[600px] h-[600px] rounded-full ambient-blue-glow-1 blur-[120px] pointer-events-none"
-          style={{
-            background: 'radial-gradient(circle, rgba(38, 167, 222, 0.16) 0%, rgba(90, 37, 235, 0.13) 50%, rgba(0, 0, 0, 0) 75%)',
-          }}
-        />
-        <div
-          className="absolute top-1/3 -right-24 w-[520px] h-[520px] rounded-full ambient-blue-glow-2 blur-[110px] pointer-events-none"
-          style={{
-            background: 'radial-gradient(circle, rgba(90, 37, 235, 0.16) 0%, rgba(14, 165, 233, 0.12) 45%, rgba(0, 0, 0, 0) 70%)',
-          }}
-        />
-        <div
-          className="absolute inset-0"
-          style={{
-            background: 'radial-gradient(circle at 50% 18%, rgba(20, 35, 60, 0.35) 0%, rgba(8, 11, 20, 0.85) 60%, #05070e 100%)',
-          }}
-        />
-      </div>
+    <div className="h-full flex-1 flex flex-col min-h-0 bg-zinc-50 dark:bg-[#000000] text-zinc-900 dark:text-[#f4f4f6] transition-colors duration-200 overflow-hidden relative">
 
-      {/* Hidden File Input */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        onChange={handleFileChange}
-        className="hidden"
-        accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.txt"
+      {/* === LIGHT MODE BACKGROUND: soft blue/white liquid glow === */}
+      <div className="absolute top-[-10%] left-[-5%] w-[45%] h-[45%] rounded-full bg-blue-300/40 dark:bg-[#5a25eb]/20 blur-[130px] pointer-events-none z-0" />
+      <div className="absolute bottom-[-10%] right-[-5%] w-[55%] h-[55%] rounded-full bg-sky-300/40 dark:bg-[#3a1c8c]/30 blur-[140px] pointer-events-none z-0" />
+      <div className="absolute top-[25%] left-[50%] -translate-x-1/2 w-[65%] h-[35%] rounded-full bg-blue-200/50 dark:bg-[#2a1a5e]/20 blur-[110px] pointer-events-none z-0" />
+      <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[75%] h-[30%] rounded-full bg-indigo-200/40 dark:bg-[#5a25eb]/15 blur-[90px] pointer-events-none z-0" />
+      <div className="absolute top-[55%] left-[15%] w-[35%] h-[35%] rounded-full bg-cyan-200/30 dark:bg-[#1a0a3e]/40 blur-[120px] pointer-events-none z-0" />
+
+      {/* Animated soft movement overlay */}
+      <motion.div
+        animate={{
+          opacity: [0.25, 0.45, 0.25],
+          scale: [1, 1.04, 1]
+        }}
+        transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
+        className="absolute inset-0 bg-gradient-to-b from-transparent via-blue-100/20 dark:via-[#0a0514]/5 to-transparent pointer-events-none z-0"
       />
 
-      {/* Top Floating Control Toolbar */}
-      {messages.length > 0 && (
-        <div className="max-w-2xl w-full mx-auto px-4 pt-3 flex items-center justify-between shrink-0 z-10">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-white/[0.05] border border-white/[0.1] backdrop-blur-xl text-xs text-slate-200 shadow-md">
-            <AILoaderOrb state={currentOrbState} variant="avatar" size={16} />
-            <span className="font-mono text-[11px] capitalize">{currentOrbState}</span>
-          </div>
+      {/* === MAIN CHAT CONTAINER === */}
+      <div className="max-w-3xl w-full mx-auto flex-1 flex flex-col h-full min-h-0 px-2.5 sm:px-6 relative z-10">
 
-          <div className="flex items-center gap-2">
-            {isSpeakingVoice && (
-              <button
-                onClick={stopAudio}
-                className="p-1.5 rounded-full bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/30 transition-colors cursor-pointer"
-                title="Stop Audio"
-              >
-                <VolumeX className="w-3.5 h-3.5" />
-              </button>
-            )}
-            <button
-              onClick={handleResetChat}
-              className="p-1.5 rounded-full bg-white/[0.05] hover:bg-white/[0.1] text-slate-400 hover:text-white border border-white/[0.08] transition-colors cursor-pointer backdrop-blur-md"
-              title="Reset Chat"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        </div>
-      )}
+        {/* Liquid glass container with blue gradient */}
+        <div className="relative flex-1 flex flex-col min-h-0 rounded-3xl my-2 overflow-hidden
+                        bg-white/70 dark:bg-[#0a0a14]/60
+                        backdrop-blur-2xl
+                        border border-blue-200/60 dark:border-[#2a1f4a]/50
+                        shadow-[0_8px_40px_-10px_rgba(59,130,246,0.25),inset_0_1px_0_0_rgba(255,255,255,0.8)]
+                        dark:shadow-[0_0_30px_rgba(90,37,235,0.1),inset_0_1px_0_0_rgba(255,255,255,0.05)]">
 
-      {/* Main Interactive Canvas Area */}
-      <div
-        ref={messagesContainerRef}
-        className="flex-1 min-h-0 overflow-y-auto px-3 sm:px-4 py-4 sm:py-6 flex flex-col items-center justify-start scrollbar-none"
-      >
-        {/* =========================================================================
-            1. HERO EMPTY STATE (Exact Matching Mockup Structure with Our Animated Orb)
-           ========================================================================= */}
-        {messages.length === 0 ? (
-          <div className="w-full max-w-2xl flex flex-col items-center pt-1 sm:pt-3 my-auto">
-            {/* Central Iridescent Glowing 3D Orb (Our Animation Orb) */}
-            <div className="relative mb-4 sm:mb-6 flex items-center justify-center">
-              {/* Diffuse ambient aura behind the orb */}
-              <div className="absolute w-36 h-36 sm:w-48 sm:h-48 rounded-full bg-cyan-500/20 blur-2xl filter -z-10 pointer-events-none ambient-blue-glow-1" />
-              <div className="absolute w-32 h-32 sm:w-40 sm:h-40 rounded-full bg-[#5a25eb]/25 blur-xl filter -z-10 pointer-events-none ambient-blue-glow-2" />
+          {/* === LIQUID GLASS BLUE GRADIENT LAYERS === */}
+          {/* Radial blue glow top-left */}
+          <div className="absolute -top-24 -left-24 w-80 h-80 rounded-full bg-blue-400/25 dark:bg-[#5a25eb]/15 blur-3xl pointer-events-none z-0" />
+          {/* Radial blue glow bottom-right */}
+          <div className="absolute -bottom-24 -right-24 w-96 h-96 rounded-full bg-indigo-400/25 dark:bg-[#3a1c8c]/20 blur-3xl pointer-events-none z-0" />
+          {/* Diagonal blue sheen */}
+          <div className="absolute inset-0 bg-gradient-to-br from-blue-100/60 via-white/10 to-indigo-200/40 dark:from-[#5a25eb]/5 dark:via-transparent dark:to-[#3a1c8c]/10 pointer-events-none z-0" />
+          {/* Top white glass highlight */}
+          <div className="absolute top-0 left-0 right-0 h-24 bg-gradient-to-b from-white/70 to-transparent dark:from-white/[0.04] pointer-events-none z-0" />
+          {/* Subtle animated shimmer */}
+          <motion.div
+            animate={{
+              opacity: [0.15, 0.3, 0.15],
+              backgroundPosition: ['0% 0%', '100% 100%', '0% 0%'],
+            }}
+            transition={{ duration: 14, repeat: Infinity, ease: "easeInOut" }}
+            className="absolute inset-0 pointer-events-none z-0"
+            style={{
+              background: 'radial-gradient(circle at 30% 20%, rgba(147,197,253,0.25), transparent 50%), radial-gradient(circle at 70% 80%, rgba(129,140,248,0.25), transparent 50%)',
+              backgroundSize: '200% 200%',
+            }}
+          />
 
-              {/* Our Fluid Interactive Hero Animation Orb */}
-              <div className="cursor-pointer transform hover:scale-105 transition-transform duration-300 drop-shadow-[0_0_35px_rgba(90,37,235,0.35)]">
-                <AILoaderOrb
-                  state={currentOrbState}
-                  text={currentOrbText}
-                  size={120}
-                  variant="hero"
-                />
+          {/* === HEADER === */}
+          <div className="hidden sm:flex py-2 px-3 my-1 rounded-2xl
+                          bg-white/80 dark:bg-[#0a0a10]/80
+                          backdrop-blur-md
+                          border border-blue-200/70 dark:border-[#1c1c28]
+                          items-center justify-between
+                          shadow-[0_4px_20px_-8px_rgba(59,130,246,0.25)]
+                          dark:shadow-2xs
+                          shrink-0 relative z-20 mx-3 mt-3">
+            <div className="flex items-center gap-2">
+              <div className="relative flex items-center justify-center">
+                <div className="w-7 h-7 rounded-full bg-[#5a25eb]/10 dark:bg-[#5a25eb]/20 border border-[#5a25eb]/30 flex items-center justify-center shadow-xs overflow-hidden">
+                  <AILoaderOrb state={currentOrbState} variant="avatar" size={20} />
+                </div>
+                <span className="absolute -bottom-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-black" />
+              </div>
+
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <h1 className="text-xs sm:text-sm font-bold tracking-tight text-zinc-900 dark:text-white">
+                    SYNDEO AI
+                  </h1>
+                  <span className="px-1.5 py-0.2 rounded text-[9px] font-mono font-medium bg-[#5a25eb]/10 dark:bg-[#5a25eb]/20 text-[#5a25eb] dark:text-[#cbbeff]">
+                    Vault
+                  </span>
+                </div>
               </div>
             </div>
 
-            {/* Assistant Greeting Titles */}
-            <header className="text-center mb-4 sm:mb-6 space-y-1 px-2">
-              <h2 className="text-slate-400 text-xs sm:text-sm font-normal tracking-wide">
-                Hi, {userName || 'Indresh'}
-              </h2>
-              <h1 className="text-white text-2xl sm:text-4xl font-semibold tracking-tight">
-                How can I help today?
-              </h1>
-              <p className="text-slate-400/90 text-[11px] sm:text-xs font-normal mt-1.5 max-w-sm mx-auto leading-relaxed">
-                I'm here to help — from zero-knowledge memory retrieval to cryptographic proof generation.
-              </p>
-            </header>
-
-            {/* Main Glowing Prompt Container Card (Outer Glass Card) */}
-            <div className="w-full rounded-2xl p-2.5 sm:p-3.5 bg-gradient-to-b from-[#141e33]/50 to-[#0a0f1d]/70 border border-sky-500/20 shadow-[0_15px_40px_-10px_rgba(0,0,0,0.7),0_0_35px_-10px_rgba(38,167,222,0.15)] backdrop-blur-2xl transition-shadow">
-              {/* Header Pill Badge for Sovereign Pro Tier */}
-              <div className="flex items-center gap-1.5 text-xs font-medium text-slate-300/90 px-2 py-1 mb-2.5">
-                <Zap className="w-3.5 h-3.5 fill-current text-sky-400" />
-                <span className="hover:text-white cursor-pointer transition-colors font-medium">
-                  Zero-Knowledge Sovereign Vault Active
+            <div className="flex items-center gap-1.5">
+              <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-blue-50 dark:bg-[#12121a] border border-blue-200 dark:border-[#222230] text-[10px] text-zinc-600 dark:text-[#a1a1aa]">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#5a25eb] dark:bg-[#cbbeff] animate-pulse" />
+                <span className="capitalize font-mono font-bold text-[10px]">
+                  {currentOrbState}
                 </span>
               </div>
 
-              {/* Inner Dark Textarea Input Container */}
-              <div className="bg-[#090810]/95 rounded-xl p-3 border border-white/[0.06] shadow-inner flex flex-col justify-between min-h-[110px]">
-                {/* Attached File Pill */}
-                {attachedFile && (
-                  <div className="mb-2 p-2 rounded-lg bg-[#5a25eb]/15 border border-[#5a25eb]/30 flex items-center justify-between text-xs text-[#cbbeff]">
-                    <div className="flex items-center gap-2 truncate">
-                      <FileText className="w-3.5 h-3.5 shrink-0 text-[#cbbeff]" />
-                      <span className="font-semibold truncate">{attachedFile.name}</span>
-                      <span className="text-[10px] text-slate-400 font-mono">({attachedFile.formattedSize})</span>
-                    </div>
-                    <button
-                      onClick={() => setAttachedFile(null)}
-                      className="p-1 rounded text-slate-400 hover:text-white cursor-pointer"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                )}
+              {isSpeakingVoice && (
+                <button
+                  onClick={stopAudio}
+                  className="p-1.5 rounded-lg text-red-500 hover:bg-red-500/10 transition-colors cursor-pointer"
+                  title="Stop Audio"
+                >
+                  <VolumeX className="w-3.5 h-3.5" />
+                </button>
+              )}
 
-                <textarea
-                  ref={textareaRef}
-                  value={inputText}
-                  onChange={(e) => setInputText(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  rows={2}
-                  placeholder="Ask me anything or query your vault ..."
-                  className="w-full bg-transparent border-0 resize-none text-sm text-slate-100 placeholder-slate-500 focus:ring-0 focus:outline-none p-1 font-normal leading-relaxed"
-                />
-
-                {/* Input Footer Actions Toolbar */}
-                <div className="flex items-center justify-between pt-2">
-                  {/* Left Tool Actions */}
-                  <div className="flex items-center gap-2">
-                    {/* Import file action */}
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium text-slate-300 bg-white/[0.05] hover:bg-white/[0.1] border border-white/[0.08] transition-all cursor-pointer"
-                    >
-                      <Paperclip className="w-3.5 h-3.5 text-slate-400" />
-                      <span>Import file</span>
-                    </button>
-
-                    {/* Tools action toggle */}
-                    <div className="relative">
-                      <button
-                        type="button"
-                        onClick={() => setIsToolsMenuOpen(!isToolsMenuOpen)}
-                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all cursor-pointer ${
-                          chatMode !== 'normal'
-                            ? 'bg-[#5a25eb]/20 text-[#cbbeff] border-[#5a25eb]/40'
-                            : 'text-slate-300 bg-white/[0.05] hover:bg-white/[0.1] border border-white/[0.08]'
-                        }`}
-                      >
-                        <SlidersHorizontal className="w-3.5 h-3.5 text-slate-400" />
-                        <span className="capitalize">{chatMode === 'normal' ? 'Tools' : chatMode}</span>
-                      </button>
-
-                      {/* Dropdown Tools Menu */}
-                      <AnimatePresence>
-                        {isToolsMenuOpen && (
-                          <motion.div
-                            initial={{ opacity: 0, y: -8 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -8 }}
-                            className="absolute left-0 bottom-full mb-2 w-48 p-1.5 rounded-xl bg-[#0f0e1a] border border-[#2a283c] shadow-2xl z-30 text-xs space-y-1"
-                          >
-                            <button
-                              onClick={() => {
-                                setChatMode('normal');
-                                setIsToolsMenuOpen(false);
-                              }}
-                              className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-white/5 text-slate-200 cursor-pointer"
-                            >
-                              🔍 Standard Query
-                            </button>
-                            <button
-                              onClick={() => {
-                                setChatMode('save');
-                                setIsToolsMenuOpen(false);
-                              }}
-                              className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-white/5 text-slate-200 cursor-pointer"
-                            >
-                              💾 Save to Vault
-                            </button>
-                            <button
-                              onClick={() => {
-                                setChatMode('share');
-                                setIsToolsMenuOpen(false);
-                              }}
-                              className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-white/5 text-slate-200 cursor-pointer"
-                            >
-                              🔗 Compose zk-Proof
-                            </button>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </div>
-                  </div>
-
-                  {/* Right Controls: Audio & Send Button */}
-                  <div className="flex items-center gap-2.5">
-                    {/* Audio Dictation Icon */}
-                    <button
-                      type="button"
-                      onClick={toggleVoiceInput}
-                      aria-label="Voice Input"
-                      className={`p-1.5 rounded-full transition-colors cursor-pointer ${
-                        voiceState === 'listening'
-                          ? 'bg-red-500 text-white animate-pulse'
-                          : 'text-slate-400 hover:text-white hover:bg-white/5'
-                      }`}
-                      title={voiceState === 'listening' ? 'Listening...' : 'Voice Input'}
-                    >
-                      {voiceState === 'listening' ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-                    </button>
-
-                    {/* Purple / Indigo Send Button with Up Arrow */}
-                    <button
-                      type="button"
-                      onClick={() => handleSendMessage()}
-                      disabled={(!inputText.trim() && !attachedFile) || isTyping || isStreaming}
-                      aria-label="Send Prompt"
-                      className={`w-8 h-8 rounded-full flex items-center justify-center text-white transition-all shadow-md active:scale-95 cursor-pointer ${
-                        inputText.trim() || attachedFile
-                          ? 'bg-[#5a25eb] hover:bg-[#6b37fa] shadow-[#5a25eb]/40 ring-1 ring-white/20'
-                          : 'bg-white/10 text-slate-500 cursor-not-allowed'
-                      }`}
-                    >
-                      <ArrowUp className="w-4 h-4 stroke-[2.5]" />
-                    </button>
-                  </div>
-                </div>
-              </div>
+              <button
+                onClick={handleResetChat}
+                className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors cursor-pointer"
+                title="Reset Chat"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+              </button>
             </div>
-
-            {/* Quick Action Cards Section (3 Cards Exactly Matching Structure) */}
-            <section className="w-full grid grid-cols-1 sm:grid-cols-3 gap-3 mt-5">
-              {/* Card 1: Query Education / Memory Graph */}
-              <article
-                onClick={() => handleSendMessage("What's my education status and degree?")}
-                className="group bg-[#0b0a14]/70 hover:bg-[#121120]/90 border border-white/[0.06] hover:border-[#5a25eb]/40 rounded-xl p-3.5 flex flex-col justify-start cursor-pointer transition-all duration-200 shadow-sm"
-              >
-                <div className="flex items-center gap-2 text-white font-medium text-xs mb-1">
-                  <span className="text-amber-400">
-                    <Star className="w-3.5 h-3.5 fill-current" />
-                  </span>
-                  <span className="tracking-tight text-[13px] font-semibold">Query Education</span>
-                </div>
-                <p className="text-slate-400 text-[11px] leading-relaxed group-hover:text-slate-300 transition-colors">
-                  SLRTCE Computer Engineering & CGPA records.
-                </p>
-              </article>
-
-              {/* Card 2: Verify & Extract Document */}
-              <article
-                onClick={() => {
-                  fileInputRef.current?.click();
-                }}
-                className="group bg-[#0b0a14]/70 hover:bg-[#121120]/90 border border-white/[0.06] hover:border-[#5a25eb]/40 rounded-xl p-3.5 flex flex-col justify-start cursor-pointer transition-all duration-200 shadow-sm"
-              >
-                <div className="flex items-center gap-2 text-white font-medium text-xs mb-1">
-                  <span className="text-[#cbbeff]">
-                    <FileSearch className="w-3.5 h-3.5" />
-                  </span>
-                  <span className="tracking-tight text-[13px] font-semibold">Verify Document</span>
-                </div>
-                <p className="text-slate-400 text-[11px] leading-relaxed group-hover:text-slate-300 transition-colors">
-                  Upload PDF to extract & seal zero-knowledge evidence.
-                </p>
-              </article>
-
-              {/* Card 3: Selective Share Proof */}
-              <article
-                onClick={() => handleSendMessage('Show all my verified social and developer links')}
-                className="group bg-[#0b0a14]/70 hover:bg-[#121120]/90 border border-white/[0.06] hover:border-[#5a25eb]/40 rounded-xl p-3.5 flex flex-col justify-start cursor-pointer transition-all duration-200 shadow-sm"
-              >
-                <div className="flex items-center gap-2 text-white font-medium text-xs mb-1">
-                  <span className="text-emerald-400">
-                    <ShieldCheck className="w-3.5 h-3.5" />
-                  </span>
-                  <span className="tracking-tight text-[13px] font-semibold">Social Proof</span>
-                </div>
-                <p className="text-slate-400 text-[11px] leading-relaxed group-hover:text-slate-300 transition-colors">
-                  Retrieve verified GitHub, LinkedIn & Discord credentials.
-                </p>
-              </article>
-            </section>
           </div>
-        ) : (
-          /* =========================================================================
-              2. ACTIVE CONVERSATION STREAM (When messages exist)
-             ========================================================================= */
-          <div className="w-full max-w-2xl space-y-4 py-2">
+
+          {/* === MESSAGES STREAM === */}
+          <div ref={messagesContainerRef} className="flex-1 min-h-0 overflow-y-auto px-1 sm:px-2 py-2.5 space-y-3.5 scrollbar-none no-scrollbar flex flex-col justify-start relative z-10">
+
+            {/* Welcome Hero */}
+            {messages.length === 0 && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.97 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="my-auto py-6 sm:py-8 px-4 sm:px-6 rounded-3xl bg-transparent text-center space-y-4 relative overflow-hidden flex flex-col items-center justify-center min-h-[400px]"
+              >
+                <div className="flex items-center justify-center my-2">
+                  <AILoaderOrb
+                    state={currentOrbState}
+                    text={currentOrbText}
+                    size={150}
+                    variant="hero"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <h2 className="text-lg sm:text-xl font-bold text-zinc-900 dark:text-white tracking-tight">
+                    Hi, {userName}
+                  </h2>
+                  <h3 className="text-xl sm:text-2xl font-bold text-zinc-900 dark:text-white tracking-tight">
+                    How can I help today?
+                  </h3>
+                  <p className="text-xs sm:text-sm text-zinc-500 dark:text-[#8c879a] max-w-md mx-auto pt-1">
+                    I'm here to help — from quick answers<br/>to smart recommendations.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-lg mx-auto pt-4 w-full">
+                  {quickPrompts.map((p, idx) => {
+                    const Icon = p.icon;
+                    return (
+                      <button
+                        key={idx}
+                        onClick={() => handleSendMessage(p.text)}
+                        className="p-4 rounded-2xl
+                                   bg-white/70 dark:bg-[#12121a]/80
+                                   backdrop-blur-md
+                                   border border-blue-200/70 dark:border-[#222230]
+                                   hover:border-blue-400/80 dark:hover:border-[#5a25eb]/50
+                                   hover:bg-blue-50/80 dark:hover:bg-[#5a25eb]/5
+                                   text-left transition-all cursor-pointer flex items-start gap-3 group
+                                   shadow-[0_4px_20px_-8px_rgba(59,130,246,0.3)]
+                                   dark:shadow-lg dark:shadow-black/20"
+                      >
+                        <div className="w-9 h-9 rounded-xl bg-blue-100/80 dark:bg-[#5a25eb]/15 border border-blue-300/60 dark:border-[#5a25eb]/30 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform mt-0.5">
+                          <Icon className="w-4.5 h-4.5 text-[#5a25eb] dark:text-[#cbbeff]" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <span className="font-semibold text-zinc-800 dark:text-zinc-200 group-hover:text-zinc-900 dark:group-hover:text-white truncate block text-sm">
+                            {p.title}
+                          </span>
+                          <span className="text-xs text-zinc-500 dark:text-zinc-500 group-hover:text-zinc-600 dark:group-hover:text-zinc-400 truncate block mt-0.5">
+                            {p.subtitle}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </motion.div>
+            )}
+
+            {/* Messages */}
             {messages.map((msg) => {
               const isUser = msg.sender === 'user';
               return (
@@ -868,28 +784,31 @@ export const ChatPage: React.FC = () => {
                   key={msg.id}
                   initial={{ opacity: 0, y: 5 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className={`flex gap-3 max-w-2xl ${isUser ? 'ml-auto justify-end' : 'mr-auto justify-start'}`}
+                  transition={{ duration: 0.12 }}
+                  className={`flex gap-2.5 max-w-2xl ${isUser ? 'ml-auto justify-end' : 'mr-auto justify-start'}`}
                 >
                   {!isUser && (
-                    <div className="w-8 h-8 rounded-full bg-[#121120] border border-white/10 flex items-center justify-center shrink-0 mt-0.5 overflow-hidden shadow-sm">
-                      <AILoaderOrb state={isSpeakingVoice ? 'speaking' : 'idle'} variant="avatar" size={20} />
+                    <div className="w-7 h-7 rounded-full bg-white/80 dark:bg-[#12121c] border border-blue-200 dark:border-[#222230] flex items-center justify-center shrink-0 shadow-2xs mt-0.5 overflow-hidden">
+                      <AILoaderOrb state={isSpeakingVoice ? 'speaking' : 'idle'} variant="avatar" size={22} />
                     </div>
                   )}
 
-                  <div className={`space-y-1.5 ${isUser ? 'items-end' : 'items-start'} max-w-[85%]`}>
+                  <div className={`space-y-1 ${isUser ? 'items-end' : 'items-start'}`}>
                     <div
-                      className={`p-4 rounded-2xl text-xs sm:text-sm leading-relaxed ${
+                      className={`p-3.5 rounded-2xl text-xs sm:text-sm leading-relaxed ${
                         isUser
-                          ? 'bg-[#5a25eb] text-white rounded-br-xs shadow-md font-medium'
-                          : 'bg-[#0f0e1a]/90 border border-white/[0.08] text-slate-100 rounded-bl-xs shadow-lg backdrop-blur-md'
+                          ? 'bg-[#5a25eb] text-white rounded-br-xs shadow-xs font-medium'
+                          : 'bg-white/85 dark:bg-[#0c0c12] border border-blue-200/70 dark:border-[#1c1c28] text-zinc-900 dark:text-[#e4e1e8] rounded-bl-xs shadow-2xs backdrop-blur-md'
                       }`}
                     >
                       {isUser && msg.attachment && (
-                        <div className="mb-2.5 p-2 rounded-xl bg-white/15 border border-white/20 flex items-center gap-2 text-white">
-                          <FileText className="w-4 h-4 shrink-0" />
+                        <div className="mb-2 p-2 rounded-xl bg-white/15 border border-white/25 flex items-center gap-2 text-white">
+                          <div className="p-1.5 rounded-lg bg-white/20 shrink-0">
+                            <FileText className="w-3.5 h-3.5 text-white" />
+                          </div>
                           <div className="min-w-0 flex-1">
-                            <p className="text-xs font-semibold truncate">{msg.attachment.name}</p>
-                            <p className="text-[10px] text-white/80 font-mono">{msg.attachment.size}</p>
+                            <p className="text-xs font-semibold truncate leading-tight">{msg.attachment.name}</p>
+                            <p className="text-[10px] text-white/75 font-mono">{msg.attachment.size}</p>
                           </div>
                         </div>
                       )}
@@ -897,11 +816,11 @@ export const ChatPage: React.FC = () => {
                       <div>{renderFormattedContent(msg.content, isUser)}</div>
 
                       {!isUser && (
-                        <div className="mt-3 pt-2.5 border-t border-white/[0.08] flex items-center justify-between text-[11px] text-slate-400">
-                          <div className="flex items-center gap-3">
+                        <div className="mt-2.5 pt-2 border-t border-zinc-100 dark:border-white/10 flex items-center justify-between text-[10px] text-zinc-400">
+                          <div className="flex items-center gap-2">
                             <button
                               onClick={() => speakText(msg.content)}
-                              className="flex items-center gap-1 text-[#cbbeff] hover:underline font-semibold cursor-pointer"
+                              className="flex items-center gap-1 text-[#5a25eb] dark:text-[#cbbeff] hover:underline font-semibold cursor-pointer"
                             >
                               <Volume2 className="w-3 h-3" />
                               <span>Listen</span>
@@ -909,38 +828,46 @@ export const ChatPage: React.FC = () => {
                             <span>•</span>
                             <button
                               onClick={() => handleCopy(msg.id, msg.content)}
-                              className="flex items-center gap-1 hover:text-white cursor-pointer"
+                              className="flex items-center gap-1 hover:text-zinc-900 dark:hover:text-white cursor-pointer"
                             >
-                              {copiedId === msg.id ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                              {copiedId === msg.id ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
                               <span>{copiedId === msg.id ? 'Copied' : 'Copy'}</span>
                             </button>
                           </div>
-                          <span className="font-mono text-[10px]">{msg.timestamp}</span>
+                          <span className="font-mono text-[9px]">{msg.timestamp}</span>
                         </div>
                       )}
                     </div>
 
                     {!isUser && msg.sourceType && (
-                      <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                      <div className="flex flex-wrap items-center gap-1 pt-0.5">
                         {msg.sourceType === 'evidence-backed' && (
-                          <div className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[10px] bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 font-medium font-mono">
+                          <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] bg-emerald-500/10 border border-emerald-500/25 text-emerald-600 dark:text-emerald-400 font-medium">
                             <FileCheck className="w-3 h-3" />
-                            <span className="truncate max-w-[200px]">{msg.evidenceDoc || 'Evidence_Record.pdf'}</span>
+                            <span className="font-mono text-[9px] truncate max-w-[180px]">
+                              {msg.evidenceDoc || 'Degree_Certificate_SLRTCE_2024.pdf'}
+                            </span>
                           </div>
                         )}
                         {msg.sourceType === 'user-confirmed' && (
-                          <div className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[10px] bg-[#5a25eb]/10 border border-[#5a25eb]/25 text-[#cbbeff]">
+                          <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] bg-[#5a25eb]/10 border border-[#5a25eb]/25 text-[#5a25eb] dark:text-[#cbbeff]">
                             <UserCheck className="w-3 h-3" />
                             <span>{msg.sourceNote || 'Self-asserted'}</span>
                           </div>
                         )}
                       </div>
                     )}
+
+                    {isUser && (
+                      <div className="text-right text-[9px] text-zinc-400">
+                        {msg.timestamp}
+                      </div>
+                    )}
                   </div>
 
                   {isUser && (
-                    <div className="w-8 h-8 rounded-full bg-[#5a25eb]/20 border border-[#5a25eb]/40 flex items-center justify-center shrink-0 font-bold text-xs text-[#cbbeff] mt-0.5">
-                      {(userName || 'US').slice(0, 2).toUpperCase()}
+                    <div className="w-7 h-7 rounded-full bg-[#5a25eb]/15 border border-[#5a25eb]/30 flex items-center justify-center shrink-0 font-bold text-[10px] text-[#5a25eb] dark:text-[#cbbeff] mt-0.5">
+                      {userName.slice(0, 2).toUpperCase()}
                     </div>
                   )}
                 </motion.div>
@@ -951,12 +878,12 @@ export const ChatPage: React.FC = () => {
               <motion.div
                 initial={{ opacity: 0, y: 5 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="flex gap-3 max-w-2xl mr-auto justify-start"
+                className="flex gap-2.5 max-w-2xl mr-auto justify-start"
               >
-                <div className="w-8 h-8 rounded-full bg-[#121120] border border-white/10 flex items-center justify-center shrink-0 mt-0.5 overflow-hidden shadow-sm">
-                  <AILoaderOrb state={isSpeakingVoice ? 'speaking' : 'generating'} variant="avatar" size={20} />
+                <div className="w-7 h-7 rounded-full bg-[#5a25eb]/15 border border-[#5a25eb]/30 flex items-center justify-center shrink-0 shadow-xs mt-0.5 overflow-hidden">
+                  <AILoaderOrb state={isSpeakingVoice ? 'speaking' : 'generating'} variant="avatar" size={22} />
                 </div>
-                <div className="p-4 rounded-2xl text-xs sm:text-sm bg-[#0f0e1a]/90 border-2 border-[#5a25eb] text-slate-100 shadow-xl">
+                <div className="p-3.5 rounded-2xl text-xs sm:text-sm bg-white/85 dark:bg-[#0c0c12] border-2 border-[#5a25eb] text-zinc-900 dark:text-white shadow-xs backdrop-blur-md">
                   <div className="leading-relaxed">
                     {renderFormattedContent(streamingText, false)}
                     <span className="inline-block w-1.5 h-3.5 bg-[#5a25eb] ml-1 animate-pulse align-middle" />
@@ -969,83 +896,251 @@ export const ChatPage: React.FC = () => {
               <motion.div
                 initial={{ opacity: 0, y: 4 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="flex items-center gap-2.5 py-2"
+                className="flex items-center gap-2.5 py-1.5"
               >
-                <div className="inline-flex h-9 items-center gap-2.5 rounded-full pl-2.5 pr-4 bg-[#0f0e1a] border border-white/[0.08] shadow-sm">
-                  <ThinkingOrb state={currentThinkingStep.state} size={20} theme="auto" />
-                  <span className="text-xs text-[#cbbeff] font-mono">{currentThinkingStep.text}</span>
+                <div className="inline-flex h-9 items-center gap-2.5 rounded-full pl-2.5 pr-4 bg-white/85 dark:bg-[#0c0c12] border border-blue-200 dark:border-[#222230] shadow-xs backdrop-blur-md">
+                  <ThinkingOrb
+                    state={currentThinkingStep.state}
+                    size={20}
+                    theme="auto"
+                  />
+                  <AnimatePresence mode="wait">
+                    <motion.span
+                      key={currentThinkingStep.text}
+                      initial={{ opacity: 0, y: 3 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -3 }}
+                      transition={{ duration: 0.22 }}
+                      className="whitespace-nowrap text-xs font-medium text-zinc-700 dark:text-zinc-200"
+                    >
+                      {currentThinkingStep.text}
+                    </motion.span>
+                  </AnimatePresence>
                 </div>
               </motion.div>
             )}
-          </div>
-        )}
-      </div>
 
-      {/* =========================================================================
-          BOTTOM FIXED PROMPT BAR (When in active conversation mode)
-         ========================================================================= */}
-      {messages.length > 0 && (
-        <div className="w-full max-w-2xl mx-auto px-4 pb-4 shrink-0 z-20">
-          <div className="w-full rounded-2xl p-2.5 bg-[#0e0d18]/90 border border-[#5a25eb]/30 shadow-2xl backdrop-blur-xl">
-            {attachedFile && (
-              <div className="mb-2 p-1.5 rounded-lg bg-[#5a25eb]/15 border border-[#5a25eb]/30 flex items-center justify-between text-xs text-[#cbbeff]">
-                <span className="truncate">{attachedFile.name} ({attachedFile.formattedSize})</span>
-                <button onClick={() => setAttachedFile(null)} className="text-slate-400 hover:text-white">
-                  <X className="w-3 h-3" />
+            <div ref={messagesEndRef} />
+          </div>
+
+          {/* === BOTTOM INPUT BAR === */}
+          <div className="pt-1.5 pb-2 sm:pb-3 bg-transparent shrink-0 space-y-2 relative z-20 px-2 sm:px-3">
+
+            {/* Mode Chips */}
+            <div className="flex items-center justify-between gap-2 px-0.5">
+              <div className="flex items-center gap-1 p-0.5 rounded-full bg-white/70 dark:bg-[#12121c] border border-blue-200/70 dark:border-[#222230] backdrop-blur-md overflow-x-auto scrollbar-none max-w-full shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setChatMode('normal')}
+                  className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer shrink-0 ${
+                    chatMode === 'normal'
+                      ? 'bg-[#5a25eb] text-white shadow-xs'
+                      : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
+                  }`}
+                >
+                  <QuestionIcon className="w-3 h-3" />
+                  <span>Normal</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setChatMode('save')}
+                  className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer shrink-0 ${
+                    chatMode === 'save'
+                      ? 'bg-emerald-600 text-white shadow-xs'
+                      : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
+                  }`}
+                >
+                  <Save className="w-3 h-3" />
+                  <span>Save</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setChatMode('share')}
+                  className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer shrink-0 ${
+                    chatMode === 'share'
+                      ? 'bg-[#8a54ff] text-white shadow-xs'
+                      : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
+                  }`}
+                >
+                  <Share2 className="w-3 h-3" />
+                  <span>Share</span>
                 </button>
               </div>
-            )}
 
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="p-2 rounded-full text-slate-400 hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
-                title="Attach Document"
-              >
-                <Paperclip className="w-4 h-4" />
-              </button>
+              <div className="hidden sm:flex items-center gap-1 text-[10px] text-zinc-400">
+                <ShieldCheck className="w-3 h-3 text-emerald-500" />
+                <span>Encrypted</span>
+              </div>
+            </div>
 
-              <input
-                type="text"
-                value={inputText}
-                onChange={(e) => setInputText(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    handleSendMessage();
-                  }
+            {/* Attached File Preview */}
+            <AnimatePresence>
+              {attachedFile && (
+                <motion.div
+                  initial={{ opacity: 0, y: 6, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 4, scale: 0.95 }}
+                  className="flex items-center gap-2 p-1.5 pl-2.5 pr-2 rounded-xl bg-white/85 dark:bg-[#12121c] border border-blue-200 dark:border-[#272738] shadow-xs backdrop-blur-md max-w-sm"
+                >
+                  <div className="p-1 rounded-md bg-[#5a25eb]/10 dark:bg-[#5a25eb]/20 text-[#5a25eb] dark:text-[#cbbeff] shrink-0">
+                    <FileText className="w-3.5 h-3.5" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-semibold text-zinc-900 dark:text-zinc-100 truncate">{attachedFile.name}</p>
+                    <p className="text-[10px] text-zinc-500 dark:text-zinc-400 font-mono">{attachedFile.formattedSize}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setAttachedFile(null)}
+                    className="p-1 rounded-md text-zinc-400 hover:text-zinc-700 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                    title="Remove attachment"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Input Container with Animated Gradient Border */}
+            <motion.div
+              animate={{
+                boxShadow: [
+                  '0 0 15px rgba(90, 37, 235, 0.2), inset 0 0 10px rgba(90, 37, 235, 0.05)',
+                  '0 0 25px rgba(90, 37, 235, 0.4), inset 0 0 15px rgba(90, 37, 235, 0.1)',
+                  '0 0 15px rgba(90, 37, 235, 0.2), inset 0 0 10px rgba(90, 37, 235, 0.05)'
+                ]
+              }}
+              transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+              className="w-full max-w-2xl mx-auto rounded-3xl p-[1.5px] relative overflow-hidden
+                         bg-white/60 dark:bg-[#0c0c12]"
+            >
+              <motion.div
+                animate={{
+                  backgroundPosition: ['0% 50%', '100% 50%', '0% 50%']
                 }}
-                placeholder="Ask SYNDEO AI about your records..."
-                className="flex-1 bg-transparent border-0 text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-0 px-2 py-1.5"
+                transition={{ duration: 6, repeat: Infinity, ease: "linear" }}
+                className="absolute inset-0 rounded-3xl opacity-80"
+                style={{
+                  background: 'linear-gradient(90deg, #5a25eb, #93c5fd, #cbbeff, #5a25eb)',
+                  backgroundSize: '300% 300%',
+                }}
               />
 
-              <button
-                type="button"
-                onClick={toggleVoiceInput}
-                className={`p-2 rounded-full transition-colors cursor-pointer ${
-                  voiceState === 'listening' ? 'bg-red-500 text-white animate-pulse' : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                <Mic className="w-4 h-4" />
-              </button>
+              <div className="relative w-full h-full
+                              bg-white/85 dark:bg-[#0c0c12]/95
+                              backdrop-blur-xl
+                              rounded-[calc(1.5rem-1px)] p-3 z-10">
 
-              <button
-                type="button"
-                onClick={() => handleSendMessage()}
-                disabled={(!inputText.trim() && !attachedFile) || isTyping || isStreaming}
-                className={`w-8 h-8 rounded-full flex items-center justify-center text-white transition-all ${
-                  inputText.trim() || attachedFile
-                    ? 'bg-[#5a25eb] hover:bg-[#6b37fa] shadow-md shadow-[#5a25eb]/30'
-                    : 'bg-white/10 text-slate-500'
-                }`}
-              >
-                <ArrowUp className="w-4 h-4 stroke-[2.5]" />
-              </button>
-            </div>
+                <div className="absolute top-0 left-0 right-0 h-1/2 bg-gradient-to-b from-white/50 dark:from-white/[0.03] to-transparent pointer-events-none rounded-t-[calc(1.5rem-1px)]" />
+
+                <div className="flex items-center gap-2 mb-3 px-1 relative z-10">
+                  <Sparkles className="w-4 h-4 text-[#5a25eb] dark:text-[#cbbeff]" />
+                  <span className="text-xs font-semibold text-zinc-600 dark:text-zinc-300 tracking-wide">
+                    Unlock more features with Pro
+                  </span>
+                </div>
+
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    handleSendMessage();
+                  }}
+                  className="relative flex items-center
+                             bg-white/70 dark:bg-[#050508]/80
+                             rounded-2xl
+                             border border-blue-200/80 dark:border-[#1a1a24]
+                             focus-within:border-[#5a25eb]/50
+                             focus-within:ring-1 focus-within:ring-[#5a25eb]/20
+                             transition-all p-1 z-10 backdrop-blur-md"
+                >
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleFileChange}
+                    className="hidden"
+                    accept=".pdf,.png,.jpg,.jpeg,.doc,.docx,.txt,.json,.csv"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="p-2 rounded-xl text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white hover:bg-blue-100/60 dark:hover:bg-zinc-800/50 transition-colors cursor-pointer ml-1"
+                    title="Attach document or image"
+                    aria-label="Attach file"
+                  >
+                    <Paperclip className="w-4 h-4" />
+                  </button>
+
+                  <input
+                    type="text"
+                    value={inputText}
+                    onChange={(e) => setInputText(e.target.value)}
+                    placeholder={
+                      voiceState === 'listening'
+                        ? 'Listening...'
+                        : attachedFile
+                        ? `Message with ${attachedFile.name}...`
+                        : chatMode === 'save'
+                        ? 'Save record (e.g. "Passport: Z8921098")...'
+                        : chatMode === 'share'
+                        ? 'Share fields (e.g. "Degree with Acme")...'
+                        : 'Ask me anything...'
+                    }
+                    className="flex-1 bg-transparent px-3 py-2 text-xs sm:text-sm text-zinc-800 dark:text-zinc-100 placeholder-zinc-500 focus:outline-none"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={toggleVoiceInput}
+                    className={`p-2 rounded-xl transition-all cursor-pointer mr-1 ${
+                      voiceState === 'listening'
+                        ? 'bg-red-500 text-white animate-pulse'
+                        : 'text-zinc-500 hover:text-[#5a25eb] dark:hover:text-white hover:bg-blue-100/60 dark:hover:bg-zinc-800/50'
+                    }`}
+                    title="Voice Input"
+                  >
+                    {voiceState === 'listening' ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
+                  </button>
+
+                  <button
+                    type="submit"
+                    disabled={(!inputText.trim() && !attachedFile) || isTyping || isStreaming}
+                    className="p-2 rounded-xl bg-[#5a25eb] hover:bg-[#6b37fa] text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-md shadow-[#5a25eb]/30 cursor-pointer mr-1"
+                    aria-label="Send"
+                  >
+                    <ArrowUp className="w-4 h-4 stroke-[3]" />
+                  </button>
+                </form>
+
+                <div className="flex items-center gap-4 mt-3 px-2 relative z-10">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex items-center gap-1.5 text-[10px] font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors cursor-pointer"
+                  >
+                    <Paperclip className="w-3 h-3" />
+                    <span>Import file</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="flex items-center gap-1.5 text-[10px] font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors cursor-pointer"
+                  >
+                    <Sparkles className="w-3 h-3" />
+                    <span>Tools</span>
+                  </button>
+                </div>
+
+              </div>
+            </motion.div>
+
+            <p className="text-[10px] text-center text-zinc-400 dark:text-zinc-600 mt-2 relative z-10">
+              SYNDEO AI • Zero-knowledge cryptographic personal records
+            </p>
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 };
