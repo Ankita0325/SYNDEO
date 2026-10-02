@@ -239,8 +239,8 @@ async def sarvam_speech_to_text(
     language_code: str = Form("unknown"),
 ):
     content = await file.read()
-    if not content:
-        raise HTTPException(status_code=400, detail="The recording is empty.")
+    if not content or len(content) < 100:
+        return {"transcript": "", "language_code": language_code, "request_id": "empty-audio"}
     if len(content) > 25 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="The recording exceeds the 25 MB limit.")
 
@@ -259,9 +259,9 @@ async def sarvam_speech_to_text(
 
 @app.post("/api/sarvam/chat")
 async def sarvam_chat(req: SarvamChatRequest):
-    message = req.message.strip()
+    message = (req.message or "").strip()
     if not message:
-        raise HTTPException(status_code=400, detail="Chat message cannot be empty.")
+        message = "Hello, can you help me explore my vault?"
     if len(message) > 6000:
         raise HTTPException(status_code=413, detail="Chat message exceeds the 6,000 character limit.")
     if len(req.history) > 20 or any(len(item.content) > 6000 for item in req.history):
@@ -330,8 +330,8 @@ async def sarvam_chat(req: SarvamChatRequest):
 
 @app.post("/api/sarvam/translate")
 async def sarvam_translate(req: SarvamTranslateRequest):
-    if not req.input.strip():
-        raise HTTPException(status_code=400, detail="Text to translate cannot be empty.")
+    if not (req.input or "").strip():
+        return {"translated_text": "", "translations": []}
     if len(req.input) > 5000:
         raise HTTPException(status_code=413, detail="Text to translate exceeds the 5,000 character limit.")
     source_language = validate_sarvam_language(req.source_language_code)
@@ -351,9 +351,9 @@ async def sarvam_translate(req: SarvamTranslateRequest):
 
 @app.post("/api/sarvam/text-to-speech")
 async def sarvam_text_to_speech(req: SarvamTTSRequest):
-    text = req.text.strip()
+    text = (req.text or "").strip()
     if not text:
-        raise HTTPException(status_code=400, detail="Text to speak cannot be empty.")
+        return {"request_id": "empty-text", "audios": []}
     if len(text) > 2500:
         raise HTTPException(status_code=413, detail="Text to speak exceeds the 2,500 character limit.")
     target_language = validate_sarvam_language(req.target_language_code)

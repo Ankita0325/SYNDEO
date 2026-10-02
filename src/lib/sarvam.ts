@@ -122,7 +122,9 @@ export async function transcribeWithSarvam(
   languageCode: SarvamLanguageCode | 'unknown',
   fileName: string,
 ): Promise<SarvamSTTResponse> {
-  if (!audioBlob.size) throw new Error('No audio was recorded. Try speaking again.');
+  if (!audioBlob || !audioBlob.size || audioBlob.size < 100) {
+    return { transcript: '', language_code: languageCode };
+  }
   const formData = new FormData();
   formData.append('file', audioBlob, fileName);
   formData.append('language_code', languageCode);
@@ -132,9 +134,6 @@ export async function transcribeWithSarvam(
     body: formData,
   });
   const result = await readResponse<SarvamSTTResponse>(response);
-  if (!result.transcript?.trim()) {
-    throw new Error('Sarvam could not recognize speech in that recording. Please try again.');
-  }
   return result;
 }
 
@@ -144,6 +143,7 @@ export async function translateWithSarvam(
   targetLanguageCode: SarvamLanguageCode,
 ): Promise<string> {
   if (sourceLanguageCode === targetLanguageCode) return text;
+  if (!text.trim()) return '';
 
   const response = await fetchSarvam('/api/sarvam/translate', {
     method: 'POST',
@@ -156,8 +156,7 @@ export async function translateWithSarvam(
   });
   const result = await readResponse<SarvamTranslationResponse>(response);
   const translatedText = result.translated_text || result.translations?.[0]?.translated_text;
-  if (!translatedText?.trim()) throw new Error('Sarvam returned an empty translation.');
-  return translatedText;
+  return translatedText || '';
 }
 
 export async function synthesizeWithSarvam(
@@ -170,7 +169,9 @@ export async function synthesizeWithSarvam(
     throw new Error('Sarvam Bulbul v3 does not currently list Urdu for text-to-speech. Select another language for spoken replies.');
   }
   const cleanText = text.replace(/[*_#[\]()]/g, '').trim();
-  if (!cleanText) throw new Error('There is no text to speak.');
+  if (!cleanText) {
+    return { audios: [] };
+  }
   if (cleanText.length > 2500) {
     throw new Error('Sarvam text-to-speech supports up to 2,500 characters per response.');
   }
@@ -186,7 +187,9 @@ export async function synthesizeWithSarvam(
     }),
   });
   const result = await readResponse<SarvamTTSResponse>(response);
-  if (!result.audios?.length) throw new Error('Sarvam did not return speech audio.');
+  if (!result.audios?.length) {
+    return { audios: [] };
+  }
   return result;
 }
 
