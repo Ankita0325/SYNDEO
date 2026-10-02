@@ -966,7 +966,7 @@ export const ChatPage: React.FC = () => {
     } else if (lower.includes('blood')) {
       category = 'healthcare';
       fieldName = 'Blood Group';
-      const bgMatch = clean.match(/\b(A|B|AB|O)[+-]\b/i) || clean.match(/(?:o|a|b|ab)\s*(?:positive|negative|\+|\-)/i);
+      const bgMatch = clean.match(/\b(A|B|AB|O)[+-]\b/i) || clean.match(/(?:o|a|b|ab)\s*(?:positive|negative|\+|-)/i);
       value = bgMatch ? bgMatch[0].toUpperCase() : clean.replace(/.*(?:blood\s*group|blood)\s*(?:is|:)?\s*/i, '').trim();
     } else if (lower.includes('pan') || lower.includes('tax')) {
       category = 'finance';
@@ -1092,7 +1092,7 @@ export const ChatPage: React.FC = () => {
     void (async () => {
       let extractedText = '';
       let docHash = '';
-      let candidateClaims: any[] = [];
+      const candidateClaims: any[] = [];
 
       try {
         // --- Explicit Save / Store Intent (No document attached) ---
