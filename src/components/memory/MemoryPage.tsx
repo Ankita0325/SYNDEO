@@ -1,13 +1,12 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { initialDocuments, initialRecords } from '../../data/mockData';
 import type { LifeStageCategory, RecordField, DocumentItem, OCRDocumentResult } from '../../types';
-import { fetchRecordsFromBackend, fetchDocumentsFromBackend, addClaimToBackend } from '../../lib/api';
-import { supabase } from '../../lib/supabase';
-import { mapSupabaseDocument, type SupabaseDocumentRow } from '../../lib/documents';
+import { fetchRecordsFromBackend, fetchDocumentsFromBackend, addClaimToBackend, uploadDocumentToBackend } from '../../lib/api';
 import { runLocalOcr } from '../../lib/ocrClient';
 import { StatusBadge } from '../common/Badge';
 import { Modal } from '../common/Modal';
 import { ObsidianGraphView } from './ObsidianGraphView';
+import { useNavigation } from '../../context/NavigationContext';
 import {
   Database,
   FileText,
@@ -30,6 +29,8 @@ import {
   X,
   Loader2,
   Eye,
+  ShieldCheck,
+  MessageSquare,
 } from 'lucide-react';
 
 type ViewMode = 'graph' | 'cards' | 'documents';
@@ -37,6 +38,7 @@ type OCRRecordField = RecordField & { ocrDocument: OCRDocumentResult };
 type LocalDocument = DocumentItem & { fileUrl: string; ocrResult: OCRDocumentResult };
 
 export const MemoryPage: React.FC = () => {
+  const { navigate } = useNavigation();
   const [records, setRecords] = useState<RecordField[]>(initialRecords);
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [localDocuments, setLocalDocuments] = useState<LocalDocument[]>([]);
@@ -49,82 +51,42 @@ export const MemoryPage: React.FC = () => {
   const [viewMode, setViewMode] = useState<ViewMode>('graph');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [selectedOcrRecord, setSelectedOcrRecord] = useState<OCRRecordField | null>(null);
+  const [selectedClaim, setSelectedClaim] = useState<RecordField | null>(null);
+  const [isProvenanceModalOpen, setIsProvenanceModalOpen] = useState(false);
   const [isOcrViewerOpen, setIsOcrViewerOpen] = useState(false);
-  const useSupabaseForDocuments = import.meta.env.VITE_USE_SUPABASE_DOCUMENTS !== 'false';
 
   const showSampleDocuments = useCallback((error?: string) => {
-    setDocuments(initialDocuments.slice(0, 2));
+    setDocuments(initialDocuments.slice(0, 4));
     setIsUsingSampleDocuments(true);
     setDocumentLoadError(error || null);
   }, []);
 
-  // Sync with backend graph store
+  // Sync with live Neo4j backend graph store
   useEffect(() => {
     let active = true;
 
     void (async () => {
-      if (!supabase) {
-        const backendRecs = await fetchRecordsFromBackend();
-        if (active && backendRecs && Array.isArray(backendRecs) && backendRecs.length > 0) {
-          setRecords(backendRecs);
-        }
+      // 1. Fetch live claims from Neo4j Aura
+      const backendRecs = await fetchRecordsFromBackend();
+      if (active && backendRecs && Array.isArray(backendRecs) && backendRecs.length > 0) {
+        setRecords(backendRecs);
       }
 
-      if (supabase && useSupabaseForDocuments) {
-        const { data: { user }, error: userError } = await supabase.auth.getUser();
-        if (userError) {
-          if (active) showSampleDocuments(userError.message);
-          return;
-        }
-        if (!user) {
-          if (active) showSampleDocuments('Sign in to load your vault documents.');
-          return;
-        }
-
-        const { data: profile, error: profileError } = await supabase
-          .from('profiles')
-          .select('id')
-          .eq('auth_user_id', user.id)
-          .single();
-        if (profileError) {
-          if (active) showSampleDocuments(profileError.message);
-          return;
-        }
-
-        const { data, error } = await supabase
-          .from('documents')
-          .select('id, file_name, category, document_type, mime_type, file_size, processing_status, created_at')
-          .eq('profile_id', profile.id)
-          .order('created_at', { ascending: false });
-        if (!active) return;
-        if (error) {
-          showSampleDocuments(error.message);
-          return;
-        }
-        const savedDocuments = (data || []).map((row) => mapSupabaseDocument(row as SupabaseDocumentRow));
-        if (savedDocuments.length === 0) {
-          showSampleDocuments();
-        } else {
-          setDocuments(savedDocuments);
-          setIsUsingSampleDocuments(false);
-          setDocumentLoadError(null);
-        }
+      // 2. Fetch live documents
+      const backendDocs = await fetchDocumentsFromBackend();
+      if (active && backendDocs && Array.isArray(backendDocs) && backendDocs.length > 0) {
+        setDocuments(backendDocs);
+        setIsUsingSampleDocuments(false);
+        setDocumentLoadError(null);
       } else {
-        const backendDocs = await fetchDocumentsFromBackend();
-        if (!active) return;
-        if (backendDocs && Array.isArray(backendDocs) && backendDocs.length > 0) {
-          setDocuments(backendDocs);
-          setIsUsingSampleDocuments(false);
-        } else {
-          showSampleDocuments();
-        }
+        showSampleDocuments();
       }
     })();
 
     return () => {
       active = false;
     };
-  }, [showSampleDocuments, useSupabaseForDocuments]);
+  }, [showSampleDocuments]);
 
 
   // Modals state
@@ -402,11 +364,12 @@ export const MemoryPage: React.FC = () => {
                     if (ocrRecord) {
                       setSelectedOcrRecord(ocrRecord);
                       setIsOcrViewerOpen(true);
+                    } else {
+                      setSelectedClaim(record);
+                      setIsProvenanceModalOpen(true);
                     }
                   }}
-                  className={`p-4 rounded-2xl border border-zinc-200 dark:border-[#1c1c28] bg-white dark:bg-[#07070a] hover:border-[#5a25eb]/40 transition-all space-y-2.5 flex flex-col justify-between shadow-2xs group ${
-                    ocrRecords.some((item) => item.id === record.id) ? 'cursor-pointer' : ''
-                  }`}
+                  className="p-4 rounded-2xl border border-zinc-200 dark:border-[#1c1c28] bg-white dark:bg-[#07070a] hover:border-[#5a25eb]/40 transition-all space-y-2.5 flex flex-col justify-between shadow-2xs group cursor-pointer"
                 >
                   <div>
                     <div className="flex items-center justify-between gap-2 mb-1.5">
@@ -905,7 +868,7 @@ export const MemoryPage: React.FC = () => {
                   {ocrResult.status === 'completed' && selectedFile && (
                     <button
                       type="button"
-                      onClick={() => {
+                      onClick={async () => {
                         if (!selectedFile || ocrResult.status !== 'completed') return;
                         const fileUrl = URL.createObjectURL(selectedFile);
                         localFileUrls.current.push(fileUrl);
@@ -935,6 +898,19 @@ export const MemoryPage: React.FC = () => {
                           fileUrl,
                           ocrResult,
                         }, ...previous]);
+
+                        // Sync with backend Document Agent & Neo4j Aura
+                        void (async () => {
+                          const backendRes = await uploadDocumentToBackend(selectedFile, uploadCategory);
+                          if (backendRes && backendRes.extractedFields) {
+                            setRecords((prev) => [...backendRes.extractedFields, ...prev]);
+                          }
+                          if (backendRes && backendRes.document) {
+                            setDocuments((prev) => [backendRes.document, ...prev]);
+                            setIsUsingSampleDocuments(false);
+                          }
+                        })();
+
                         setIsUploadDocOpen(false);
                         setUploadError(null);
                         setSelectedFile(null);
@@ -950,6 +926,111 @@ export const MemoryPage: React.FC = () => {
             )}
           </div>
         </div>
+      </Modal>
+
+      {/* Cryptographic Provenance & Evidence Modal */}
+      <Modal
+        isOpen={isProvenanceModalOpen && !!selectedClaim}
+        onClose={() => {
+          setIsProvenanceModalOpen(false);
+          setSelectedClaim(null);
+        }}
+        title="Claim Provenance & Cryptographic Assurance"
+        subtitle="Deterministic evidence verification stored in Neo4j Aura knowledge graph."
+        maxWidth="max-w-lg"
+      >
+        {selectedClaim && (
+          <div className="space-y-4 text-xs">
+            <div className="p-3.5 rounded-2xl bg-zinc-50 dark:bg-[#0e0e14] border border-zinc-200 dark:border-[#222230] space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-400">
+                  {selectedClaim.category}
+                </span>
+                <StatusBadge type={selectedClaim.confidence} label={selectedClaim.source} />
+              </div>
+              <h3 className="text-sm font-bold text-zinc-900 dark:text-white">
+                {selectedClaim.fieldName}
+              </h3>
+              <div className="p-2.5 rounded-xl bg-white dark:bg-[#14141e] border border-zinc-200 dark:border-[#222230]">
+                <span className="text-[10px] text-zinc-400 block mb-0.5">Stored Value:</span>
+                <p className="font-semibold text-zinc-900 dark:text-zinc-100 text-sm break-words">
+                  {selectedClaim.value}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between p-2.5 rounded-xl bg-zinc-50 dark:bg-[#0e0e14] border border-zinc-200 dark:border-[#222230]">
+                <span className="text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+                  Assurance Level:
+                </span>
+                <span className="font-semibold text-zinc-800 dark:text-zinc-200">
+                  {selectedClaim.confidence === 'evidence-backed'
+                    ? 'Level 2 (Cryptographic Evidence Attached)'
+                    : 'Level 1 (User Self-Assertion)'}
+                </span>
+              </div>
+
+              {selectedClaim.evidenceDocName && (
+                <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-300 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold flex items-center gap-1.5">
+                      <FileCheck className="w-3.5 h-3.5" /> Source Document:
+                    </span>
+                    <span className="font-mono text-[11px]">{selectedClaim.evidenceDocName}</span>
+                  </div>
+                  {selectedClaim.evidenceDocHash && (
+                    <div className="pt-1 border-t border-emerald-500/20 text-[10px] font-mono break-all opacity-80">
+                      SHA-256: {selectedClaim.evidenceDocHash}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="flex items-center justify-between p-2.5 rounded-xl bg-zinc-50 dark:bg-[#0e0e14] border border-zinc-200 dark:border-[#222230]">
+                <span className="text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5">
+                  <Database className="w-3.5 h-3.5 text-[#5a25eb] dark:text-[#cbbeff]" />
+                  Graph Node:
+                </span>
+                <span className="font-mono text-[11px] text-emerald-600 dark:text-emerald-400">
+                  Neo4j Aura Synced (Claim:{selectedClaim.id})
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 pt-2 border-t border-zinc-200 dark:border-[#222230]">
+              <button
+                type="button"
+                onClick={() => handleCopy(selectedClaim.id, selectedClaim.value)}
+                className="flex-1 inline-flex items-center justify-center gap-1.5 py-2 rounded-xl bg-zinc-100 dark:bg-[#14141e] hover:bg-zinc-200 dark:hover:bg-[#1c1c28] text-xs font-medium cursor-pointer"
+              >
+                {copiedId === selectedClaim.id ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-emerald-500" />
+                    <span>Copied!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>Copy Value</span>
+                  </>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsProvenanceModalOpen(false);
+                  navigate('/chat');
+                }}
+                className="flex-1 inline-flex items-center justify-center gap-1.5 py-2 rounded-xl bg-[#5a25eb] hover:bg-[#6b37fa] text-white text-xs font-medium cursor-pointer shadow-sm"
+              >
+                <MessageSquare className="w-3.5 h-3.5" />
+                <span>Ask AI Agent</span>
+              </button>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   );

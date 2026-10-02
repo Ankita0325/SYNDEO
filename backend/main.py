@@ -388,6 +388,41 @@ async def sarvam_text_to_speech(req: SarvamTTSRequest):
         },
     )
 
+@app.get("/api/memory")
+def get_personal_memory_store():
+    """
+    Returns the complete unified Personal Memory Store:
+    - Active claims from Neo4j Aura
+    - Cryptographic evidence documents with SHA-256 hashes
+    - Topology nodes and relationships
+    - Provenance & assurance statistics
+    """
+    records = graph_store.get_all_records()
+    documents = graph_store.get_all_documents()
+    neo4j_stat = graph_store.get_neo4j_status()
+    integrity_ok, integrity_msg = audit_logger.verify_chain_integrity()
+    
+    return {
+        "status": "success",
+        "userName": graph_store.user_name,
+        "neo4jConnected": neo4j_stat["connected"],
+        "records": records,
+        "documents": documents,
+        "conflicts": graph_store.conflicts,
+        "historyCount": len(graph_store.history),
+        "stats": {
+            "recordsCount": len(records),
+            "documentsCount": len(documents),
+            "categoriesCount": len(set(r["category"] for r in records)),
+            "auditStatus": integrity_msg
+        }
+    }
+
+@app.get("/api/graph/topology")
+def get_graph_topology_route():
+    """Returns live graph nodes and links directly from Neo4j Cypher memory model."""
+    return graph_store.get_graph_topology()
+
 @app.get("/api/graph/records")
 def get_records():
     """Returns all active personal memory claims from multi-hop graph."""

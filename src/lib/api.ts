@@ -22,6 +22,28 @@ export async function fetchNeo4jStatus() {
   }
 }
 
+export async function fetchMemoryStore() {
+  try {
+    const res = await fetch(`${API_BASE}/api/memory`);
+    if (!res.ok) throw new Error('Failed to fetch memory store');
+    return await res.json();
+  } catch (err) {
+    console.warn('Backend API unavailable, using local memory store.', err);
+    return null;
+  }
+}
+
+export async function fetchGraphTopology() {
+  try {
+    const res = await fetch(`${API_BASE}/api/graph/topology`);
+    if (!res.ok) throw new Error('Failed to fetch topology');
+    return await res.json();
+  } catch (err) {
+    console.warn('Backend topology unavailable.', err);
+    return null;
+  }
+}
+
 export async function fetchRecordsFromBackend() {
   try {
     const res = await fetch(`${API_BASE}/api/graph/records`);

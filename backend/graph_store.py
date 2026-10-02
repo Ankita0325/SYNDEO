@@ -134,9 +134,9 @@ class GraphStore:
             logger.warning(self.neo4j_error)
             return
 
-        uri = os.getenv("NEO4J_URI", "neo4j+s://63ba69f0.databases.neo4j.io")
-        user = os.getenv("NEO4J_USERNAME", "neo4j")
-        password = os.getenv("NEO4J_PASSWORD", "1B2Cwe5I9OonX6NasQTrLC72VO97HIfaJRxbk6z2x_Y")
+        uri = os.getenv("NEO4J_URI", "neo4j+s://c4374f30.databases.neo4j.io")
+        user = os.getenv("NEO4J_USERNAME", "c4374f30")
+        password = os.getenv("NEO4J_PASSWORD", "46sTtsx8Sem6UMTwevvhLYA7ipw9rZEQbKpxBP_J3Xg")
 
         if not uri or not password:
             self.neo4j_error = "NEO4J_URI or NEO4J_PASSWORD not configured"
@@ -514,9 +514,113 @@ class GraphStore:
         return {
             "driverConfigured": NEO4J_AVAILABLE,
             "connected": self.neo4j_connected,
-            "uri": os.getenv("NEO4J_URI", "neo4j+s://63ba69f0.databases.neo4j.io"),
-            "username": os.getenv("NEO4J_USERNAME", "neo4j"),
+            "uri": os.getenv("NEO4J_URI", "neo4j+s://c4374f30.databases.neo4j.io"),
+            "username": os.getenv("NEO4J_USERNAME", "c4374f30"),
             "errorMessage": self.neo4j_error,
             "activeNodes": len(self.nodes),
             "sourceDocs": len(self.documents)
+        }
+
+    def get_graph_topology(self) -> Dict[str, Any]:
+        """
+        Generates real nodes and links directly from the active Neo4j / Graph memory model.
+        Returns:
+          nodes: [Root, Category Hubs, Verified Claims, Source Evidence Documents]
+          links: [Root -> Hubs, Hubs -> Claims, Claims -> Documents, Cross-Links]
+        """
+        nodes = []
+        links = []
+        
+        # 1. Root Person Node
+        nodes.append({
+            "id": "root-user",
+            "label": self.user_name,
+            "sublabel": "Personal Identity Root",
+            "type": "root",
+            "radius": 36,
+            "color": "#38bdf8"
+        })
+
+        # 2. Category Hubs
+        categories = ["identity", "education", "employment", "finance", "healthcare"]
+        cat_colors = {
+            "identity": "#f43f5e",
+            "education": "#a855f7",
+            "employment": "#ec4899",
+            "finance": "#94a3b8",
+            "healthcare": "#fb7185"
+        }
+        for cat in categories:
+            cat_id = f"hub-{cat}"
+            nodes.append({
+                "id": cat_id,
+                "label": cat.capitalize(),
+                "type": "category",
+                "category": cat,
+                "radius": 24,
+                "color": cat_colors.get(cat, "#64748b")
+            })
+            links.append({
+                "source": "root-user",
+                "target": cat_id,
+                "type": "root-to-cat",
+                "color": "rgba(56, 189, 248, 0.4)"
+            })
+
+        # 3. Claims
+        for claim in self.nodes.values():
+            if claim.status != "ACTIVE":
+                continue
+            nodes.append({
+                "id": claim.id,
+                "label": claim.field_name,
+                "value": claim.field_value,
+                "sublabel": claim.field_value,
+                "type": "record",
+                "category": claim.category,
+                "confidence": claim.confidence,
+                "assuranceLevel": claim.assurance_level,
+                "evidenceDoc": claim.evidence_doc_name,
+                "evidenceDocHash": claim.evidence_doc_hash,
+                "isSensitive": claim.is_sensitive,
+                "radius": 16,
+                "color": cat_colors.get(claim.category, "#a855f7")
+            })
+            links.append({
+                "source": f"hub-{claim.category}",
+                "target": claim.id,
+                "type": "cat-to-rec",
+                "color": "rgba(168, 85, 247, 0.3)"
+            })
+            if claim.evidence_doc_name:
+                # Link to evidence document
+                for doc in self.documents.values():
+                    if doc.name == claim.evidence_doc_name:
+                        links.append({
+                            "source": claim.id,
+                            "target": doc.id,
+                            "type": "doc-to-rec",
+                            "color": "rgba(16, 185, 129, 0.4)"
+                        })
+                        break
+
+        # 4. Evidence Documents
+        for doc in self.documents.values():
+            nodes.append({
+                "id": doc.id,
+                "label": doc.name,
+                "sublabel": f"{doc.file_size} · SHA-256",
+                "type": "document",
+                "category": doc.category,
+                "sha256Hash": doc.sha256_hash,
+                "radius": 18,
+                "color": "#10b981"
+            })
+
+        return {
+            "nodes": nodes,
+            "links": links,
+            "neo4jConnected": self.neo4j_connected,
+            "activeRecordsCount": len([n for n in nodes if n["type"] == "record"]),
+            "documentsCount": len(self.documents)
         }

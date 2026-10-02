@@ -9,6 +9,7 @@ export interface RecordField {
   value: string;
   source: 'Extracted from document' | 'Confirmed by you' | 'Not provided';
   evidenceDocName?: string;
+  evidenceDocHash?: string;
   lastUpdated: string;
   confidence: ConfidenceType;
   isSensitive?: boolean;
@@ -23,6 +24,7 @@ export interface DocumentItem {
   uploadDate: string;
   extractedFieldsCount: number;
   status: 'Parsed' | 'Processing' | 'Needs Review' | 'Stored locally';
+  sha256Hash?: string;
 }
 
 export interface ChatMessage {
