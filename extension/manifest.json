@@ -4,7 +4,8 @@
   "version": "0.1.0",
   "description": "Read and inspect form fields on webpages for SYNDEO.",
   "permissions": [
-    "activeTab"
+    "activeTab",
+    "scripting"
   ],
   "action": {
     "default_popup": "popup.html",

@@ -38,6 +38,7 @@
   const countAll = document.getElementById('countAll');
   const countInputs = document.getElementById('countInputs');
   const countSelects = document.getElementById('countSelects');
+  const countOptions = document.getElementById('countOptions');
   const countTextareas = document.getElementById('countTextareas');
   const countRequired = document.getElementById('countRequired');
 
@@ -120,9 +121,10 @@
 
     const filtered = currentScanResult.fields.filter((field) => {
       // 1. Category Tab Filter
-      if (currentFilterCategory === 'input' && field.tag !== 'input') return false;
-      if (currentFilterCategory === 'select' && field.tag !== 'select') return false;
-      if (currentFilterCategory === 'textarea' && field.tag !== 'textarea') return false;
+      if (currentFilterCategory === 'input' && (field.tag !== 'input' || field.type === 'radio' || field.type === 'checkbox')) return false;
+      if (currentFilterCategory === 'select' && field.type !== 'select') return false;
+      if (currentFilterCategory === 'options' && field.type !== 'radio' && field.type !== 'checkbox' && (!field.options || field.options.length === 0)) return false;
+      if (currentFilterCategory === 'textarea' && field.type !== 'textarea') return false;
       if (currentFilterCategory === 'required' && !field.required) return false;
 
       // 2. Text Search Query
@@ -133,7 +135,8 @@
         const matchType = (field.type || '').toLowerCase().includes(query);
         const matchPlaceholder = (field.placeholder || '').toLowerCase().includes(query);
         const matchForm = (field.formId || '').toLowerCase().includes(query);
-        return matchLabel || matchName || matchId || matchType || matchPlaceholder || matchForm;
+        const matchOptions = Array.isArray(field.options) && field.options.some((opt) => (opt.label || opt.value || '').toLowerCase().includes(query));
+        return matchLabel || matchName || matchId || matchType || matchPlaceholder || matchForm || matchOptions;
       }
 
       return true;
@@ -169,7 +172,7 @@
       header.appendChild(typeBadge);
       card.appendChild(header);
 
-      // Meta Grid: name & id
+      // Meta Grid: name & id & placeholder
       const metaGrid = document.createElement('div');
       metaGrid.className = 'field-meta-grid';
 
@@ -219,7 +222,7 @@
         card.appendChild(metaGrid);
       }
 
-      // Badges Row: Required, ReadOnly, Disabled, Form, Autocomplete
+      // Badges Row: Required, ReadOnly, Disabled, Form, Autocomplete, Multiple
       const badgesRow = document.createElement('div');
       badgesRow.className = 'field-badges-row';
 
@@ -227,6 +230,20 @@
         const b = document.createElement('span');
         b.className = 'badge badge-required';
         b.textContent = 'REQUIRED';
+        badgesRow.appendChild(b);
+      }
+
+      if (field.multiple) {
+        const b = document.createElement('span');
+        b.className = 'badge badge-multiple';
+        b.textContent = 'MULTIPLE';
+        badgesRow.appendChild(b);
+      }
+
+      if (Array.isArray(field.options) && field.options.length > 1) {
+        const b = document.createElement('span');
+        b.className = 'badge badge-options-count';
+        b.textContent = `${field.options.length} OPTIONS`;
         badgesRow.appendChild(b);
       }
 
@@ -267,27 +284,44 @@
         card.appendChild(badgesRow);
       }
 
-      // Select Options Preview (Collapsible <details>)
-      if (field.tag === 'select' && Array.isArray(field.options) && field.options.length > 0) {
-        const details = document.createElement('details');
-        details.className = 'options-preview';
+      // Render Options Preview (Radio Choices, Checkbox Choices, Select Options)
+      if (Array.isArray(field.options) && field.options.length > 0) {
+        const optionsBox = document.createElement('div');
+        optionsBox.className = 'options-box';
 
-        const summary = document.createElement('summary');
-        summary.textContent = `View ${field.options.length} Select Options`;
-        details.appendChild(summary);
+        const optionsHeader = document.createElement('div');
+        optionsHeader.className = 'options-header';
 
-        const optList = document.createElement('div');
-        optList.className = 'options-list';
+        const typeIcon = field.type === 'radio' ? '🔘' : field.type === 'checkbox' ? '☑️' : '▾';
+        const typeLabel = field.type === 'radio' ? 'Radio Options' : field.type === 'checkbox' ? 'Checkbox Choices' : 'Select Options';
+        
+        optionsHeader.textContent = `${typeIcon} ${typeLabel} (${field.options.length}):`;
+        optionsBox.appendChild(optionsHeader);
+
+        const chipsContainer = document.createElement('div');
+        chipsContainer.className = 'options-chips';
 
         field.options.forEach((opt) => {
-          const optItem = document.createElement('div');
-          optItem.className = 'option-item';
-          optItem.textContent = `• ${opt.label || opt.value} (${opt.value})`;
-          optList.appendChild(optItem);
+          const chip = document.createElement('div');
+          chip.className = 'option-chip';
+
+          const chipText = document.createElement('span');
+          chipText.className = 'option-chip-text';
+          chipText.textContent = opt.label || opt.value || 'Option';
+          chip.appendChild(chipText);
+
+          if (opt.value && opt.value !== opt.label && opt.value !== 'on' && opt.value !== 'true') {
+            const chipVal = document.createElement('span');
+            chipVal.className = 'option-chip-val';
+            chipVal.textContent = `[${opt.value}]`;
+            chip.appendChild(chipVal);
+          }
+
+          chipsContainer.appendChild(chip);
         });
 
-        details.appendChild(optList);
-        card.appendChild(details);
+        optionsBox.appendChild(chipsContainer);
+        card.appendChild(optionsBox);
       }
 
       fieldsList.appendChild(card);
@@ -308,26 +342,21 @@
       if (!tab || !tab.id) {
         errorMessage.textContent = 'No active browser tab found.';
         showState('error');
+        scanBtn.disabled = false;
+        scanBtnText.textContent = 'Scan Current Page';
         return;
       }
 
       if (isRestrictedUrl(tab.url)) {
         showState('restricted');
+        scanBtn.disabled = false;
+        scanBtnText.textContent = 'Scan Current Page';
         return;
       }
 
-      // Send SCAN_FORM action to content script
-      chrome.tabs.sendMessage(tab.id, { action: 'SCAN_FORM' }, (response) => {
+      function handleResponse(response) {
         scanBtn.disabled = false;
         scanBtnText.textContent = 'Rescan Current Page';
-
-        if (chrome.runtime.lastError) {
-          console.error('[SYNDEO Form Scanner] Message error:', chrome.runtime.lastError.message);
-          errorMessage.textContent =
-            'Could not connect to the webpage. Please refresh the page and click Scan again.';
-          showState('error');
-          return;
-        }
 
         if (!response || !response.success) {
           errorMessage.textContent = (response && response.error) || 'Failed to scan DOM structure.';
@@ -350,11 +379,64 @@
         countAll.textContent = response.summary.total;
         countInputs.textContent = response.summary.inputs;
         countSelects.textContent = response.summary.selects;
+        if (countOptions) countOptions.textContent = response.summary.radiosCheckboxes || 0;
         countTextareas.textContent = response.summary.textareas;
         countRequired.textContent = response.summary.required;
 
         showState('results');
         renderFields();
+      }
+
+      // First attempt sending message
+      chrome.tabs.sendMessage(tab.id, { action: 'SCAN_FORM' }, (response) => {
+        if (chrome.runtime.lastError) {
+          // If receiving end does not exist (tab was opened prior to extension install/reload),
+          // dynamically inject content.js and retry automatically!
+          if (chrome.scripting && tab.id) {
+            chrome.scripting.executeScript(
+              {
+                target: { tabId: tab.id },
+                files: ['content.js'],
+              },
+              () => {
+                if (chrome.runtime.lastError) {
+                  console.warn('[SYNDEO Form Scanner] Script injection fallback error:', chrome.runtime.lastError.message);
+                  errorMessage.textContent =
+                    'Could not connect to this webpage. Please refresh the page (F5) and click Scan again.';
+                  showState('error');
+                  scanBtn.disabled = false;
+                  scanBtnText.textContent = 'Scan Current Page';
+                  return;
+                }
+
+                // Retry message after dynamic injection
+                setTimeout(() => {
+                  chrome.tabs.sendMessage(tab.id, { action: 'SCAN_FORM' }, (retryResponse) => {
+                    if (chrome.runtime.lastError || !retryResponse) {
+                      errorMessage.textContent =
+                        'Could not connect to this webpage. Please refresh the page (F5) and click Scan again.';
+                      showState('error');
+                      scanBtn.disabled = false;
+                      scanBtnText.textContent = 'Scan Current Page';
+                      return;
+                    }
+                    handleResponse(retryResponse);
+                  });
+                }, 100);
+              }
+            );
+            return;
+          }
+
+          errorMessage.textContent =
+            'Could not connect to the webpage. Please refresh the page (F5) and click Scan again.';
+          showState('error');
+          scanBtn.disabled = false;
+          scanBtnText.textContent = 'Scan Current Page';
+          return;
+        }
+
+        handleResponse(response);
       });
     } catch (err) {
       console.error('[SYNDEO Form Scanner] Unexpected error:', err);
