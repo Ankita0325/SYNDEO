@@ -85,7 +85,7 @@ export const NavigationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   useEffect(() => {
     if (!sessionReady) return;
-    if (!supabase || !authUser) {
+    if (!supabase || !authUser || authUser.is_anonymous) {
       setProfileExists(null);
       setIsAuthenticated(false);
       setUserName('');
@@ -159,19 +159,32 @@ export const NavigationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const normalizedName = fullName.trim();
     if (!normalizedName) throw new Error('Enter your full name.');
 
-    const { data, error } = await supabase
+    const { data: existingProfile, error: lookupError } = await supabase
       .from('profiles')
-      .insert({
+      .select('full_name')
+      .eq('auth_user_id', authUser.id)
+      .maybeSingle();
+    if (lookupError) throw lookupError;
+
+    if (existingProfile) {
+      setUserName(existingProfile.full_name);
+      setProfileExists(true);
+      setIsAuthenticated(true);
+      navigate('/memory');
+      return;
+    }
+
+    const { error: upsertError } = await supabase
+      .from('profiles')
+      .upsert({
         auth_user_id: authUser.id,
         full_name: normalizedName,
         profile_code: `SYN-${crypto.randomUUID().replaceAll('-', '').toUpperCase()}`,
         neo4j_person_id: crypto.randomUUID(),
-      })
-      .select('full_name')
-      .single();
+      }, { onConflict: 'auth_user_id', ignoreDuplicates: true });
+    if (upsertError) throw upsertError;
 
-    if (error) throw error;
-    setUserName(data.full_name);
+    setUserName(existingProfile?.full_name || normalizedName);
     setProfileExists(true);
     setIsAuthenticated(true);
     navigate('/memory');

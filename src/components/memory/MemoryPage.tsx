@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { initialRecords, initialDocuments } from '../../data/mockData';
+import React, { useState, useEffect, useCallback } from 'react';
+import { initialDocuments, initialRecords } from '../../data/mockData';
 import type { LifeStageCategory, RecordField, DocumentItem } from '../../types';
-import { fetchRecordsFromBackend, fetchDocumentsFromBackend, addClaimToBackend, uploadDocumentToBackend } from '../../lib/api';
+import { fetchRecordsFromBackend, fetchDocumentsFromBackend, addClaimToBackend } from '../../lib/api';
+import { supabase } from '../../lib/supabase';
+import { mapSupabaseDocument, type SupabaseDocumentRow } from '../../lib/documents';
 import { StatusBadge } from '../common/Badge';
 import { Modal } from '../common/Modal';
 import { ObsidianGraphView } from './ObsidianGraphView';
@@ -31,30 +33,96 @@ type ViewMode = 'graph' | 'cards' | 'documents';
 
 export const MemoryPage: React.FC = () => {
   const [records, setRecords] = useState<RecordField[]>(initialRecords);
-  const [documents, setDocuments] = useState<DocumentItem[]>(initialDocuments);
+  const [documents, setDocuments] = useState<DocumentItem[]>([]);
+  const [documentLoadError, setDocumentLoadError] = useState<string | null>(null);
+  const [isUsingSampleDocuments, setIsUsingSampleDocuments] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<LifeStageCategory | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [viewMode, setViewMode] = useState<ViewMode>('graph');
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
+  const useSampleDocuments = useCallback((error?: string) => {
+    setDocuments(initialDocuments.slice(0, 2));
+    setIsUsingSampleDocuments(true);
+    setDocumentLoadError(error || null);
+  }, []);
+
   // Sync with backend graph store
   useEffect(() => {
+    let active = true;
+
     void (async () => {
-      const backendRecs = await fetchRecordsFromBackend();
-      if (backendRecs && Array.isArray(backendRecs) && backendRecs.length > 0) {
-        setRecords(backendRecs);
+      if (!supabase) {
+        const backendRecs = await fetchRecordsFromBackend();
+        if (active && backendRecs && Array.isArray(backendRecs) && backendRecs.length > 0) {
+          setRecords(backendRecs);
+        }
       }
-      const backendDocs = await fetchDocumentsFromBackend();
-      if (backendDocs && Array.isArray(backendDocs) && backendDocs.length > 0) {
-        setDocuments(backendDocs);
+
+      if (supabase) {
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        if (userError) {
+          if (active) useSampleDocuments(userError.message);
+          return;
+        }
+        if (!user) {
+          if (active) useSampleDocuments('Sign in to load your vault documents.');
+          return;
+        }
+
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('auth_user_id', user.id)
+          .single();
+        if (profileError) {
+          if (active) useSampleDocuments(profileError.message);
+          return;
+        }
+
+        const { data, error } = await supabase
+          .from('documents')
+          .select('id, file_name, category, document_type, mime_type, file_size, processing_status, created_at')
+          .eq('profile_id', profile.id)
+          .order('created_at', { ascending: false });
+        if (!active) return;
+        if (error) {
+          useSampleDocuments(error.message);
+          return;
+        }
+        const savedDocuments = (data || []).map((row) => mapSupabaseDocument(row as SupabaseDocumentRow));
+        if (savedDocuments.length === 0) {
+          useSampleDocuments();
+        } else {
+          setDocuments(savedDocuments);
+          setIsUsingSampleDocuments(false);
+          setDocumentLoadError(null);
+        }
+      } else {
+        const backendDocs = await fetchDocumentsFromBackend();
+        if (!active) return;
+        if (backendDocs && Array.isArray(backendDocs) && backendDocs.length > 0) {
+          setDocuments(backendDocs);
+          setIsUsingSampleDocuments(false);
+        } else {
+          useSampleDocuments();
+        }
       }
     })();
-  }, []);
+
+    return () => {
+      active = false;
+    };
+  }, [useSampleDocuments]);
 
 
   // Modals state
   const [isAddInfoOpen, setIsAddInfoOpen] = useState<boolean>(false);
   const [isUploadDocOpen, setIsUploadDocOpen] = useState<boolean>(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploadCategory, setUploadCategory] = useState<LifeStageCategory>('education');
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
 
   // Add Info Form state
   const [newCategory, setNewCategory] = useState<LifeStageCategory>('identity');
@@ -64,8 +132,6 @@ export const MemoryPage: React.FC = () => {
 
   // Upload Document Flow state
   const [uploadStep, setUploadStep] = useState<1 | 2 | 3 | 4>(1);
-  const uploadedFileName = 'Degree_Provisional_Certificate.pdf';
-  const uploadedFileSize = '1.8 MB';
 
   const categories: { id: LifeStageCategory; label: string; icon: React.FC<{ className?: string }> }[] = [
     { id: 'identity', label: 'Identity', icon: Fingerprint },
@@ -119,37 +185,90 @@ export const MemoryPage: React.FC = () => {
   };
 
   const handleFinishUpload = async () => {
-    const newDoc: DocumentItem = {
-      id: `doc-${Date.now()}`,
-      name: uploadedFileName,
-      category: 'education',
-      fileType: 'PDF',
-      fileSize: uploadedFileSize,
-      uploadDate: 'Just now',
-      extractedFieldsCount: 2,
-      status: 'Parsed',
-    };
+    if (!selectedFile) {
+      setUploadError('Choose a PDF or image file first.');
+      setUploadStep(1);
+      return;
+    }
+    if (selectedFile.size > 25 * 1024 * 1024) {
+      setUploadError('Choose a file smaller than 25 MB.');
+      setUploadStep(1);
+      return;
+    }
+    if (!supabase) {
+      setUploadError('Supabase is not configured. Check the VITE Supabase URL and anon key.');
+      return;
+    }
 
-    const newExtractedRec: RecordField = {
-      id: `rec-ext-${Date.now()}`,
-      category: 'education',
-      fieldName: 'University Provisional Number',
-      value: 'PRV-2024-8849',
-      source: 'Extracted from document',
-      evidenceDocName: uploadedFileName,
-      lastUpdated: 'Just now',
-      confidence: 'evidence-backed',
-    };
+    setIsUploading(true);
+    setUploadError(null);
+    let storagePath: string | null = null;
 
-    setDocuments([newDoc, ...documents]);
-    setRecords([newExtractedRec, ...records]);
-    setIsUploadDocOpen(false);
-    setUploadStep(1);
+    try {
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError) throw userError;
+      if (!user) throw new Error('Sign in before uploading documents.');
 
-    // Call backend doc upload endpoint if a file object exists or sample PDF
-    const dummyBlob = new Blob(['Provisional Certificate Content'], { type: 'application/pdf' });
-    const dummyFile = new File([dummyBlob], uploadedFileName, { type: 'application/pdf' });
-    await uploadDocumentToBackend(dummyFile, 'education');
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('auth_user_id', user.id)
+        .single();
+      if (profileError) throw profileError;
+
+      const safeFileName = selectedFile.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const extension = selectedFile.name.split('.').pop()?.toLowerCase();
+      const mimeType = selectedFile.type || (extension === 'pdf' ? 'application/pdf' : extension === 'png' ? 'image/png' : extension === 'jpg' || extension === 'jpeg' ? 'image/jpeg' : '');
+      if (!['application/pdf', 'image/png', 'image/jpeg'].includes(mimeType)) {
+        throw new Error('Only PDF, PNG, and JPEG documents are supported.');
+      }
+      storagePath = `${profile.id}/${crypto.randomUUID()}-${safeFileName}`;
+      const { error: storageError } = await supabase.storage
+        .from('documents')
+        .upload(storagePath, selectedFile, {
+          contentType: mimeType,
+          upsert: false,
+        });
+      if (storageError) throw storageError;
+
+      const bytes = await selectedFile.arrayBuffer();
+      const hashBytes = await crypto.subtle.digest('SHA-256', bytes);
+      const sha256Hash = Array.from(new Uint8Array(hashBytes), (byte) => byte.toString(16).padStart(2, '0')).join('');
+      const { data: insertedDocument, error: documentError } = await supabase
+        .from('documents')
+        .insert({
+          profile_id: profile.id,
+          file_name: selectedFile.name,
+          storage_path: storagePath,
+          document_type: extension || 'unknown',
+          category: uploadCategory,
+          mime_type: mimeType,
+          file_size: selectedFile.size,
+          sha256_hash: sha256Hash,
+          processing_status: 'PENDING',
+        })
+        .select('id, file_name, category, document_type, mime_type, file_size, processing_status, created_at')
+        .single();
+      if (documentError) throw documentError;
+
+      const newDocument = mapSupabaseDocument(insertedDocument as SupabaseDocumentRow);
+      setDocuments((previous) => [newDocument, ...(isUsingSampleDocuments ? [] : previous.filter((document) => document.id !== newDocument.id))]);
+      setIsUsingSampleDocuments(false);
+      setDocumentLoadError(null);
+      setIsUploadDocOpen(false);
+      setUploadStep(1);
+      setSelectedFile(null);
+    } catch (error) {
+      if (storagePath) {
+        await supabase.storage.from('documents').remove([storagePath]);
+      }
+      const message = error instanceof Error ? error.message : 'Document upload failed.';
+      setUploadError(message.toLowerCase().includes('bucket not found')
+        ? 'Supabase Storage bucket "documents" is missing. Run supabase_documents.sql in the Supabase SQL Editor, then retry.'
+        : message);
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   return (
@@ -182,6 +301,7 @@ export const MemoryPage: React.FC = () => {
           <button
             onClick={() => {
               setUploadStep(1);
+              setUploadError(null);
               setIsUploadDocOpen(true);
             }}
             className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-[#5a25eb] hover:bg-[#6b37fa] text-white text-xs font-medium transition-all shadow-xs cursor-pointer"
@@ -396,7 +516,23 @@ export const MemoryPage: React.FC = () => {
 
       {/* VIEW 3: EVIDENCE FILES */}
       {viewMode === 'documents' && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <div className="space-y-3">
+          {isUsingSampleDocuments && (
+            <p role="status" className="rounded-lg border border-sky-300 bg-sky-50 px-3 py-2 text-xs text-sky-800 dark:border-sky-900 dark:bg-sky-950/30 dark:text-sky-300">
+              Showing two sample documents for testing. Upload a file after configuring the Supabase documents bucket to save your own.
+            </p>
+          )}
+          {documentLoadError && (
+            <p role="alert" className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300">
+              Could not load vault documents: {documentLoadError}
+            </p>
+          )}
+          {documents.length === 0 && !documentLoadError && (
+            <p className="rounded-lg border border-dashed border-zinc-300 p-6 text-center text-xs text-zinc-500 dark:border-[#2d2b38]">
+              No documents uploaded yet.
+            </p>
+          )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {documents.map((doc) => (
             <div
               key={doc.id}
@@ -425,6 +561,7 @@ export const MemoryPage: React.FC = () => {
               </div>
             </div>
           ))}
+          </div>
         </div>
       )}
 
@@ -531,8 +668,13 @@ export const MemoryPage: React.FC = () => {
         maxWidth="max-w-md"
       >
         <div className="space-y-4 text-xs">
+          {uploadError && (
+            <p role="alert" className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
+              {uploadError}
+            </p>
+          )}
           <div className="grid grid-cols-4 gap-1.5 text-center text-[10px] font-mono">
-            {['Upload', 'Extract', 'Review', 'Save'].map((label, idx) => (
+            {['Select', 'Review', 'Confirm', 'Save'].map((label, idx) => (
               <div
                 key={idx}
                 className={`p-1.5 rounded-lg border ${
@@ -553,10 +695,37 @@ export const MemoryPage: React.FC = () => {
               <div className="border border-dashed border-zinc-300 dark:border-[#2d2b38] rounded-2xl p-6 space-y-2">
                 <UploadCloud className="w-8 h-8 text-[#5a25eb] mx-auto" />
                 <p className="font-semibold text-zinc-800 dark:text-zinc-200">Select Document</p>
-                <span className="inline-block px-2.5 py-0.5 rounded text-[10px] font-mono bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300">
-                  Degree_Provisional_Certificate.pdf (1.8 MB)
-                </span>
+                <input
+                  type="file"
+                  accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
+                  onChange={(event) => {
+                    const file = event.currentTarget.files?.[0] || null;
+                    if (file && file.size > 25 * 1024 * 1024) {
+                      setSelectedFile(null);
+                      setUploadError('Choose a file smaller than 25 MB.');
+                      return;
+                    }
+                    setSelectedFile(file);
+                    setUploadError(null);
+                  }}
+                  className="block w-full text-xs text-zinc-600 file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-100 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-zinc-700 hover:file:bg-zinc-200 dark:text-zinc-300 dark:file:bg-[#23222c] dark:file:text-zinc-200"
+                />
+                {selectedFile && (
+                  <span className="inline-block max-w-full break-all rounded bg-zinc-100 px-2.5 py-1 font-mono text-[10px] text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
+                    {selectedFile.name} · {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB
+                  </span>
+                )}
               </div>
+              <label className="block space-y-1 text-left text-[11px] font-semibold text-zinc-600 dark:text-zinc-300">
+                Document category
+                <select
+                  value={uploadCategory}
+                  onChange={(event) => setUploadCategory(event.target.value as LifeStageCategory)}
+                  className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs dark:border-[#2d2b38] dark:bg-[#18171f]"
+                >
+                  {categories.map((category) => <option key={category.id} value={category.id}>{category.label}</option>)}
+                </select>
+              </label>
               <div className="flex justify-end gap-2">
                 <button
                   type="button"
@@ -568,7 +737,8 @@ export const MemoryPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setUploadStep(2)}
-                  className="px-4 py-1.5 rounded-full bg-[#5a25eb] text-white text-xs font-medium flex items-center gap-1 cursor-pointer"
+                  disabled={!selectedFile}
+                  className="px-4 py-1.5 rounded-full bg-[#5a25eb] text-white text-xs font-medium flex items-center gap-1 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <span>Extract</span>
                   <ArrowRight className="w-3 h-3" />
@@ -580,13 +750,9 @@ export const MemoryPage: React.FC = () => {
           {uploadStep === 2 && (
             <div className="space-y-3">
               <div className="p-3 rounded-xl bg-zinc-50 dark:bg-[#0c0c12] border border-zinc-200 dark:border-[#222230] space-y-2">
-                <div className="flex items-center justify-between">
-                  <span>Parsing Fields...</span>
-                  <span className="text-emerald-500 font-mono">100% Done</span>
-                </div>
-                <div className="w-full bg-zinc-200 dark:bg-zinc-800 h-1.5 rounded-full overflow-hidden">
-                  <div className="bg-[#5a25eb] h-full rounded-full w-full" />
-                </div>
+                <p className="font-semibold text-zinc-900 dark:text-white">File selected</p>
+                <p className="break-all text-zinc-600 dark:text-zinc-300">{selectedFile?.name}</p>
+                <p className="text-zinc-500 dark:text-zinc-400">The original file will be stored privately in your vault.</p>
               </div>
               <div className="flex justify-end gap-2">
                 <button
@@ -603,9 +769,9 @@ export const MemoryPage: React.FC = () => {
           {uploadStep === 3 && (
             <div className="space-y-3">
               <div className="p-3 rounded-xl border border-zinc-200 dark:border-[#222230] bg-zinc-50 dark:bg-[#0c0c12] space-y-1">
-                <span className="text-[10px] text-zinc-400">Extracted Field</span>
-                <p className="font-semibold text-zinc-900 dark:text-white">University Provisional Number</p>
-                <p className="font-mono text-[#5a25eb] text-xs">PRV-2024-8849</p>
+                <span className="text-[10px] text-zinc-400">Document details</span>
+                <p className="break-all font-semibold text-zinc-900 dark:text-white">{selectedFile?.name}</p>
+                <p className="font-mono text-[#5a25eb] text-xs">{categories.find((item) => item.id === uploadCategory)?.label} · {selectedFile ? (selectedFile.size / 1024).toFixed(0) : 0} KB</p>
               </div>
               <div className="flex justify-end gap-2">
                 <button
@@ -626,9 +792,10 @@ export const MemoryPage: React.FC = () => {
               <button
                 type="button"
                 onClick={handleFinishUpload}
-                className="px-5 py-2 rounded-full bg-[#5a25eb] text-white text-xs font-medium cursor-pointer shadow-xs"
+                disabled={isUploading}
+                className="px-5 py-2 rounded-full bg-[#5a25eb] text-white text-xs font-medium cursor-pointer shadow-xs disabled:cursor-wait disabled:opacity-60"
               >
-                Save to Memory
+                {isUploading ? 'Uploading...' : 'Save to Memory'}
               </button>
             </div>
           )}

@@ -1,6 +1,11 @@
-import React, { useState, useMemo } from 'react';
-import { initialSharedLinks } from '../../data/mockData';
-import type { SharedLink } from '../../types';
+import React, { useState, useMemo, useEffect } from 'react';
+import { initialDocuments, initialSharedLinks } from '../../data/mockData';
+import type { DocumentItem, SharedLink } from '../../types';
+import { loadSharedLinks, saveSharedLinks, subscribeToSharedLinks } from '../../lib/shareStore';
+import { supabase } from '../../lib/supabase';
+import { hashShareToken } from '../../lib/shareToken';
+import { mapSupabaseDocument, type SupabaseDocumentRow } from '../../lib/documents';
+import { mapShareAccessRows } from '../../lib/shareAccess';
 import { StatusBadge } from '../common/Badge';
 import { Modal } from '../common/Modal';
 import {
@@ -10,10 +15,6 @@ import {
   Check,
   Copy,
   ExternalLink,
-  Globe,
-  GraduationCap,
-  Landmark,
-  HeartPulse,
   X,
   Lock,
   ChevronDown,
@@ -28,6 +29,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { QRCodeSVG } from 'qrcode.react';
 
 interface SelectableFieldItem {
   id: string;
@@ -218,9 +220,10 @@ const AVAILABLE_FIELDS: SelectableFieldItem[] = [
 
 export const SharePage: React.FC = () => {
   // Selected State for Creator
-  const [selectedFieldIds, setSelectedFieldIds] = useState<Set<string>>(
-    new Set(['soc-github', 'soc-linkedin', 'soc-email', 'edu-school', 'edu-degree'])
-  );
+  const [selectedFieldIds, setSelectedFieldIds] = useState<Set<string>>(new Set());
+  const [vaultDocuments, setVaultDocuments] = useState<DocumentItem[]>([]);
+  const [documentLoadError, setDocumentLoadError] = useState<string | null>(null);
+  const [isUsingSampleDocuments, setIsUsingSampleDocuments] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [recipientInput, setRecipientInput] = useState('Acme University Postgraduate Admissions');
   const [expiryOption, setExpiryOption] = useState<'1h' | '24h' | '7d' | 'never'>('24h');
@@ -232,9 +235,202 @@ export const SharePage: React.FC = () => {
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
   const [newShareToken, setNewShareToken] = useState('share-78b10f2c');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [shareCreationError, setShareCreationError] = useState<string | null>(null);
+  const [isCreatingShare, setIsCreatingShare] = useState(false);
 
   // Link History
-  const [sharedLinks, setSharedLinks] = useState<SharedLink[]>(initialSharedLinks);
+  const [sharedLinks, setSharedLinks] = useState<SharedLink[]>(() => loadSharedLinks(initialSharedLinks));
+
+  useEffect(() => {
+    saveSharedLinks(sharedLinks);
+  }, [sharedLinks]);
+
+  useEffect(() => subscribeToSharedLinks(setSharedLinks), []);
+
+  useEffect(() => {
+    if (!supabase) return;
+    let active = true;
+
+    const refreshAccessActivity = async () => {
+      const persistedLinks = loadSharedLinks(initialSharedLinks).filter((link) => link.shareId);
+      const updates = await Promise.all(persistedLinks.map(async (link) => {
+        const { data: share, error: shareError } = await supabase
+          .from('shares')
+          .select('status, expires_at')
+          .eq('id', link.shareId)
+          .maybeSingle();
+        if (shareError || !share) return null;
+
+        const { data: events, error: eventsError } = await supabase
+          .from('share_access')
+          .select('id, organization_id, organization_member_id, action, accessed_at, created_at, organizations(id, name, type, purpose, website), organization_members(full_name, work_email, role, department)')
+          .eq('share_id', link.shareId)
+          .order('created_at', { ascending: true });
+        if (eventsError || !events) return null;
+
+        const activity = mapShareAccessRows(events, link.fieldsShared);
+        const expired = share.status === 'EXPIRED' || new Date(share.expires_at).getTime() <= Date.now();
+        return {
+          ...link,
+          status: share.status === 'REVOKED' ? 'Revoked' as const : expired ? 'Expired' as const : 'Active' as const,
+          accessCount: activity.accessCount,
+          viewers: activity.viewers,
+          accessRequests: activity.accessRequests,
+        };
+      }));
+
+      if (!active) return;
+      const synced = new Map(updates.filter((link): link is NonNullable<typeof link> => link !== null).map((link) => [link.id, link]));
+      setSharedLinks((previous) => previous.map((link) => synced.get(link.id) || link));
+    };
+
+    void refreshAccessActivity();
+    const timer = window.setInterval(() => void refreshAccessActivity(), 5000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    void (async () => {
+      if (!supabase) {
+        const sampleDocuments = initialDocuments.slice(0, 2);
+        setVaultDocuments(sampleDocuments);
+        setSelectedFieldIds(new Set(sampleDocuments.map((document) => document.id)));
+        setIsUsingSampleDocuments(true);
+        setDocumentLoadError('Supabase is not configured.');
+        return;
+      }
+
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError) {
+        if (active) {
+          const sampleDocuments = initialDocuments.slice(0, 2);
+          setVaultDocuments(sampleDocuments);
+          setSelectedFieldIds(new Set(sampleDocuments.map((document) => document.id)));
+          setIsUsingSampleDocuments(true);
+          setDocumentLoadError(userError.message);
+        }
+        return;
+      }
+      if (!user) {
+        if (active) {
+          const sampleDocuments = initialDocuments.slice(0, 2);
+          setVaultDocuments(sampleDocuments);
+          setSelectedFieldIds(new Set(sampleDocuments.map((document) => document.id)));
+          setIsUsingSampleDocuments(true);
+          setDocumentLoadError('Sign in to load your vault documents.');
+        }
+        return;
+      }
+
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('auth_user_id', user.id)
+        .single();
+      if (profileError) {
+        if (active) {
+          const sampleDocuments = initialDocuments.slice(0, 2);
+          setVaultDocuments(sampleDocuments);
+          setSelectedFieldIds(new Set(sampleDocuments.map((document) => document.id)));
+          setIsUsingSampleDocuments(true);
+          setDocumentLoadError(profileError.message);
+        }
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('documents')
+        .select('id, file_name, category, document_type, mime_type, file_size, processing_status, created_at')
+        .eq('profile_id', profile.id)
+        .order('created_at', { ascending: false });
+      if (!active) return;
+      if (error) {
+        const sampleDocuments = initialDocuments.slice(0, 2);
+        setVaultDocuments(sampleDocuments);
+        setSelectedFieldIds(new Set(sampleDocuments.map((document) => document.id)));
+        setIsUsingSampleDocuments(true);
+        setDocumentLoadError(error.message);
+        return;
+      }
+
+      const savedDocuments = (data || []).map((row) => mapSupabaseDocument(row as SupabaseDocumentRow));
+      const documents = savedDocuments.length ? savedDocuments : initialDocuments.slice(0, 2);
+      setVaultDocuments(documents);
+      setSelectedFieldIds(new Set(documents.slice(0, 2).map((document) => document.id)));
+      setIsUsingSampleDocuments(savedDocuments.length === 0);
+      setDocumentLoadError(null);
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    void (async () => {
+      if (!supabase) return;
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data: profile } = await supabase.from('profiles').select('id').eq('auth_user_id', user.id).maybeSingle();
+      if (!profile) return;
+
+      const { data: shares, error: sharesError } = await supabase
+        .from('shares')
+        .select('id, recipient_name, recipient_organization, allowed_claims, status, expires_at, created_at')
+        .eq('profile_id', profile.id);
+      if (!active || sharesError || !shares?.length) return;
+
+      const knownLinks = loadSharedLinks(initialSharedLinks);
+      const syncedLinks = await Promise.all(shares.map(async (share) => {
+        const localLink = knownLinks.find((link) => link.shareId === share.id);
+        if (!localLink) return null;
+
+        const { data: events, error: eventsError } = await supabase
+          .from('share_access')
+          .select('id, organization_id, organization_member_id, action, accessed_at, created_at, organizations(id, name, type, purpose, website), organization_members(full_name, work_email, role, department)')
+          .eq('share_id', share.id)
+          .order('created_at', { ascending: true });
+        const claims = Array.isArray(share.allowed_claims)
+          ? share.allowed_claims as Array<{ document_id?: string; file_name?: string; document?: DocumentItem }>
+          : [];
+        const requestedDocuments = claims.map((claim) => claim.file_name || claim.document_id || '').filter(Boolean);
+        const activity = eventsError || !events
+          ? { viewers: localLink.viewers || [], accessRequests: localLink.accessRequests || [], accessCount: localLink.accessCount }
+          : mapShareAccessRows(events, requestedDocuments);
+        const expiresAt = new Date(share.expires_at);
+        const expired = expiresAt.getTime() <= Date.now() || share.status === 'EXPIRED';
+
+        return {
+          ...localLink,
+          recipient: share.recipient_organization || share.recipient_name || localLink.recipient,
+          fieldsShared: requestedDocuments,
+          sharedDocumentIds: claims.map((claim) => claim.document_id).filter((id): id is string => Boolean(id)),
+          sharedDocuments: claims.flatMap((claim) => claim.document ? [claim.document] : []),
+          status: share.status === 'REVOKED' ? 'Revoked' as const : expired ? 'Expired' as const : 'Active' as const,
+          expiry: share.status === 'REVOKED' ? 'Revoked by user' : expired ? 'Expired' : `Expires ${expiresAt.toLocaleString()}`,
+          createdAt: new Date(share.created_at).toLocaleString(),
+          viewers: activity.viewers,
+          accessRequests: activity.accessRequests,
+          accessCount: activity.accessCount,
+        };
+      }));
+
+      if (!active) return;
+      const updates = new Map(syncedLinks.filter((link): link is NonNullable<typeof link> => link !== null).map((link) => [link.shareId, link]));
+      setSharedLinks((previous) => previous.map((link) => updates.get(link.shareId) || link));
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [vaultDocuments]);
 
   // Add Field To Link Drawer Modal
   const [activeDrawerLinkId, setActiveDrawerLinkId] = useState<string | null>(null);
@@ -258,62 +454,107 @@ export const SharePage: React.FC = () => {
   };
 
   const selectAll = () => {
-    setSelectedFieldIds(new Set(AVAILABLE_FIELDS.map((f) => f.id)));
+    setSelectedFieldIds(new Set(vaultDocuments.map((document) => document.id)));
   };
 
   const clearAll = () => {
     setSelectedFieldIds(new Set());
   };
 
-  const filteredFields = useMemo(() => {
-    if (!searchQuery.trim()) return AVAILABLE_FIELDS;
+  const filteredDocuments = useMemo(() => {
+    if (!searchQuery.trim()) return vaultDocuments;
     const q = searchQuery.toLowerCase();
-    return AVAILABLE_FIELDS.filter(
-      (f) =>
-        f.label.toLowerCase().includes(q) ||
-        f.categoryLabel.toLowerCase().includes(q) ||
-        f.value.toLowerCase().includes(q)
+    return vaultDocuments.filter(
+      (document) =>
+        document.name.toLowerCase().includes(q) ||
+        document.category.toLowerCase().includes(q) ||
+        document.fileType.toLowerCase().includes(q)
     );
-  }, [searchQuery]);
+  }, [searchQuery, vaultDocuments]);
 
-  const categories: Array<{ key: SelectableFieldItem['category']; label: string; icon: React.ReactNode }> = [
-    { key: 'social', label: 'Social', icon: <Globe className="w-4 h-4 text-blue-500" /> },
-    { key: 'education', label: 'Education', icon: <GraduationCap className="w-4 h-4 text-purple-400" /> },
-    { key: 'finance', label: 'Finance', icon: <Landmark className="w-4 h-4 text-emerald-500" /> },
-    { key: 'health', label: 'Health', icon: <HeartPulse className="w-4 h-4 text-rose-500" /> },
-  ];
-
-  const handleGenerateShare = () => {
+  const handleGenerateShare = async () => {
     if (selectedFieldIds.size === 0) return;
+    setShareCreationError(null);
+    if (!supabase) {
+      setShareCreationError('Supabase is not configured. Check the VITE Supabase URL and anon key.');
+      return;
+    }
 
-    const token = `share-${Math.random().toString(36).substring(2, 9)}`;
-    const selectedFieldsList = AVAILABLE_FIELDS.filter((f) => selectedFieldIds.has(f.id)).map((f) => f.label);
+    const selectedDocuments = vaultDocuments.filter((document) => selectedFieldIds.has(document.id));
+    const selectedFieldsList = selectedDocuments.map((document) => document.name);
+    setIsCreatingShare(true);
 
-    const newLink: SharedLink = {
-      id: token,
-      recipient: recipientInput || 'Verified Partner Review',
-      fieldsShared: selectedFieldsList,
-      createdAt: 'Just now',
-      expiry:
-        expiryOption === '1h'
-          ? 'Expires in 1 hour'
-          : expiryOption === '24h'
-          ? 'Expires in 24 hours'
-          : expiryOption === '7d'
-          ? 'Expires in 7 days'
-          : 'Permanent (Until revoked)',
-      status: 'Active',
-      accessCount: 0,
-      viewers: [],
-      accessRequests: [],
-    };
+    try {
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError) throw userError;
+      if (!user) throw new Error('Sign in before creating a share link.');
 
-    setNewShareToken(token);
-    setSharedLinks([newLink, ...sharedLinks]);
-    setExpandedLinkId(token);
-    setIsCreatePanelOpen(false);
-    setIsShareSuccessModalOpen(true);
-    showToast('New verifiable share link generated!');
+      const { data: ownerProfile, error: profileError } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('auth_user_id', user.id)
+        .single();
+      if (profileError) throw profileError;
+
+      const token = crypto.randomUUID();
+      const tokenHash = await hashShareToken(token);
+      const expiresAt = expiryOption === 'never'
+        ? '9999-12-31T23:59:59.000Z'
+        : new Date(Date.now() + (expiryOption === '1h' ? 1 : expiryOption === '24h' ? 24 : 24 * 7) * 60 * 60 * 1000).toISOString();
+      const { data: savedShare, error: shareError } = await supabase
+        .from('shares')
+        .insert({
+          profile_id: ownerProfile.id,
+          recipient_name: recipientInput || null,
+          recipient_organization: recipientInput || null,
+          purpose: 'Organization access request',
+          allowed_claims: selectedDocuments.map((document) => ({
+            document_id: document.id,
+            file_name: document.name,
+            document,
+          })),
+          token_hash: tokenHash,
+          expires_at: expiresAt,
+        })
+        .select('id')
+        .single();
+      if (shareError) throw shareError;
+
+      const newLink: SharedLink = {
+        id: token,
+        shareId: savedShare.id,
+        recipient: recipientInput || 'Verified Partner Review',
+        fieldsShared: selectedFieldsList,
+        createdAt: 'Just now',
+        expiry:
+          expiryOption === '1h'
+            ? 'Expires in 1 hour'
+            : expiryOption === '24h'
+            ? 'Expires in 24 hours'
+            : expiryOption === '7d'
+            ? 'Expires in 7 days'
+            : 'Permanent (Until revoked)',
+        status: 'Active',
+        accessCount: 0,
+        viewers: [],
+        accessRequests: [],
+        sharedDocumentIds: selectedDocuments.map((document) => document.id),
+        sharedDocuments: selectedDocuments,
+      };
+
+      setNewShareToken(token);
+      setSharedLinks([newLink, ...sharedLinks]);
+      setExpandedLinkId(token);
+      setIsCreatePanelOpen(false);
+      setIsShareSuccessModalOpen(true);
+      showToast('New share link saved to Supabase.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not create share link.';
+      setShareCreationError(message);
+      showToast(message);
+    } finally {
+      setIsCreatingShare(false);
+    }
   };
 
   // Open real separate share link in a new tab
@@ -330,32 +571,94 @@ export const SharePage: React.FC = () => {
     setTimeout(() => setCopiedToken(null), 2000);
   };
 
-  const handleRevoke = (id: string) => {
-    setSharedLinks((prev) =>
-      prev.map((link) => (link.id === id ? { ...link, status: 'Revoked', expiry: 'Revoked by user' } : link))
-    );
+  const handleRevoke = async (id: string) => {
+    const link = sharedLinks.find((item) => item.id === id);
+    if (!link?.shareId || !supabase) return showToast('This share is not connected to Supabase.');
+    const { error } = await supabase
+      .from('shares')
+      .update({ status: 'REVOKED', revoked_at: new Date().toISOString() })
+      .eq('id', link.shareId);
+    if (error) return showToast(error.message);
+    setSharedLinks((previous) => previous.map((item) => item.id === id ? { ...item, status: 'Revoked', expiry: 'Revoked by user' } : item));
     showToast('Link access revoked.');
   };
 
-  const handleRestore = (id: string) => {
-    setSharedLinks((prev) =>
-      prev.map((link) => (link.id === id ? { ...link, status: 'Active', expiry: 'Active (24h)' } : link))
-    );
+  const handleRestore = async (id: string) => {
+    const link = sharedLinks.find((item) => item.id === id);
+    if (!link?.shareId || !supabase) return showToast('This share is not connected to Supabase.');
+    const { error } = await supabase
+      .from('shares')
+      .update({ status: 'ACTIVE', revoked_at: null })
+      .eq('id', link.shareId);
+    if (error) return showToast(error.message);
+    setSharedLinks((previous) => previous.map((item) => item.id === id ? { ...item, status: 'Active', expiry: 'Active' } : item));
     showToast('Link reactivated.');
   };
 
   // Live Field Removal from Link Drawer
-  const handleRemoveFieldFromLink = (linkId: string, fieldName: string) => {
+  const handleRemoveFieldFromLink = async (linkId: string, fieldName: string) => {
+    const link = sharedLinks.find((item) => item.id === linkId);
+    const remainingDocumentIds = link?.sharedDocumentIds?.filter(
+      (documentId) => vaultDocuments.find((document) => document.id === documentId)?.name !== fieldName
+    );
+    if (link?.shareId && remainingDocumentIds && supabase) {
+      const { error } = await supabase.from('shares').update({
+        allowed_claims: vaultDocuments.filter((document) => remainingDocumentIds.includes(document.id)).map((document) => ({
+          document_id: document.id,
+          file_name: document.name,
+          document,
+        })),
+      }).eq('id', link.shareId);
+      if (error) return showToast(error.message);
+    }
+
     setSharedLinks((prev) =>
       prev.map((link) => {
         if (link.id !== linkId) return link;
         return {
           ...link,
           fieldsShared: link.fieldsShared.filter((f) => f !== fieldName),
+          sharedDocumentIds: link.sharedDocumentIds?.filter(
+            (documentId) => vaultDocuments.find((document) => document.id === documentId)?.name !== fieldName
+          ),
+          sharedDocuments: link.sharedDocuments?.filter((document) => document.name !== fieldName),
         };
       })
     );
-    showToast(`Removed "${fieldName}" from live link.`);
+    showToast(`Removed "${fieldName}" from this share.`);
+  };
+
+  const handleAddDocumentToLink = async (linkId: string, documentId: string) => {
+    const document = vaultDocuments.find((item) => item.id === documentId);
+    if (!document) return;
+    const link = sharedLinks.find((item) => item.id === linkId);
+    const nextDocumentIds = Array.from(new Set([...(link?.sharedDocumentIds || []), document.id]));
+    if (link?.shareId && supabase) {
+      const { error } = await supabase.from('shares').update({
+        allowed_claims: vaultDocuments.filter((item) => nextDocumentIds.includes(item.id)).map((item) => ({
+          document_id: item.id,
+          file_name: item.name,
+          document: item,
+        })),
+      }).eq('id', link.shareId);
+      if (error) return showToast(error.message);
+    }
+
+    setSharedLinks((prev) =>
+      prev.map((link) => {
+        if (link.id !== linkId) return link;
+        return {
+          ...link,
+          fieldsShared: link.fieldsShared.includes(document.name)
+            ? link.fieldsShared
+            : [...link.fieldsShared, document.name],
+          sharedDocumentIds: Array.from(new Set([...(link.sharedDocumentIds || []), document.id])),
+          sharedDocuments: [...(link.sharedDocuments || []), document],
+        };
+      })
+    );
+    setActiveDrawerLinkId(null);
+    showToast(`Added "${document.name}" to this share.`);
   };
 
   // Live Field Addition to Link Drawer
@@ -375,34 +678,50 @@ export const SharePage: React.FC = () => {
   };
 
   // Handle Access Request Approval / Decline
-  const handleApproveRequest = (linkId: string, requestId: string, reqFields: string[]) => {
-    setSharedLinks((prev) =>
-      prev.map((link) => {
-        if (link.id !== linkId) return link;
-        const newFields = Array.from(new Set([...link.fieldsShared, ...reqFields]));
-        const updatedReqs = link.accessRequests?.map((r) => (r.id === requestId ? { ...r, status: 'approved' as const } : r));
-        return {
-          ...link,
-          fieldsShared: newFields,
-          accessRequests: updatedReqs,
-        };
+  const appendAccessEvent = async (
+    linkId: string,
+    requestId: string,
+    action: 'APPROVED' | 'DENIED' | 'REVOKED',
+    status: 'approved' | 'declined' | 'revoked',
+    successMessage: string,
+  ) => {
+    const link = sharedLinks.find((item) => item.id === linkId);
+    const request = link?.accessRequests?.find((item) => item.id === requestId);
+    if (!link?.shareId || !request?.organizationId || !request.organizationMemberId || !supabase) {
+      return showToast('This access request is missing its Supabase organization/member link.');
+    }
+
+    const { data, error } = await supabase
+      .from('share_access')
+      .insert({
+        share_id: link.shareId,
+        organization_id: request.organizationId,
+        organization_member_id: request.organizationMemberId,
+        action,
       })
-    );
-    showToast('Access request approved! Disclosed requested fields.');
+      .select('id, created_at')
+      .single();
+    if (error) return showToast(error.message);
+
+    setSharedLinks((previous) => previous.map((item) => item.id !== linkId ? item : {
+      ...item,
+      accessRequests: item.accessRequests?.map((entry) => entry.organizationMemberId === request.organizationMemberId
+        ? { ...entry, id: data.id, status, requestedAt: new Date(data.created_at).toLocaleString() }
+        : entry),
+    }));
+    showToast(successMessage);
+  };
+
+  const handleApproveRequest = (linkId: string, requestId: string) => {
+    void appendAccessEvent(linkId, requestId, 'APPROVED', 'approved', 'Organization access approved.');
   };
 
   const handleDeclineRequest = (linkId: string, requestId: string) => {
-    setSharedLinks((prev) =>
-      prev.map((link) => {
-        if (link.id !== linkId) return link;
-        const updatedReqs = link.accessRequests?.map((r) => (r.id === requestId ? { ...r, status: 'declined' as const } : r));
-        return {
-          ...link,
-          accessRequests: updatedReqs,
-        };
-      })
-    );
-    showToast('Access request declined.');
+    void appendAccessEvent(linkId, requestId, 'DENIED', 'declined', 'Access request declined.');
+  };
+
+  const handleRevokeOrganizationAccess = (linkId: string, requestId: string) => {
+    void appendAccessEvent(linkId, requestId, 'REVOKED', 'revoked', 'Organization access removed.');
   };
 
   return (
@@ -434,13 +753,16 @@ export const SharePage: React.FC = () => {
             </span>
           </div>
           <p className="text-sm text-zinc-500 dark:text-[#8c879a] mt-1">
-            Generate scoped share links. Real-time audit logs show who has viewed and who is requesting access.
+            Choose specific documents, review organization requests, and manage approved access.
           </p>
         </div>
 
         {/* Top Corner Button */}
         <button
-          onClick={() => setIsCreatePanelOpen(true)}
+          onClick={() => {
+            setShareCreationError(null);
+            setIsCreatePanelOpen(true);
+          }}
           className="px-5 py-2.5 rounded-xl bg-[#5a25eb] hover:bg-[#6b37fa] text-white font-semibold text-sm transition-all shadow-md shadow-[#5a25eb]/20 flex items-center justify-center gap-2 cursor-pointer shrink-0 self-start sm:self-auto"
         >
           <Plus className="w-4 h-4 stroke-[2.5]" />
@@ -511,7 +833,10 @@ export const SharePage: React.FC = () => {
                       <div className="flex items-center gap-3 text-xs text-zinc-500 dark:text-[#8c879a] flex-wrap">
                         <span className="font-mono text-[11px]">TOKEN: {link.id}</span>
                         <span>•</span>
-                        <span>{link.fieldsShared.length} Disclosed Fields</span>
+                        <span>
+                          {link.sharedDocumentIds?.length ?? link.fieldsShared.length}{' '}
+                          {link.sharedDocumentIds?.length ? 'Shared Documents' : 'Disclosed Fields'}
+                        </span>
                         <span>•</span>
                         <span>{viewers.length} Verified Views</span>
                         <span>•</span>
@@ -646,6 +971,13 @@ export const SharePage: React.FC = () => {
                                     </span>
                                     <span className="text-[10px] text-zinc-400 font-mono">Requested {req.requestedAt}</span>
                                   </div>
+                                  {req.profile && (
+                                    <p className="text-[11px] text-zinc-500 dark:text-[#8c879a]">
+                                      {req.profile.workEmail} · {req.profile.organizationType} · {req.profile.role}
+                                      {req.profile.department ? ` · ${req.profile.department}` : ''}
+                                      {req.profile.website ? ` · ${req.profile.website}` : ''}
+                                    </p>
+                                  )}
                                   <p className="text-xs text-zinc-600 dark:text-[#b4afc2]">
                                     Purpose: <em>"{req.purpose}"</em>
                                   </p>
@@ -666,7 +998,7 @@ export const SharePage: React.FC = () => {
                                   {req.status === 'pending' ? (
                                     <>
                                       <button
-                                        onClick={() => handleApproveRequest(link.id, req.id, req.requestedFields)}
+                                        onClick={() => handleApproveRequest(link.id, req.id)}
                                         className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold cursor-pointer transition-colors"
                                       >
                                         Approve Access
@@ -679,8 +1011,15 @@ export const SharePage: React.FC = () => {
                                       </button>
                                     </>
                                   ) : req.status === 'approved' ? (
-                                    <span className="px-3 py-1 rounded-lg text-xs font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                                      Approved
+                                    <button
+                                      onClick={() => handleRevokeOrganizationAccess(link.id, req.id)}
+                                      className="px-3.5 py-1.5 rounded-lg border border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400 text-xs font-semibold cursor-pointer transition-colors hover:bg-red-500/20"
+                                    >
+                                      Remove Access
+                                    </button>
+                                  ) : req.status === 'revoked' ? (
+                                    <span className="px-3 py-1 rounded-lg text-xs font-semibold bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20">
+                                      Access Removed
                                     </span>
                                   ) : (
                                     <span className="px-3 py-1 rounded-lg text-xs font-semibold bg-zinc-200 dark:bg-[#201f2b] text-zinc-500">
@@ -699,7 +1038,9 @@ export const SharePage: React.FC = () => {
                         <div className="flex items-center justify-between">
                           <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-700 dark:text-[#c4bfcf] flex items-center gap-2">
                             <Sparkles className="w-4 h-4 text-emerald-500" />
-                            <span>Currently Disclosed Fields ({link.fieldsShared.length})</span>
+                            <span>
+                              {link.sharedDocumentIds ? 'Shared Documents' : 'Currently Disclosed Fields'} ({link.fieldsShared.length})
+                            </span>
                           </h4>
 
                           <button
@@ -707,7 +1048,7 @@ export const SharePage: React.FC = () => {
                             className="text-xs text-[#5a25eb] dark:text-[#cbbeff] hover:underline cursor-pointer flex items-center gap-1 font-medium"
                           >
                             <Plus className="w-3.5 h-3.5" />
-                            Add Information to this Live Link
+                            {link.sharedDocumentIds ? 'Add Document' : 'Add Information to this Live Link'}
                           </button>
                         </div>
 
@@ -778,10 +1119,25 @@ export const SharePage: React.FC = () => {
       <Modal
         isOpen={isCreatePanelOpen}
         onClose={() => setIsCreatePanelOpen(false)}
-        title="Create Scoped Share Packet"
-        subtitle="Search and select fields to disclose. Selected cards turn white."
+        title="Create Selective Share Link"
+        subtitle="Choose the documents this organization may request access to."
       >
         <div className="space-y-6 max-h-[75vh] overflow-y-auto pr-1">
+          {shareCreationError && (
+            <p role="alert" className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
+              {shareCreationError}
+            </p>
+          )}
+          {documentLoadError && (
+            <p role="alert" className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300">
+              Could not load vault documents: {documentLoadError}
+            </p>
+          )}
+          {isUsingSampleDocuments && (
+            <p role="status" className="rounded-lg border border-sky-300 bg-sky-50 px-3 py-2 text-xs text-sky-800 dark:border-sky-900 dark:bg-sky-950/30 dark:text-sky-300">
+              Showing two sample documents for testing. They are not saved in your Supabase vault.
+            </p>
+          )}
           {/* Search Bar */}
           <div className="relative">
             <Search className="w-4 h-4 text-zinc-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -789,7 +1145,7 @@ export const SharePage: React.FC = () => {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search any information (e.g. GitHub, GPA, School, LinkedIn, Bank)..."
+              placeholder="Search documents by name or category..."
               className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-zinc-200 dark:border-[#2d2b38] bg-zinc-50 dark:bg-[#18171f] text-zinc-900 dark:text-white placeholder-zinc-400 text-xs focus:outline-none focus:ring-2 focus:ring-[#5a25eb]/50"
             />
             {searchQuery && (
@@ -824,53 +1180,38 @@ export const SharePage: React.FC = () => {
             </div>
           </div>
 
-          {/* Categorized White Capsule Selection Cards */}
-          <div className="space-y-5">
-            {categories.map((cat) => {
-              const catFields = filteredFields.filter((f) => f.category === cat.key);
-              if (catFields.length === 0) return null;
-
+          <div className="space-y-2">
+            {filteredDocuments.map((document) => {
+              const isSelected = selectedFieldIds.has(document.id);
               return (
-                <div key={cat.key} className="space-y-2.5">
-                  <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-zinc-700 dark:text-[#c4bfcf]">
-                    {cat.icon}
-                    <span>{cat.label}</span>
-                    <span className="text-[10px] text-zinc-400 font-mono">
-                      ({catFields.filter((f) => selectedFieldIds.has(f.id)).length}/{catFields.length})
+                <button
+                  key={document.id}
+                  type="button"
+                  onClick={() => toggleField(document.id)}
+                  className={`w-full flex items-center gap-3 rounded-xl border p-3 text-left transition-colors ${
+                    isSelected
+                      ? 'border-emerald-500/50 bg-emerald-500/5'
+                      : 'border-zinc-200 dark:border-[#2d2b38] hover:border-zinc-400 dark:hover:border-[#4b4858]'
+                  }`}
+                >
+                  <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border ${isSelected ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-zinc-400'}`}>
+                    {isSelected && <Check className="h-3.5 w-3.5" />}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-xs font-semibold text-zinc-900 dark:text-white">{document.name}</span>
+                    <span className="mt-0.5 block text-[11px] capitalize text-zinc-500 dark:text-[#8c879a]">
+                      {document.category} · {document.fileType} · {document.fileSize}
                     </span>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    {catFields.map((field) => {
-                      const isSelected = selectedFieldIds.has(field.id);
-                      return (
-                        <button
-                          key={field.id}
-                          type="button"
-                          onClick={() => toggleField(field.id)}
-                          className={`px-3.5 py-2 rounded-xl text-xs font-medium transition-all duration-150 cursor-pointer flex items-center gap-2 border ${
-                            isSelected
-                              ? 'bg-white text-zinc-950 font-semibold border-white shadow-lg ring-2 ring-[#5a25eb]/40'
-                              : 'bg-zinc-100 dark:bg-[#1a1923] text-zinc-700 dark:text-[#b4afc2] border-zinc-200 dark:border-[#2d2b38] hover:border-zinc-300 dark:hover:border-[#3e3b4d]'
-                          }`}
-                        >
-                          <div
-                            className={`w-3.5 h-3.5 rounded-full flex items-center justify-center text-[10px] ${
-                              isSelected
-                                ? 'bg-[#5a25eb] text-white'
-                                : 'border border-zinc-400 dark:border-[#4d495b]'
-                            }`}
-                          >
-                            {isSelected && <Check className="w-2.5 h-2.5 stroke-[3]" />}
-                          </div>
-                          <span>{field.label}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
+                  </span>
+                  <span className="text-[11px] text-zinc-500">{document.extractedFieldsCount} records</span>
+                </button>
               );
             })}
+            {filteredDocuments.length === 0 && (
+              <p className="py-6 text-center text-xs text-zinc-500">
+                {vaultDocuments.length === 0 ? 'No uploaded documents are available in your SYNDEO vault.' : 'No documents match this search.'}
+              </p>
+            )}
           </div>
 
           {/* Recipient & Expiry */}
@@ -915,7 +1256,7 @@ export const SharePage: React.FC = () => {
             </button>
             <button
               onClick={handleGenerateShare}
-              disabled={selectedFieldIds.size === 0}
+              disabled={selectedFieldIds.size === 0 || isCreatingShare}
               className={`px-6 py-2.5 rounded-xl font-semibold text-xs transition-all shadow-md flex items-center gap-2 cursor-pointer ${
                 selectedFieldIds.size > 0
                   ? 'bg-[#5a25eb] hover:bg-[#6b37fa] text-white shadow-[#5a25eb]/25'
@@ -923,7 +1264,7 @@ export const SharePage: React.FC = () => {
               }`}
             >
               <Share2 className="w-4 h-4" />
-              Generate & Share ({selectedFieldIds.size})
+              {isCreatingShare ? 'Saving share...' : `Generate & Share (${selectedFieldIds.size})`}
             </button>
           </div>
         </div>
@@ -934,55 +1275,17 @@ export const SharePage: React.FC = () => {
         isOpen={isShareSuccessModalOpen}
         onClose={() => setIsShareSuccessModalOpen(false)}
         title="Share Link & QR Code Generated"
-        subtitle="This scoped link can be opened in a new tab and requires platform registration to decrypt."
+        subtitle="The selected documents remain locked until the requesting organization is approved."
       >
         <div className="space-y-6 text-center py-2">
-          {/* Sample QR Code Box */}
-          <div className="p-6 bg-white rounded-2xl w-56 h-56 mx-auto flex items-center justify-center shadow-xl border border-zinc-100">
-            <svg
-              className="w-full h-full"
-              viewBox="0 0 100 100"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <rect width="100" height="100" fill="white" />
-              {/* Corner 1 */}
-              <rect x="10" y="10" width="25" height="25" fill="#131317" rx="3" />
-              <rect x="15" y="15" width="15" height="15" fill="white" rx="1" />
-              <rect x="18" y="18" width="9" height="9" fill="#5a25eb" />
-              {/* Corner 2 */}
-              <rect x="65" y="10" width="25" height="25" fill="#131317" rx="3" />
-              <rect x="70" y="15" width="15" height="15" fill="white" rx="1" />
-              <rect x="73" y="18" width="9" height="9" fill="#5a25eb" />
-              {/* Corner 3 */}
-              <rect x="10" y="65" width="25" height="25" fill="#131317" rx="3" />
-              <rect x="15" y="70" width="15" height="15" fill="white" rx="1" />
-              <rect x="18" y="73" width="9" height="9" fill="#5a25eb" />
-              {/* Matrix Dots */}
-              <rect x="42" y="12" width="6" height="6" fill="#131317" />
-              <rect x="52" y="12" width="6" height="6" fill="#131317" />
-              <rect x="42" y="24" width="6" height="6" fill="#5a25eb" />
-              <rect x="52" y="32" width="6" height="6" fill="#131317" />
-              <rect x="12" y="42" width="6" height="6" fill="#131317" />
-              <rect x="24" y="42" width="6" height="6" fill="#5a25eb" />
-              <rect x="34" y="42" width="6" height="6" fill="#131317" />
-              <rect x="45" y="45" width="10" height="10" fill="#5a25eb" rx="2" />
-              <rect x="62" y="42" width="6" height="6" fill="#131317" />
-              <rect x="74" y="42" width="6" height="6" fill="#131317" />
-              <rect x="84" y="42" width="6" height="6" fill="#5a25eb" />
-              <rect x="42" y="62" width="6" height="6" fill="#131317" />
-              <rect x="52" y="72" width="6" height="6" fill="#5a25eb" />
-              <rect x="65" y="65" width="6" height="6" fill="#131317" />
-              <rect x="78" y="65" width="6" height="6" fill="#131317" />
-              <rect x="65" y="78" width="6" height="6" fill="#5a25eb" />
-              <rect x="78" y="78" width="6" height="6" fill="#131317" />
-            </svg>
+          <div className="mx-auto flex h-56 w-56 items-center justify-center rounded-xl border border-zinc-200 bg-white p-4">
+            <QRCodeSVG value={`${window.location.origin}/?share=${encodeURIComponent(newShareToken)}`} size={192} level="H" />
           </div>
 
           <div className="space-y-2">
             <div className="flex items-center justify-center gap-1.5 text-xs text-zinc-600 dark:text-[#9e9aa8]">
               <Lock className="w-3.5 h-3.5 text-emerald-500" />
-              <span>Restricted: Registration Required to Decrypt</span>
+              <span>Documents unlock after organization approval</span>
             </div>
 
             {/* Unique Link Box */}
@@ -1025,8 +1328,8 @@ export const SharePage: React.FC = () => {
       <Modal
         isOpen={!!activeDrawerLinkId}
         onClose={() => setActiveDrawerLinkId(null)}
-        title="Disclose Additional Information"
-        subtitle="Select any record to add to this active live share link immediately."
+        title={sharedLinks.find((link) => link.id === activeDrawerLinkId)?.sharedDocumentIds ? 'Add a Document' : 'Disclose Additional Information'}
+        subtitle={sharedLinks.find((link) => link.id === activeDrawerLinkId)?.sharedDocumentIds ? 'Add a document to this share. Approved organizations will see the updated selection.' : 'Select a record to add to this active share link.'}
       >
         <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
           <div className="relative">
@@ -1035,37 +1338,48 @@ export const SharePage: React.FC = () => {
               type="text"
               value={searchAddDrawerQuery}
               onChange={(e) => setSearchAddDrawerQuery(e.target.value)}
-              placeholder="Search available fields (e.g. Bank, Transcripts, Vaccine)..."
+              placeholder="Search documents or information..."
               className="w-full pl-10 pr-4 py-2 rounded-xl border border-zinc-200 dark:border-[#2d2b38] bg-zinc-50 dark:bg-[#18171f] text-zinc-900 dark:text-white text-xs focus:outline-none focus:ring-2 focus:ring-[#5a25eb]/50"
             />
           </div>
 
           <div className="space-y-2">
-            {AVAILABLE_FIELDS.filter((f) => {
-              const currentLink = sharedLinks.find((l) => l.id === activeDrawerLinkId);
-              return !currentLink?.fieldsShared.includes(f.label);
-            })
-              .filter(
-                (f) =>
-                  !searchAddDrawerQuery.trim() ||
-                  f.label.toLowerCase().includes(searchAddDrawerQuery.toLowerCase()) ||
-                  f.category.toLowerCase().includes(searchAddDrawerQuery.toLowerCase())
-              )
-              .map((field) => (
-                <div
-                  key={field.id}
-                  onClick={() => activeDrawerLinkId && handleAddFieldToLink(activeDrawerLinkId, field.label)}
-                  className="p-3 rounded-xl border border-zinc-200 dark:border-[#282733] bg-zinc-50 dark:bg-[#181720] hover:border-[#5a25eb] hover:bg-[#5a25eb]/5 dark:hover:bg-[#1d1c28] transition-all cursor-pointer flex items-center justify-between"
-                >
-                  <div className="space-y-0.5">
-                    <span className="text-xs font-bold text-zinc-900 dark:text-white">{field.label}</span>
-                    <p className="text-xs text-zinc-500 dark:text-[#8c879a] font-mono">{field.value}</p>
-                  </div>
-                  <button className="px-3 py-1.5 rounded-lg bg-[#5a25eb] hover:bg-[#6b37fa] text-white text-xs font-medium cursor-pointer">
-                    + Add
+            {sharedLinks.find((link) => link.id === activeDrawerLinkId)?.sharedDocumentIds !== undefined ? (
+              vaultDocuments
+                .filter((document) => !sharedLinks.find((link) => link.id === activeDrawerLinkId)?.sharedDocumentIds?.includes(document.id))
+                .filter((document) => !searchAddDrawerQuery.trim() || document.name.toLowerCase().includes(searchAddDrawerQuery.toLowerCase()) || document.category.includes(searchAddDrawerQuery.toLowerCase()))
+                .map((document) => (
+                  <button
+                    key={document.id}
+                    type="button"
+                    onClick={() => activeDrawerLinkId && handleAddDocumentToLink(activeDrawerLinkId, document.id)}
+                    className="flex w-full items-center justify-between rounded-lg border border-zinc-200 p-3 text-left hover:border-emerald-500 dark:border-[#282733]"
+                  >
+                    <span>
+                      <span className="block text-xs font-semibold text-zinc-900 dark:text-white">{document.name}</span>
+                      <span className="mt-1 block text-[11px] capitalize text-zinc-500">{document.category} · {document.fileSize}</span>
+                    </span>
+                    <Plus className="h-4 w-4 text-emerald-600" />
                   </button>
-                </div>
-              ))}
+                ))
+            ) : (
+              AVAILABLE_FIELDS.filter((field) => !sharedLinks.find((link) => link.id === activeDrawerLinkId)?.fieldsShared.includes(field.label))
+                .filter((field) => !searchAddDrawerQuery.trim() || field.label.toLowerCase().includes(searchAddDrawerQuery.toLowerCase()) || field.category.toLowerCase().includes(searchAddDrawerQuery.toLowerCase()))
+                .map((field) => (
+                  <button
+                    key={field.id}
+                    type="button"
+                    onClick={() => activeDrawerLinkId && handleAddFieldToLink(activeDrawerLinkId, field.label)}
+                    className="flex w-full items-center justify-between rounded-lg border border-zinc-200 p-3 text-left hover:border-emerald-500 dark:border-[#282733]"
+                  >
+                    <span>
+                      <span className="block text-xs font-semibold text-zinc-900 dark:text-white">{field.label}</span>
+                      <span className="mt-1 block text-[11px] text-zinc-500">{field.value}</span>
+                    </span>
+                    <Plus className="h-4 w-4 text-emerald-600" />
+                  </button>
+                ))
+            )}
           </div>
         </div>
       </Modal>

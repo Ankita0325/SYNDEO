@@ -17,20 +17,27 @@ const AppContent: React.FC = () => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       const token = params.get('share');
-      if (token) return token;
+      if (token) {
+        window.sessionStorage.setItem('syndeo.pending-share-token', token);
+        return token;
+      }
       const pathMatch = window.location.pathname.match(/^\/p\/(.+)/);
       if (pathMatch) return pathMatch[1];
+      return window.sessionStorage.getItem('syndeo.pending-share-token');
     }
     return null;
   });
 
   const renderCurrentPage = () => {
+    if (currentPath === '/auth') return <AuthPage />;
+
     if (shareParamToken) {
       return (
         <SharedLinkViewer
           token={shareParamToken}
           onBack={() => {
             setShareParamToken(null);
+            window.sessionStorage.removeItem('syndeo.pending-share-token');
             if (typeof window !== 'undefined') {
               window.history.pushState({}, '', '/share');
             }
@@ -58,7 +65,9 @@ const AppContent: React.FC = () => {
     }
   };
 
-  return <AppLayout>{renderCurrentPage()}</AppLayout>;
+  const currentPage = renderCurrentPage();
+  if (shareParamToken && currentPath !== '/auth') return currentPage;
+  return <AppLayout>{currentPage}</AppLayout>;
 };
 
 export default function App() {

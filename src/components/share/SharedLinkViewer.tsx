@@ -1,8 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigation } from '../../context/NavigationContext';
-import { initialSharedLinks } from '../../data/mockData';
+import { initialDocuments, initialSharedLinks } from '../../data/mockData';
+import type { AccessViewer, DocumentItem, OrganizationAccessProfile, OrganizationType, SharePurpose, SharedLink } from '../../types';
+import { loadSharedLinks, saveSharedLinks, subscribeToSharedLinks } from '../../lib/shareStore';
+import { supabase } from '../../lib/supabase';
+import { hashShareToken } from '../../lib/shareToken';
+import { mapShareAccessRows } from '../../lib/shareAccess';
 import { Modal } from '../common/Modal';
 import {
+  FileText,
   ShieldCheck,
   CheckCircle2,
   Lock,
@@ -37,7 +43,28 @@ export interface SharedPacketData {
   token: string;
   status: 'Active' | 'Revoked' | 'Expired';
   fields: SharedFieldData[];
+  documents: DocumentItem[];
+  documentShare: boolean;
 }
+
+const ORGANIZATION_TYPES: OrganizationType[] = [
+  'Company',
+  'University/College',
+  'Hospital/Healthcare',
+  'Bank/Financial',
+  'Government',
+  'NGO',
+  'Other',
+];
+
+const SHARE_PURPOSES: SharePurpose[] = [
+  'Hiring',
+  'Verification',
+  'Admissions',
+  'Healthcare',
+  'Financial services',
+  'Other',
+];
 
 const ALL_MASTER_FIELDS: SharedFieldData[] = [
   // Social
@@ -224,14 +251,14 @@ interface SharedLinkViewerProps {
 }
 
 export const SharedLinkViewer: React.FC<SharedLinkViewerProps> = ({ token: propToken, packet: propPacket, onBack }) => {
-  const { isAuthenticated, navigate, userName, userEmail } = useNavigation();
-
+  const { isAuthenticated, navigate } = useNavigation();
   // Resolve packet data
   const initialPacket = React.useMemo<SharedPacketData>(() => {
     if (propPacket) return propPacket;
     const token = propToken || 'link-1';
-    const existing = initialSharedLinks.find((l) => l.id === token);
+    const existing = loadSharedLinks(initialSharedLinks).find((l) => l.id === token);
     const selectedLabels = existing?.fieldsShared || ['GitHub', 'LinkedIn', 'School / College', 'Degree & Major'];
+    const documents = existing?.sharedDocuments || initialDocuments.filter((document) => existing?.sharedDocumentIds?.includes(document.id));
     const matched = ALL_MASTER_FIELDS.filter((f) =>
       selectedLabels.some((label) => f.label.toLowerCase().includes(label.toLowerCase()) || label.toLowerCase().includes(f.label.toLowerCase()))
     );
@@ -244,17 +271,124 @@ export const SharedLinkViewer: React.FC<SharedLinkViewerProps> = ({ token: propT
       createdAt: existing?.createdAt || 'Recently',
       expiry: existing?.expiry || 'Active (24h)',
       token,
-      status: existing?.status || 'Active',
-      fields: matched.length > 0 ? matched : ALL_MASTER_FIELDS.slice(0, 4),
+      status: existing?.status || 'Expired',
+      fields: matched.length > 0 ? matched : existing?.sharedDocumentIds !== undefined ? [] : ALL_MASTER_FIELDS.slice(0, 4),
+      documents,
+      documentShare: existing?.sharedDocumentIds !== undefined,
     };
   }, [propPacket, propToken]);
 
   const [packet, setPacket] = useState<SharedPacketData>(initialPacket);
   const [fields, setFields] = useState<SharedFieldData[]>(initialPacket.fields);
+  const [shareLinks, setShareLinks] = useState<SharedLink[]>(() => loadSharedLinks(initialSharedLinks));
+  const [organizationProfile, setOrganizationProfile] = useState<OrganizationAccessProfile>({
+    fullName: '',
+    workEmail: '',
+    organizationName: '',
+    organizationType: 'Company',
+    role: '',
+    department: '',
+    website: '',
+    purpose: 'Hiring',
+  });
+  const [registeredEmail, setRegisteredEmail] = useState('');
+  const [isSavingRegistration, setIsSavingRegistration] = useState(false);
+  const [registrationError, setRegistrationError] = useState<string | null>(null);
+  const [shareLookupComplete, setShareLookupComplete] = useState(false);
+  const [shareLookupError, setShareLookupError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [isAddFieldModalOpen, setIsAddFieldModalOpen] = useState(false);
   const [searchAddQuery, setSearchAddQuery] = useState('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const lastLoggedRequest = useRef<string | null>(null);
+
+  useEffect(() => subscribeToSharedLinks(setShareLinks), []);
+
+  useEffect(() => {
+    let active = true;
+    setShareLookupComplete(false);
+    setShareLookupError(null);
+
+    void (async () => {
+      if (!supabase) {
+        if (active) {
+          setShareLookupComplete(true);
+          setShareLookupError('Supabase is not configured.');
+        }
+        return;
+      }
+
+      const tokenHash = await hashShareToken(packet.token);
+      const { data, error } = await supabase
+        .from('shares')
+        .select('id, profile_id, recipient_name, recipient_organization, allowed_claims, status, expires_at, created_at')
+        .eq('token_hash', tokenHash)
+        .maybeSingle();
+      if (!active) return;
+
+      if (error) {
+        setShareLookupError(error.message);
+      } else if (data) {
+        const claims = Array.isArray(data.allowed_claims)
+          ? data.allowed_claims as Array<{ document_id?: string; document?: DocumentItem; file_name?: string }>
+          : [];
+        const selectedDocumentIds = claims.map((claim) => claim.document_id).filter((id): id is string => Boolean(id));
+        const documents = claims.flatMap((claim) => claim.document ? [claim.document] : []);
+        const expiryDate = new Date(data.expires_at);
+        const isExpired = expiryDate.getTime() <= Date.now() || data.status === 'EXPIRED';
+        const { data: accessRows } = await supabase
+          .from('share_access')
+          .select('id, organization_id, organization_member_id, action, accessed_at, created_at, organizations(id, name, type, purpose, website), organization_members(full_name, work_email, role, department)')
+          .eq('share_id', data.id)
+          .order('created_at', { ascending: true });
+        const activity = mapShareAccessRows(accessRows || [], claims.map((claim) => claim.file_name || claim.document?.name || '').filter(Boolean));
+        const remoteLink: SharedLink = {
+          id: packet.token,
+          shareId: data.id,
+          recipient: data.recipient_organization || data.recipient_name || 'Shared documents',
+          fieldsShared: claims.map((claim) => claim.file_name || claim.document?.name || '').filter(Boolean),
+          createdAt: new Date(data.created_at).toLocaleString(),
+          expiry: isExpired ? 'Expired' : expiryDate.getFullYear() >= 9999 ? 'Permanent (Until revoked)' : `Expires ${expiryDate.toLocaleString()}`,
+          status: data.status === 'REVOKED' ? 'Revoked' : isExpired ? 'Expired' : 'Active',
+          accessCount: activity.accessCount,
+          viewers: activity.viewers,
+          accessRequests: activity.accessRequests,
+          sharedDocumentIds: selectedDocumentIds,
+          sharedDocuments: documents,
+        };
+        setShareLinks((previousLinks) => {
+          const localLink = previousLinks.find((link) => link.id === remoteLink.id);
+          const hydratedLink = {
+            ...remoteLink,
+            accessCount: localLink?.accessCount ?? remoteLink.accessCount,
+            viewers: localLink?.viewers ?? remoteLink.viewers,
+            accessRequests: localLink?.accessRequests ?? remoteLink.accessRequests,
+            sharedDocuments: localLink?.sharedDocuments ?? remoteLink.sharedDocuments,
+          };
+          return [hydratedLink, ...previousLinks.filter((link) => link.id !== remoteLink.id)];
+        });
+        setPacket((current) => ({ ...current, status: remoteLink.status, documents, documentShare: true }));
+      }
+
+      setShareLookupComplete(true);
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [isAuthenticated, packet.token]);
+
+  useEffect(() => {
+    const currentLink = shareLinks.find((link) => link.id === packet.token);
+    if (currentLink) {
+      setPacket((current) => ({
+        ...current,
+        status: currentLink.status,
+        documents: currentLink.sharedDocuments || initialDocuments.filter((document) => currentLink.sharedDocumentIds?.includes(document.id)),
+        documentShare: currentLink.sharedDocumentIds !== undefined,
+      }));
+    }
+  }, [packet.token, shareLinks]);
 
   useEffect(() => {
     setFields(packet.fields);
@@ -290,44 +424,362 @@ export const SharedLinkViewer: React.FC<SharedLinkViewerProps> = ({ token: propT
     setTimeout(() => setCopied(false), 2000);
   };
 
-  // Strictly block unauthenticated / unregistered visitors
+  const currentShare = shareLinks.find((link) => link.id === packet.token);
+  const currentRequest = currentShare?.accessRequests?.find(
+    (request) => request.profile?.workEmail.toLowerCase() === registeredEmail
+  );
+  const hasApprovedAccess = currentRequest?.status === 'approved' && currentShare?.status === 'Active';
+
+  useEffect(() => {
+    if (!supabase || !currentShare?.shareId || !currentRequest?.organizationMemberId || !registeredEmail) return;
+
+    const refreshAccess = async () => {
+      const { data: shareState, error: shareError } = await supabase
+        .from('shares')
+        .select('status, expires_at')
+        .eq('id', currentShare.shareId)
+        .maybeSingle();
+      if (!shareError && shareState) {
+        const isInactive = shareState.status === 'REVOKED' || shareState.status === 'EXPIRED' || new Date(shareState.expires_at).getTime() <= Date.now();
+        if (isInactive) {
+          setShareLinks((previous) => previous.map((link) => link.id === packet.token
+            ? { ...link, status: shareState.status === 'REVOKED' ? 'Revoked' : 'Expired' }
+            : link));
+          return;
+        }
+      }
+
+      const { data, error } = await supabase
+        .from('share_access')
+        .select('id, action, created_at')
+        .eq('share_id', currentShare.shareId)
+        .eq('organization_member_id', currentRequest.organizationMemberId)
+        .neq('action', 'VIEWED')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error || !data) return;
+
+      const status = data.action === 'APPROVED' ? 'approved' as const
+        : data.action === 'REVOKED' ? 'revoked' as const
+        : data.action === 'DENIED' ? 'declined' as const
+        : 'pending' as const;
+      setShareLinks((previous) => previous.map((link) => link.id !== packet.token ? link : {
+        ...link,
+        accessRequests: link.accessRequests?.map((request) => request.organizationMemberId === currentRequest.organizationMemberId
+          ? { ...request, id: data.id, status, requestedAt: new Date(data.created_at).toLocaleString() }
+          : request),
+      }));
+    };
+
+    void refreshAccess();
+    const timer = window.setInterval(() => void refreshAccess(), 5000);
+    return () => window.clearInterval(timer);
+  }, [currentRequest?.organizationMemberId, currentShare?.shareId, packet.token, registeredEmail]);
+
+  const submitOrganizationRequest = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const normalizedEmail = organizationProfile.workEmail.trim().toLowerCase();
+    const targetLink = shareLinks.find((link) => link.id === packet.token);
+    if (!targetLink || targetLink.status !== 'Active') return;
+
+    if (!supabase) {
+      setRegistrationError('Supabase is not configured. Check VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.');
+      return;
+    }
+
+    setIsSavingRegistration(true);
+    setRegistrationError(null);
+    try {
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError) throw userError;
+      if (!user) throw new Error('Your sign-in session expired. Sign in again to request access.');
+
+      const profile = { ...organizationProfile, workEmail: normalizedEmail };
+      const organizationName = profile.organizationName.trim();
+      const website = profile.website.trim() || null;
+      const officialDomain = website
+        ? new URL(website).hostname.toLowerCase().replace(/^www\./, '')
+        : null;
+      const organizationValues = {
+        name: organizationName,
+        type: profile.organizationType,
+        website,
+        official_domain: officialDomain,
+        purpose: profile.purpose,
+      };
+
+      const { data: existingOrganization, error: lookupError } = await supabase
+        .from('organizations')
+        .select('id')
+        .eq('name', organizationName)
+        .limit(1)
+        .maybeSingle();
+      if (lookupError) throw lookupError;
+
+      let organizationId = existingOrganization?.id;
+      if (organizationId) {
+        const { error } = await supabase
+          .from('organizations')
+          .update({ ...organizationValues, updated_at: new Date().toISOString() })
+          .eq('id', organizationId);
+        if (error) throw error;
+      } else {
+        const { data, error } = await supabase
+          .from('organizations')
+          .insert(organizationValues)
+          .select('id')
+          .single();
+        if (error) throw error;
+        organizationId = data.id;
+      }
+
+      const { data: member, error: memberError } = await supabase
+        .from('organization_members')
+        .upsert(
+          {
+            organization_id: organizationId,
+            auth_user_id: user.id,
+            full_name: profile.fullName.trim(),
+            work_email: normalizedEmail,
+            role: profile.role.trim(),
+            department: profile.department.trim() || null,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'auth_user_id' }
+        )
+        .select('id')
+        .single();
+      if (memberError) throw memberError;
+      if (!targetLink.shareId) throw new Error('This link has no saved share record. Generate a fresh share link.');
+
+      const { data: previousAccess, error: accessLookupError } = await supabase
+        .from('share_access')
+        .select('id, action, created_at')
+        .eq('share_id', targetLink.shareId)
+        .eq('organization_member_id', member.id)
+        .neq('action', 'VIEWED')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (accessLookupError) throw accessLookupError;
+
+      let action = previousAccess?.action as 'REQUESTED' | 'APPROVED' | 'DENIED' | 'REVOKED' | undefined;
+      let accessId = previousAccess?.id;
+      if (!action || action === 'DENIED' || action === 'REVOKED') {
+        const { data: newAccess, error: requestError } = await supabase
+          .from('share_access')
+          .insert({
+            share_id: targetLink.shareId,
+            organization_id: organizationId,
+            organization_member_id: member.id,
+            action: 'REQUESTED',
+          })
+          .select('id, action, created_at')
+          .single();
+        if (requestError) throw requestError;
+        action = 'REQUESTED';
+        accessId = newAccess.id;
+      }
+
+      const requestStatus = action === 'APPROVED' ? 'approved' as const : action === 'REVOKED' ? 'revoked' as const : action === 'DENIED' ? 'declined' as const : 'pending' as const;
+      const accessRequest = {
+        id: accessId || crypto.randomUUID(),
+        requesterName: profile.fullName.trim(),
+        organization: organizationName,
+        requestedFields: targetLink.fieldsShared,
+        purpose: profile.purpose,
+        requestedAt: new Date().toLocaleString(),
+        status: requestStatus,
+        organizationId,
+        organizationMemberId: member.id,
+        profile,
+      };
+      const updatedLinks = shareLinks.map((link) => link.id === targetLink.id
+        ? {
+            ...link,
+            accessRequests: [
+              ...(link.accessRequests || []).filter((request) => request.organizationMemberId !== member.id),
+              accessRequest,
+            ],
+          }
+        : link);
+
+      saveSharedLinks(updatedLinks);
+      setShareLinks(updatedLinks);
+      setRegisteredEmail(normalizedEmail);
+      showToast(requestStatus === 'approved' ? 'Access is approved. Loading shared documents.' : 'Access request saved. Documents stay locked until approval.');
+    } catch (error) {
+      setRegistrationError(error instanceof Error ? error.message : 'Could not save organization details.');
+    } finally {
+      setIsSavingRegistration(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!hasApprovedAccess || !currentRequest?.profile || lastLoggedRequest.current === currentRequest.id) return;
+    if (!supabase || !currentShare?.shareId || !currentRequest.organizationId || !currentRequest.organizationMemberId) return;
+    lastLoggedRequest.current = currentRequest.id;
+
+    void supabase.from('share_access').insert({
+      share_id: currentShare.shareId,
+      organization_id: currentRequest.organizationId,
+      organization_member_id: currentRequest.organizationMemberId,
+      action: 'VIEWED',
+      accessed_at: new Date().toISOString(),
+    }).then(({ error }) => {
+      if (error) showToast(`Could not record this view: ${error.message}`);
+    });
+
+    setShareLinks((previousLinks) => {
+      const updatedLinks = previousLinks.map((link) => {
+        if (link.id !== packet.token) return link;
+        const viewer: AccessViewer = {
+          id: crypto.randomUUID(),
+          userName: currentRequest.profile!.fullName,
+          roleOrOrg: `${currentRequest.profile!.role} · ${currentRequest.profile!.organizationName}`,
+          viewedAt: new Date().toLocaleString(),
+          ipLocation: 'Organization link access',
+          verificationStatus: 'authorized',
+          email: currentRequest.profile!.workEmail,
+        };
+        return { ...link, accessCount: link.accessCount + 1, viewers: [...(link.viewers || []), viewer] };
+      });
+      saveSharedLinks(updatedLinks);
+      return updatedLinks;
+    });
+  }, [currentRequest?.id, currentRequest?.profile, currentRequest?.organizationId, currentRequest?.organizationMemberId, currentShare?.shareId, hasApprovedAccess, packet.token]);
+
+  if (!shareLookupComplete) {
+    return (
+      <div className="mx-auto flex min-h-[70vh] max-w-xl items-center justify-center px-4 py-12">
+        <div className="flex items-center gap-3 text-sm text-zinc-500 dark:text-[#8c879a]">
+          <span className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-300 border-t-emerald-600" />
+          Loading shared documents...
+        </div>
+      </div>
+    );
+  }
+
+  if (isAuthenticated && (packet.status !== 'Active' || !currentShare)) {
+    return (
+      <div className="mx-auto flex min-h-[70vh] max-w-xl items-center justify-center px-4 py-12">
+        <div className="w-full space-y-3 border-y border-zinc-200 py-8 text-center dark:border-[#26252e]">
+          <Lock className="mx-auto h-8 w-8 text-red-500" />
+          <h1 className="text-xl font-bold text-zinc-900 dark:text-white">This share link is unavailable</h1>
+          <p className="text-sm text-zinc-500 dark:text-[#8c879a]">
+            {shareLookupError || 'The owner revoked this link, or it has expired.'}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   if (!isAuthenticated) {
     return (
-      <div className="min-h-[80vh] flex items-center justify-center px-4 py-12">
-        <div className="max-w-md w-full p-8 rounded-3xl border border-zinc-200 dark:border-[#26252e] bg-white dark:bg-[#131317] text-center space-y-6 shadow-2xl">
-          <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mx-auto text-amber-500">
-            <Lock className="w-8 h-8" />
-          </div>
+      <div className="mx-auto flex min-h-[70vh] max-w-xl items-center justify-center px-4 py-12">
+        <div className="w-full space-y-4 border-y border-zinc-200 py-8 text-center dark:border-[#26252e]">
+          <Lock className="mx-auto h-8 w-8 text-amber-500" />
+          <h1 className="text-xl font-bold text-zinc-900 dark:text-white">Sign in to request access</h1>
+          <p className="text-sm text-zinc-500 dark:text-[#8c879a]">After sign-in, provide your organization details to request these documents.</p>
+          <button
+            onClick={() => {
+              window.sessionStorage.setItem('syndeo.pending-share-token', packet.token);
+              navigate('/auth');
+            }}
+            className="inline-flex items-center gap-2 rounded-lg bg-emerald-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-600"
+          >
+            Sign In / Register on SYNDEO
+            <ExternalLink className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+    );
+  }
 
-          <div className="space-y-2">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono bg-zinc-100 dark:bg-[#1d1c24] text-zinc-700 dark:text-[#a29db0] border border-zinc-200 dark:border-[#2d2c38]">
-              Restricted Link • ID: {packet.token}
-            </div>
-            <h2 className="text-2xl font-bold text-zinc-900 dark:text-[#e4e1e8]">
-              Platform Member Access Required
-            </h2>
-            <p className="text-xs text-zinc-500 dark:text-[#8c879a] leading-relaxed">
-              This shared link is protected by zero-knowledge envelope encryption. Only registered and logged-in users on the Syndeo platform can decrypt and view these records.
-            </p>
-          </div>
+  if (!registeredEmail || !currentRequest) {
+    const inputClass = 'w-full rounded-lg border border-zinc-300 bg-white px-3 py-2.5 text-sm text-zinc-900 outline-none focus:border-emerald-600 dark:border-[#353340] dark:bg-[#18171f] dark:text-white';
 
-          <div className="pt-2 space-y-2.5">
-            <button
-              onClick={() => navigate('/auth')}
-              className="w-full py-3 px-4 rounded-xl bg-[#5a25eb] hover:bg-[#6b37fa] text-white text-sm font-semibold transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
-            >
-              Sign In / Register on Syndeo
-              <ExternalLink className="w-4 h-4" />
+    return (
+      <div className="mx-auto max-w-2xl px-4 py-8 sm:px-6">
+        <div className="mb-6 border-b border-zinc-200 pb-5 dark:border-[#26252e]">
+          <div className="flex items-center gap-2 text-sm font-semibold text-emerald-700 dark:text-emerald-400">
+            <ShieldCheck className="h-4 w-4" /> Organization access request
+          </div>
+          <h1 className="mt-2 text-2xl font-bold text-zinc-900 dark:text-white">Tell the owner who is requesting access</h1>
+          <p className="mt-2 text-sm text-zinc-500 dark:text-[#8c879a]">
+            The selected documents stay locked until the owner approves your request.
+          </p>
+        </div>
+
+        <form onSubmit={submitOrganizationRequest} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <label className="space-y-1.5 text-xs font-semibold text-zinc-700 dark:text-[#c4bfcf]">
+            Full name *
+            <input className={inputClass} autoComplete="name" required value={organizationProfile.fullName} onChange={(event) => setOrganizationProfile({ ...organizationProfile, fullName: event.target.value })} />
+          </label>
+          <label className="space-y-1.5 text-xs font-semibold text-zinc-700 dark:text-[#c4bfcf]">
+            Official / work email *
+            <input className={inputClass} type="email" autoComplete="email" required value={organizationProfile.workEmail} onChange={(event) => setOrganizationProfile({ ...organizationProfile, workEmail: event.target.value })} />
+          </label>
+          <label className="space-y-1.5 text-xs font-semibold text-zinc-700 dark:text-[#c4bfcf]">
+            Organization name *
+            <input className={inputClass} autoComplete="organization" required value={organizationProfile.organizationName} onChange={(event) => setOrganizationProfile({ ...organizationProfile, organizationName: event.target.value })} />
+          </label>
+          <label className="space-y-1.5 text-xs font-semibold text-zinc-700 dark:text-[#c4bfcf]">
+            Organization type *
+            <select className={inputClass} required value={organizationProfile.organizationType} onChange={(event) => setOrganizationProfile({ ...organizationProfile, organizationType: event.target.value as OrganizationType })}>
+              {ORGANIZATION_TYPES.map((type) => <option key={type}>{type}</option>)}
+            </select>
+          </label>
+          <label className="space-y-1.5 text-xs font-semibold text-zinc-700 dark:text-[#c4bfcf]">
+            Role / designation *
+            <input className={inputClass} autoComplete="organization-title" required value={organizationProfile.role} onChange={(event) => setOrganizationProfile({ ...organizationProfile, role: event.target.value })} />
+          </label>
+          <label className="space-y-1.5 text-xs font-semibold text-zinc-700 dark:text-[#c4bfcf]">
+            Department / team
+            <input className={inputClass} value={organizationProfile.department} onChange={(event) => setOrganizationProfile({ ...organizationProfile, department: event.target.value })} />
+          </label>
+          <label className="space-y-1.5 text-xs font-semibold text-zinc-700 dark:text-[#c4bfcf]">
+            Organization website
+            <input className={inputClass} type="url" placeholder="https://example.org" value={organizationProfile.website} onChange={(event) => setOrganizationProfile({ ...organizationProfile, website: event.target.value })} />
+          </label>
+          <label className="space-y-1.5 text-xs font-semibold text-zinc-700 dark:text-[#c4bfcf]">
+            Purpose of using SYNDEO *
+            <select className={inputClass} required value={organizationProfile.purpose} onChange={(event) => setOrganizationProfile({ ...organizationProfile, purpose: event.target.value as SharePurpose })}>
+              {SHARE_PURPOSES.map((purpose) => <option key={purpose}>{purpose}</option>)}
+            </select>
+          </label>
+          <div className="flex items-center justify-between gap-3 border-t border-zinc-200 pt-4 dark:border-[#26252e] sm:col-span-2">
+            <span className="text-xs text-zinc-500">{packet.documents.length} document(s) selected by the owner</span>
+            <button disabled={isSavingRegistration} className="inline-flex items-center gap-2 rounded-lg bg-emerald-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-600 disabled:cursor-wait disabled:opacity-60" type="submit">
+              {isSavingRegistration ? 'Saving...' : 'Save details & request access'}
             </button>
-            {onBack && (
-              <button
-                onClick={onBack}
-                className="w-full py-2.5 px-4 rounded-xl border border-zinc-200 dark:border-[#2c2a38] text-zinc-600 dark:text-[#c4bfcf] hover:bg-zinc-100 dark:hover:bg-[#1e1d27] text-xs font-medium transition-colors cursor-pointer"
-              >
-                Go Back
-              </button>
-            )}
           </div>
+          {registrationError && (
+            <p className="text-sm text-red-600 dark:text-red-400 sm:col-span-2" role="alert">{registrationError}</p>
+          )}
+        </form>
+      </div>
+    );
+  }
+
+  if (!hasApprovedAccess) {
+    const wasDenied = currentRequest.status === 'declined' || currentRequest.status === 'revoked';
+    return (
+      <div className="mx-auto flex min-h-[70vh] max-w-xl items-center justify-center px-4 py-12">
+        <div className="w-full space-y-3 border-y border-zinc-200 py-8 text-center dark:border-[#26252e]">
+          <Lock className={`mx-auto h-8 w-8 ${wasDenied ? 'text-red-500' : 'text-amber-500'}`} />
+          <h1 className="text-xl font-bold text-zinc-900 dark:text-white">
+            {wasDenied ? 'Access is not available' : 'Waiting for owner approval'}
+          </h1>
+          <p className="text-sm text-zinc-500 dark:text-[#8c879a]">
+            {wasDenied ? 'No documents are available to this organization.' : 'Your request was sent. This page will unlock after approval.'}
+          </p>
+          {wasDenied && (
+            <button className="mt-2 rounded-lg border border-zinc-300 px-3 py-2 text-xs font-semibold text-zinc-700 dark:border-[#353340] dark:text-[#c4bfcf]" onClick={() => setRegisteredEmail('')}>
+              Submit another request
+            </button>
+          )}
         </div>
       </div>
     );
@@ -390,14 +842,6 @@ export const SharedLinkViewer: React.FC<SharedLinkViewerProps> = ({ token: propT
 
         <div className="flex items-center gap-2.5 flex-wrap">
           <button
-            onClick={() => setIsAddFieldModalOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#5a25eb] hover:bg-[#6b37fa] text-white text-xs font-medium transition-all shadow-sm cursor-pointer"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            Add Record to Link
-          </button>
-
-          <button
             onClick={copyShareLink}
             className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-zinc-200 dark:border-[#2d2c38] bg-white dark:bg-[#191920] text-zinc-700 dark:text-[#c4bfcf] hover:bg-zinc-50 dark:hover:bg-[#23222d] text-xs font-medium transition-colors cursor-pointer"
           >
@@ -430,7 +874,7 @@ export const SharedLinkViewer: React.FC<SharedLinkViewerProps> = ({ token: propT
 
           <div className="text-right shrink-0">
             <div className="text-xs font-mono text-[#cbbeff] bg-[#5a25eb]/10 border border-[#5a25eb]/30 px-3.5 py-2 rounded-xl text-center">
-              {fields.length} Disclosed Fields
+              {packet.documentShare ? packet.documents.length : fields.length} {packet.documentShare ? 'Documents' : 'Disclosed Fields'}
             </div>
           </div>
         </div>
@@ -439,12 +883,38 @@ export const SharedLinkViewer: React.FC<SharedLinkViewerProps> = ({ token: propT
           <div className="flex items-center gap-2">
             <Sparkles className="w-4 h-4 text-[#5a25eb] shrink-0" />
             <span>
-              Viewing as authenticated member <strong className="text-zinc-900 dark:text-white">{userName || userEmail || 'Verified User'}</strong>. You can add or remove disclosed records at any time.
+              Access approved for <strong className="text-zinc-900 dark:text-white">{currentRequest.profile?.organizationName}</strong>. Only documents selected by the owner are available.
             </span>
           </div>
         </div>
       </div>
 
+      {packet.documentShare && (
+        <section className="space-y-4">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-600 dark:text-[#8c879a]">
+            Approved Documents ({packet.documents.length})
+          </h2>
+          <div className="divide-y divide-zinc-200 border-y border-zinc-200 dark:divide-[#26252e] dark:border-[#26252e]">
+            {packet.documents.map((document) => (
+              <article key={document.id} className="flex flex-col gap-2 py-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex min-w-0 items-start gap-3">
+                  <FileText className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                  <div className="min-w-0">
+                    <h3 className="break-words text-sm font-semibold text-zinc-900 dark:text-white">{document.name}</h3>
+                    <p className="mt-1 text-xs capitalize text-zinc-500 dark:text-[#8c879a]">
+                      {document.category} · {document.fileType} · {document.fileSize} · {document.extractedFieldsCount} extracted records
+                    </p>
+                  </div>
+                </div>
+                <span className="shrink-0 text-xs font-medium text-emerald-700 dark:text-emerald-400">{document.status}</span>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Legacy record shares */}
+      {!packet.documentShare && <>
       {/* Disclosed Records Grid */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
@@ -576,6 +1046,7 @@ export const SharedLinkViewer: React.FC<SharedLinkViewerProps> = ({ token: propT
           </div>
         </div>
       </Modal>
+      </>}
     </div>
   );
 };
