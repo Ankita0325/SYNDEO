@@ -14,6 +14,7 @@ import {
   LogOut,
   ShieldCheck,
   Sparkles,
+  Plus,
 } from 'lucide-react';
 
 interface NavItemDef {
@@ -143,7 +144,7 @@ export const FloatingSidebar: React.FC<FloatingSidebarProps> = ({
             )}
           </AnimatePresence>
 
-          {/* Section Header */}
+          {/* Section Header & New Chat Button */}
           <AnimatePresence>
             {isExpanded && (
               <motion.div
@@ -151,9 +152,21 @@ export const FloatingSidebar: React.FC<FloatingSidebarProps> = ({
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.2 }}
-                className="pt-3 pb-1 px-1 text-[10px] font-mono uppercase tracking-wider text-zinc-400 dark:text-zinc-500 font-bold"
+                className="pt-2 pb-1 px-1 flex items-center justify-between"
               >
-                Navigation
+                <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 dark:text-zinc-500 font-bold">
+                  Navigation
+                </span>
+                <button
+                  onClick={() => {
+                    handleNav('/chat');
+                    handleClose();
+                  }}
+                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#5a25eb]/10 hover:bg-[#5a25eb] text-[#5a25eb] hover:text-white dark:bg-white/10 dark:hover:bg-white dark:text-[#cbbeff] dark:hover:text-[#111111] transition-all cursor-pointer"
+                >
+                  <Plus className="w-3 h-3" />
+                  <span>New Chat</span>
+                </button>
               </motion.div>
             )}
           </AnimatePresence>

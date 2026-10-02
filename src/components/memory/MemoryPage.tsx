@@ -7,6 +7,7 @@ import { mapSupabaseDocument, type SupabaseDocumentRow } from '../../lib/documen
 import { StatusBadge } from '../common/Badge';
 import { Modal } from '../common/Modal';
 import { ObsidianGraphView } from './ObsidianGraphView';
+import { MemoryPageSkeleton } from '../ui/SkeletonLoader';
 import {
   Database,
   FileText,
@@ -32,6 +33,7 @@ import {
 type ViewMode = 'graph' | 'cards' | 'documents';
 
 export const MemoryPage: React.FC = () => {
+  const [isInitialLoading, setIsInitialLoading] = useState<boolean>(true);
   const [records, setRecords] = useState<RecordField[]>(initialRecords);
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [documentLoadError, setDocumentLoadError] = useState<string | null>(null);
@@ -107,6 +109,9 @@ export const MemoryPage: React.FC = () => {
         } else {
           useSampleDocuments();
         }
+      }
+      if (active) {
+        setIsInitialLoading(false);
       }
     })();
 
@@ -270,6 +275,10 @@ export const MemoryPage: React.FC = () => {
       setIsUploading(false);
     }
   };
+
+  if (isInitialLoading) {
+    return <MemoryPageSkeleton />;
+  }
 
   return (
     <div className="max-w-6xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-6 text-zinc-900 dark:text-[#f4f4f6]">

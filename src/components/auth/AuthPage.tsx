@@ -8,6 +8,7 @@ import {
   UserRound,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { SyndeoPageLoader } from '../ui/SkeletonLoader';
 
 export const AuthPage: React.FC = () => {
   const { navigate, authLoading, needsProfile, authError, signInWithGoogle, createProfile } = useNavigation();
@@ -89,8 +90,11 @@ export const AuthPage: React.FC = () => {
           </div>
 
           {authLoading ? (
-            <div className="flex justify-center py-3" role="status" aria-label="Loading account">
-              <span className="w-4 h-4 rounded-full border-2 border-zinc-300 border-t-[#5a25eb] animate-spin" />
+            <div className="py-6">
+              <SyndeoPageLoader
+                label="Verifying Credentials..."
+                sublabel="Authenticating cryptographic identity"
+              />
             </div>
           ) : needsProfile ? (
             <form onSubmit={handleProfileSubmit} className="space-y-4">

@@ -8,6 +8,7 @@ import { mapSupabaseDocument, type SupabaseDocumentRow } from '../../lib/documen
 import { mapShareAccessRows } from '../../lib/shareAccess';
 import { StatusBadge } from '../common/Badge';
 import { Modal } from '../common/Modal';
+import { SharePageSkeleton } from '../ui/SkeletonLoader';
 import {
   Share2,
   Plus,
@@ -219,6 +220,7 @@ const AVAILABLE_FIELDS: SelectableFieldItem[] = [
 ];
 
 export const SharePage: React.FC = () => {
+  const [isInitialLoading, setIsInitialLoading] = useState<boolean>(true);
   // Selected State for Creator
   const [selectedFieldIds, setSelectedFieldIds] = useState<Set<string>>(new Set());
   const [vaultDocuments, setVaultDocuments] = useState<DocumentItem[]>([]);
@@ -365,6 +367,7 @@ export const SharePage: React.FC = () => {
       setSelectedFieldIds(new Set(documents.slice(0, 2).map((document) => document.id)));
       setIsUsingSampleDocuments(savedDocuments.length === 0);
       setDocumentLoadError(null);
+      setIsInitialLoading(false);
     })();
 
     return () => {
@@ -725,6 +728,10 @@ export const SharePage: React.FC = () => {
   const handleRevokeOrganizationAccess = (linkId: string, requestId: string) => {
     void appendAccessEvent(linkId, requestId, 'REVOKED', 'revoked', 'Organization access removed.');
   };
+
+  if (isInitialLoading) {
+    return <SharePageSkeleton />;
+  }
 
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">

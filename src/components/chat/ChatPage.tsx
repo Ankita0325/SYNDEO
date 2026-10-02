@@ -26,6 +26,7 @@ import {
   Paperclip,
   FileText,
   X,
+  Plus,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -675,6 +676,41 @@ export const ChatPage: React.FC = () => {
       {/* Seamless Workspace Area */}
       <div className="relative flex-1 flex flex-col min-h-0 h-full">
 
+        {/* Top Active Session Header with New Chat Button */}
+        {messages.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex items-center justify-between px-3 sm:px-4 py-1.5 shrink-0 z-20 border-b border-black/[0.04] dark:border-white/[0.06]"
+          >
+            <div className="flex items-center gap-2">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+              </span>
+              <span className="text-xs font-semibold text-zinc-600 dark:text-zinc-300">
+                Session Active
+              </span>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleResetChat}
+              className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold
+                         bg-white/80 dark:bg-[#151524]/80
+                         hover:bg-[#5a25eb] hover:text-white
+                         dark:hover:bg-white dark:hover:text-[#111111]
+                         text-zinc-800 dark:text-zinc-200
+                         border border-zinc-200/80 dark:border-white/12
+                         shadow-xs backdrop-blur-md transition-all cursor-pointer group"
+              title="Start a fresh chat conversation"
+            >
+              <Plus className="w-3.5 h-3.5 group-hover:rotate-90 transition-transform duration-200" />
+              <span>New Chat</span>
+            </button>
+          </motion.div>
+        )}
+
         {/* === MESSAGES CONTAINER === */}
         <div
           ref={messagesContainerRef}
@@ -1064,6 +1100,17 @@ export const ChatPage: React.FC = () => {
                   >
                     <Mic className="w-3.5 h-3.5" />
                     <span>Voice Mode</span>
+                  </button>
+
+                  {/* New Chat Quick Action */}
+                  <button
+                    type="button"
+                    onClick={handleResetChat}
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium text-zinc-600 dark:text-zinc-300 hover:text-zinc-950 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10 transition-all cursor-pointer"
+                    title="Start a fresh chat conversation"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">New Chat</span>
                   </button>
 
                   <button
