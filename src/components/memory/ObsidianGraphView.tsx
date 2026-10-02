@@ -115,8 +115,8 @@ export const ObsidianGraphView: React.FC<ObsidianGraphViewProps> = ({
   const svgRef = useRef<SVGSVGElement>(null);
   const animFrameRef = useRef<number | null>(null);
 
-  // Canvas Pan and Zoom
-  const [zoom, setZoom] = useState<number>(0.82);
+  // Canvas Pan and Zoom (Default zoom 1.0 centered cleanly)
+  const [zoom, setZoom] = useState<number>(1.0);
   const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState<boolean>(false);
   const [panStart, setPanStart] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -140,15 +140,15 @@ export const ObsidianGraphView: React.FC<ObsidianGraphViewProps> = ({
   const linksRef = useRef<GraphLink[]>([]);
   const [, setRenderTick] = useState<number>(0);
 
-  // Initialize and Seed Force Graph with Obsidian Sizing Hierarchy
+  // Initialize and Seed Force Graph with Compact Medium Spacing
   const initializeGraph = useCallback(() => {
     const calculatedNodes: GraphNode[] = [];
     const calculatedLinks: GraphLink[] = [];
 
-    const centerX = 600;
-    const centerY = 450;
+    const centerX = 500;
+    const centerY = 350;
 
-    // 1. Center Root Node (Person Anchor: 32px diameter / radius 16)
+    // 1. Center Root Node (Person Anchor: 28px diameter / radius 14)
     const rootNode: GraphNode = {
       id: 'root-user',
       label: userName || 'Indresh',
@@ -158,13 +158,13 @@ export const ObsidianGraphView: React.FC<ObsidianGraphViewProps> = ({
       y: centerY,
       vx: 0,
       vy: 0,
-      radius: 16,
+      radius: 14,
       color: '#38bdf8',
       seed: 1,
     };
     calculatedNodes.push(rootNode);
 
-    // 2. Category Hub Nodes (20px diameter / radius 10) in radial perimeter
+    // 2. Category Hub Nodes in medium orbit radius (135px)
     const catKeys: LifeStageCategory[] = [
       'identity',
       'education',
@@ -172,7 +172,7 @@ export const ObsidianGraphView: React.FC<ObsidianGraphViewProps> = ({
       'healthcare',
       'finance',
     ];
-    const catOrbitRadius = 240;
+    const catOrbitRadius = 135;
 
     const catAngles: Record<LifeStageCategory, number> = {
       identity: -Math.PI / 2,        // 12 o'clock
@@ -196,27 +196,27 @@ export const ObsidianGraphView: React.FC<ObsidianGraphViewProps> = ({
         category: catKey,
         x: catX,
         y: catY,
-        vx: (Math.random() - 0.5) * 2,
-        vy: (Math.random() - 0.5) * 2,
-        radius: 10,
+        vx: (Math.random() - 0.5) * 1.5,
+        vy: (Math.random() - 0.5) * 1.5,
+        radius: 9.5,
         color: CATEGORY_CONFIG[catKey].color,
         seed: catIdx + 2,
       };
       calculatedNodes.push(catNode);
 
-      // Root -> Category link (Subtle structural backbone)
+      // Root -> Category link (Medium spring)
       calculatedLinks.push({
         source: 'root-user',
         target: `cat-${catKey}`,
         type: 'root-to-cat',
         color: '#475569',
-        distance: 220,
-        strength: 0.022,
+        distance: 130,
+        strength: 0.035,
       });
 
-      // 3. Record Nodes (13px diameter / radius 6.5) with Fan Out
+      // 3. Record Nodes (12px diameter / radius 6) with Balanced Radial Arc
       const catRecords = records.filter((r) => r.category === catKey);
-      const fanSpread = Math.PI * 1.3;
+      const fanSpread = Math.PI * 1.25;
 
       catRecords.forEach((rec, recIdx) => {
         const offsetAngle =
@@ -224,10 +224,10 @@ export const ObsidianGraphView: React.FC<ObsidianGraphViewProps> = ({
             ? (recIdx / (catRecords.length - 1) - 0.5) * fanSpread
             : 0;
         const recAngle = angle + offsetAngle;
-        const recDistance = recIdx % 2 === 0 ? 140 : 220;
+        const recDistance = recIdx % 2 === 0 ? 68 : 95;
 
-        const recX = catX + Math.cos(recAngle) * recDistance + (Math.random() - 0.5) * 25;
-        const recY = catY + Math.sin(recAngle) * recDistance + (Math.random() - 0.5) * 25;
+        const recX = catX + Math.cos(recAngle) * recDistance + (Math.random() - 0.5) * 15;
+        const recY = catY + Math.sin(recAngle) * recDistance + (Math.random() - 0.5) * 15;
 
         const recNode: GraphNode = {
           id: rec.id,
@@ -240,9 +240,9 @@ export const ObsidianGraphView: React.FC<ObsidianGraphViewProps> = ({
           evidenceDoc: rec.evidenceDocName,
           x: recX,
           y: recY,
-          vx: (Math.random() - 0.5) * 2.5,
-          vy: (Math.random() - 0.5) * 2.5,
-          radius: 6.5,
+          vx: (Math.random() - 0.5) * 1.5,
+          vy: (Math.random() - 0.5) * 1.5,
+          radius: 6,
           color: CATEGORY_CONFIG[catKey].color,
           seed: recIdx * 7 + 10,
         };
@@ -254,15 +254,15 @@ export const ObsidianGraphView: React.FC<ObsidianGraphViewProps> = ({
           target: rec.id,
           type: 'cat-to-rec',
           color: '#3f3f46',
-          distance: 150,
-          strength: 0.022,
+          distance: 75,
+          strength: 0.038,
         });
 
-        // 4. Evidence Documents (9px diameter / radius 4.5)
+        // 4. Evidence Documents (8px diameter / radius 4)
         if (showDocuments && rec.evidenceDocName) {
           const docId = `doc-${rec.id}`;
           const docAngle = recAngle + (recIdx % 2 === 0 ? 0.35 : -0.35);
-          const docDistance = recDistance + 65;
+          const docDistance = recDistance + 36;
 
           const docX = catX + Math.cos(docAngle) * docDistance;
           const docY = catY + Math.sin(docAngle) * docDistance;
@@ -276,9 +276,9 @@ export const ObsidianGraphView: React.FC<ObsidianGraphViewProps> = ({
             category: rec.category,
             x: docX,
             y: docY,
-            vx: (Math.random() - 0.5) * 1.5,
-            vy: (Math.random() - 0.5) * 1.5,
-            radius: 4.5,
+            vx: (Math.random() - 0.5) * 1.2,
+            vy: (Math.random() - 0.5) * 1.2,
+            radius: 4,
             color: '#10b981',
             seed: recIdx * 13 + 30,
           };
@@ -290,8 +290,8 @@ export const ObsidianGraphView: React.FC<ObsidianGraphViewProps> = ({
             type: 'doc-to-rec',
             color: '#059669',
             isDashed: true,
-            distance: 85,
-            strength: 0.035,
+            distance: 42,
+            strength: 0.05,
           });
         }
       });
@@ -306,7 +306,7 @@ export const ObsidianGraphView: React.FC<ObsidianGraphViewProps> = ({
           const catX = catNode ? catNode.x : centerX;
           const catY = catNode ? catNode.y : centerY;
           const docAngle = Math.random() * Math.PI * 2;
-          const docDistance = 160 + (docIdx % 3) * 45;
+          const docDistance = 85 + (docIdx % 3) * 25;
 
           const docNode: GraphNode = {
             id: `doc-${doc.id}`,
@@ -317,9 +317,9 @@ export const ObsidianGraphView: React.FC<ObsidianGraphViewProps> = ({
             category: doc.category,
             x: catX + Math.cos(docAngle) * docDistance,
             y: catY + Math.sin(docAngle) * docDistance,
-            vx: (Math.random() - 0.5) * 1.5,
-            vy: (Math.random() - 0.5) * 1.5,
-            radius: 4.5,
+            vx: (Math.random() - 0.5) * 1.2,
+            vy: (Math.random() - 0.5) * 1.2,
+            radius: 4,
             color: '#10b981',
             seed: docIdx * 19 + 60,
           };
@@ -332,8 +332,8 @@ export const ObsidianGraphView: React.FC<ObsidianGraphViewProps> = ({
               type: 'doc-to-rec',
               color: '#059669',
               isDashed: true,
-              distance: 105,
-              strength: 0.03,
+              distance: 55,
+              strength: 0.045,
             });
           }
         }
@@ -349,7 +349,7 @@ export const ObsidianGraphView: React.FC<ObsidianGraphViewProps> = ({
     initializeGraph();
   }, [initializeGraph]);
 
-  // Obsidian Force-Directed Physics Simulation Engine
+  // Obsidian Force-Directed Physics Simulation Engine with Medium Compact Balances
   useEffect(() => {
     let startTime = performance.now();
 
@@ -362,26 +362,26 @@ export const ObsidianGraphView: React.FC<ObsidianGraphViewProps> = ({
       }
 
       const elapsed = (time - startTime) * 0.001;
-      const centerX = 600;
-      const centerY = 450;
+      const centerX = 500;
+      const centerY = 350;
 
       const nodeIndexMap = new Map<string, GraphNode>();
       nodes.forEach((n) => nodeIndexMap.set(n.id, n));
 
-      // 1. Root Node Outward Radial Push
-      const rootRepulsion = 18000;
+      // 1. Root Node Moderate Push
+      const rootRepulsion = 4500;
       nodes.forEach((n) => {
         if (n.type === 'root' || n.id === draggedNodeIdRef.current) return;
         const dx = n.x - centerX;
         const dy = n.y - centerY;
         const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-        const force = rootRepulsion / Math.max(Math.pow(dist, 1.3), 30);
+        const force = rootRepulsion / Math.max(Math.pow(dist, 1.3), 20);
         n.vx += (dx / dist) * force;
         n.vy += (dy / dist) * force;
       });
 
-      // 2. Pairwise Coulomb Repulsion & Collision Clearance
-      const repulsionStrength = 5200;
+      // 2. Pairwise Coulomb Repulsion & Collision Clearance (Moderate separation)
+      const repulsionStrength = 2200;
       const nLen = nodes.length;
 
       for (let i = 0; i < nLen; i++) {
@@ -394,7 +394,7 @@ export const ObsidianGraphView: React.FC<ObsidianGraphViewProps> = ({
           const dist = Math.sqrt(distSq);
 
           // Inverse power repulsion
-          const force = repulsionStrength / Math.max(Math.pow(dist, 1.35), 25);
+          const force = repulsionStrength / Math.max(Math.pow(dist, 1.35), 20);
           const fx = (dx / dist) * force;
           const fy = (dy / dist) * force;
 
@@ -407,8 +407,8 @@ export const ObsidianGraphView: React.FC<ObsidianGraphViewProps> = ({
             n2.vy += fy;
           }
 
-          // Anti-Overlap Collision Margin
-          const minSeparation = n1.radius + n2.radius + 45;
+          // Anti-Overlap Collision Margin (Moderate 28px margin)
+          const minSeparation = n1.radius + n2.radius + 28;
           if (dist < minSeparation) {
             const overlap = (minSeparation - dist) * 0.5;
             const pushX = (dx / dist) * overlap * 0.75;
@@ -451,14 +451,14 @@ export const ObsidianGraphView: React.FC<ObsidianGraphViewProps> = ({
         }
       });
 
-      // 4. Center Gravity & Natural Fluid Settling
-      const gravity = 0.008;
+      // 4. Center Gravity (Holds all nodes neatly within the medium viewport)
+      const gravity = 0.018;
       nodes.forEach((n) => {
         if (n.id === draggedNodeIdRef.current) return;
 
         if (n.type === 'root') {
-          n.vx += (centerX - n.x) * 0.06;
-          n.vy += (centerY - n.y) * 0.06;
+          n.vx += (centerX - n.x) * 0.08;
+          n.vy += (centerY - n.y) * 0.08;
         } else {
           n.vx += (centerX - n.x) * gravity;
           n.vy += (centerY - n.y) * gravity;
@@ -466,25 +466,24 @@ export const ObsidianGraphView: React.FC<ObsidianGraphViewProps> = ({
 
         // 5. Multi-Harmonic Organic Obsidian Drift Wave
         if (isFloatingActive && n.id !== draggedNodeIdRef.current) {
-          const waveX = Math.sin(elapsed * 1.1 + n.seed * 1.3) * 0.32 + Math.cos(elapsed * 0.5 + n.seed) * 0.18;
-          const waveY = Math.cos(elapsed * 0.95 + n.seed * 1.1) * 0.32 + Math.sin(elapsed * 0.65 + n.seed) * 0.18;
+          const waveX = Math.sin(elapsed * 1.1 + n.seed * 1.3) * 0.25 + Math.cos(elapsed * 0.5 + n.seed) * 0.15;
+          const waveY = Math.cos(elapsed * 0.95 + n.seed * 1.1) * 0.25 + Math.sin(elapsed * 0.65 + n.seed) * 0.15;
           n.vx += waveX;
           n.vy += waveY;
         }
 
         // 6. Velocity Damping
-        const friction = 0.90;
+        const friction = 0.88;
         n.vx *= friction;
         n.vy *= friction;
 
-        const maxVelocity = 8;
+        const maxVelocity = 6;
         const speed = Math.sqrt(n.vx * n.vx + n.vy * n.vy);
         if (speed > maxVelocity) {
           n.vx = (n.vx / speed) * maxVelocity;
           n.vy = (n.vy / speed) * maxVelocity;
         }
 
-        // Organic unconstrained coordinates
         n.x += n.vx;
         n.y += n.vy;
       });
@@ -643,7 +642,7 @@ export const ObsidianGraphView: React.FC<ObsidianGraphViewProps> = ({
     const onWheelNonPassive = (e: WheelEvent) => {
       e.preventDefault();
       const zoomFactor = e.deltaY < 0 ? 1.08 : 0.92;
-      setZoom((prev) => Math.min(Math.max(prev * zoomFactor, 0.5), 2.2));
+      setZoom((prev) => Math.min(Math.max(prev * zoomFactor, 0.4), 2.5));
     };
 
     el.addEventListener('wheel', onWheelNonPassive, { passive: false });
@@ -652,10 +651,10 @@ export const ObsidianGraphView: React.FC<ObsidianGraphViewProps> = ({
     };
   }, []);
 
-  const handleZoomIn = () => setZoom((prev) => Math.min(prev * 1.18, 2.2));
-  const handleZoomOut = () => setZoom((prev) => Math.max(prev / 1.18, 0.5));
+  const handleZoomIn = () => setZoom((prev) => Math.min(prev * 1.18, 2.5));
+  const handleZoomOut = () => setZoom((prev) => Math.max(prev / 1.18, 0.4));
   const handleReset = () => {
-    setZoom(0.82);
+    setZoom(1.0);
     setPan({ x: 0, y: 0 });
     setActiveNode(null);
     initializeGraph();
@@ -794,7 +793,7 @@ export const ObsidianGraphView: React.FC<ObsidianGraphViewProps> = ({
         </div>
       </div>
 
-      {/* Main Spatial SVG Graph Canvas */}
+      {/* Main Spatial SVG Graph Canvas (1000x700 centered for medium spacing) */}
       <div
         ref={containerRef}
         onMouseDown={handleSvgMouseDown}
@@ -808,24 +807,24 @@ export const ObsidianGraphView: React.FC<ObsidianGraphViewProps> = ({
         <svg
           ref={svgRef}
           className="w-full h-full"
-          viewBox="0 0 1200 900"
+          viewBox="0 0 1000 700"
           style={{
             transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-            transformOrigin: '600px 450px',
+            transformOrigin: '500px 350px',
             transition: isPanning || draggedNodeId ? 'none' : 'transform 0.08s ease-out',
           }}
         >
           <defs>
             {/* Seamless Subtle Dot Grid Pattern */}
-            <pattern id="bg-dot-grid" width="28" height="28" patternUnits="userSpaceOnUse">
-              <circle cx="14" cy="14" r="1.1" fill="rgba(255, 255, 255, 0.12)" />
+            <pattern id="bg-dot-grid" width="24" height="24" patternUnits="userSpaceOnUse">
+              <circle cx="12" cy="12" r="1.0" fill="rgba(255, 255, 255, 0.12)" />
             </pattern>
 
             {/* Subtle Directional Marker */}
             <marker
               id="subtle-arrow"
               viewBox="0 0 10 10"
-              refX="16"
+              refX="14"
               refY="5"
               markerWidth="3.5"
               markerHeight="3.5"
@@ -837,7 +836,7 @@ export const ObsidianGraphView: React.FC<ObsidianGraphViewProps> = ({
             <marker
               id="subtle-arrow-highlight"
               viewBox="0 0 10 10"
-              refX="16"
+              refX="14"
               refY="5"
               markerWidth="4.5"
               markerHeight="4.5"
@@ -847,12 +846,12 @@ export const ObsidianGraphView: React.FC<ObsidianGraphViewProps> = ({
             </marker>
 
             <filter id="glow-root" x="-60%" y="-60%" width="220%" height="220%">
-              <feGaussianBlur stdDeviation="9" result="blur" />
+              <feGaussianBlur stdDeviation="8" result="blur" />
               <feComposite in="SourceGraphic" in2="blur" operator="over" />
             </filter>
 
             <filter id="glow-selected" x="-70%" y="-70%" width="240%" height="240%">
-              <feGaussianBlur stdDeviation="11" result="blur" />
+              <feGaussianBlur stdDeviation="10" result="blur" />
               <feComposite in="SourceGraphic" in2="blur" operator="over" />
             </filter>
           </defs>
@@ -889,14 +888,14 @@ export const ObsidianGraphView: React.FC<ObsidianGraphViewProps> = ({
                 hoveredNode?.id === tgtNode.id;
 
               const opacity = isFilteredOut
-                ? 0.03
+                ? 0.04
                 : isHighlighted
-                ? 0.85
+                ? 0.9
                 : !isConnected
-                ? 0.07
+                ? 0.08
                 : isSearchMatch
-                ? 0.22
-                : 0.12;
+                ? 0.28
+                : 0.15;
 
               const strokeWidth = isHighlighted ? 1.8 : 1.0;
               const strokeColor = isHighlighted
@@ -964,14 +963,14 @@ export const ObsidianGraphView: React.FC<ObsidianGraphViewProps> = ({
 
               // Focus mode multi-depth hierarchy
               const opacity = isFilteredOut
-                ? 0.08
+                ? 0.09
                 : isSelected || isHovered
                 ? 1.0
                 : !isConnected
-                ? 0.18
+                ? 0.22
                 : isSearchMatch
-                ? 0.95
-                : 0.35;
+                ? 1.0
+                : 0.45;
 
               return (
                 <g
@@ -987,14 +986,14 @@ export const ObsidianGraphView: React.FC<ObsidianGraphViewProps> = ({
                   {/* Subtle Glowing Halo on Root or Selected/Hovered Nodes */}
                   {(node.type === 'root' || isSelected || isHovered) && (
                     <circle
-                      r={node.radius + (isSelected ? 7 : 5)}
+                      r={node.radius + (isSelected ? 6 : 4.5)}
                       fill={node.color}
-                      fillOpacity={isSelected ? 0.4 : 0.22}
+                      fillOpacity={isSelected ? 0.4 : 0.25}
                       filter={isSelected ? 'url(#glow-selected)' : 'url(#glow-root)'}
                     />
                   )}
 
-                  {/* Clean Circular Node Body (No borders/boxes) */}
+                  {/* Clean Circular Node Body */}
                   <circle
                     r={node.radius}
                     fill={
@@ -1011,14 +1010,14 @@ export const ObsidianGraphView: React.FC<ObsidianGraphViewProps> = ({
                         ? '#ffffff'
                         : node.type === 'root'
                         ? '#7dd3fc'
-                        : 'rgba(255, 255, 255, 0.2)'
+                        : 'rgba(255, 255, 255, 0.25)'
                     }
                     strokeWidth={isSelected ? 2.5 : isHovered ? 2 : 1}
                   />
 
                   {/* Inner Node Centered Dot / Icon */}
                   {node.type === 'root' && (
-                    <User className="w-4 h-4 text-zinc-950 -translate-x-2 -translate-y-2 pointer-events-none" />
+                    <User className="w-3.5 h-3.5 text-zinc-950 -translate-x-1.5 -translate-y-1.5 pointer-events-none" />
                   )}
 
                   {node.type === 'category' && (
@@ -1036,7 +1035,7 @@ export const ObsidianGraphView: React.FC<ObsidianGraphViewProps> = ({
                   )}
 
                   {/* Clean Floating Text Label Directly Beneath Node (No Card/Box) */}
-                  <g transform={`translate(0, ${node.radius + 12})`}>
+                  <g transform={`translate(0, ${node.radius + 11})`}>
                     <text
                       textAnchor="middle"
                       fill={
@@ -1048,7 +1047,7 @@ export const ObsidianGraphView: React.FC<ObsidianGraphViewProps> = ({
                           ? '#ffffff'
                           : '#cbd5e1'
                       }
-                      fontSize={node.type === 'root' ? 12 : node.type === 'category' ? 11 : 9}
+                      fontSize={node.type === 'root' ? 11.5 : node.type === 'category' ? 10.5 : 8.5}
                       fontWeight={node.type === 'root' || node.type === 'category' || isSelected ? '700' : '500'}
                       className="pointer-events-none"
                       style={{
@@ -1058,17 +1057,17 @@ export const ObsidianGraphView: React.FC<ObsidianGraphViewProps> = ({
                         strokeLinejoin: 'round',
                       }}
                     >
-                      {node.label.length > 22 ? `${node.label.substring(0, 20)}...` : node.label}
+                      {node.label.length > 20 ? `${node.label.substring(0, 18)}...` : node.label}
                     </text>
                   </g>
 
                   {/* Sublabel / Stored Value for Records */}
                   {node.value && node.type === 'record' && (isSelected || isHovered || zoom > 0.95) && (
-                    <g transform={`translate(0, ${node.radius + 23})`}>
+                    <g transform={`translate(0, ${node.radius + 21})`}>
                       <text
                         textAnchor="middle"
                         fill="#94a3b8"
-                        fontSize="8"
+                        fontSize="7.5"
                         className="pointer-events-none"
                         style={{
                           paintOrder: 'stroke fill',
@@ -1077,7 +1076,7 @@ export const ObsidianGraphView: React.FC<ObsidianGraphViewProps> = ({
                           strokeLinejoin: 'round',
                         }}
                       >
-                        {node.value.length > 22 ? `${node.value.substring(0, 20)}...` : node.value}
+                        {node.value.length > 20 ? `${node.value.substring(0, 18)}...` : node.value}
                       </text>
                     </g>
                   )}
