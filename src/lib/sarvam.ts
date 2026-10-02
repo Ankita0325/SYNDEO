@@ -69,20 +69,33 @@ const FALLBACK_BACKEND = 'https://syndeo-backend-wks3.onrender.com';
 export function cleanTextForSpeech(text: string): string {
   if (!text) return '';
   let clean = text
+    // Remove code blocks and raw JSON
     .replace(/```[\s\S]*?```/g, '')
+    // Replace markdown links with their friendly title (e.g. [GitHub](https://...) -> GitHub)
     .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    // Replace social platform URLs with spoken words rather than spelling out raw URLs
+    .replace(/https?:\/\/(?:www\.)?github\.com\/[^\s)\]]+/gi, 'GitHub link')
+    .replace(/https?:\/\/(?:www\.)?linkedin\.com\/in\/[^\s)\]]+/gi, 'LinkedIn profile')
+    .replace(/https?:\/\/(?:www\.)?discord\.(?:gg|com)\/[^\s)\]]+/gi, 'Discord link')
+    .replace(/https?:\/\/(?:www\.)?(?:twitter|x)\.com\/[^\s)\]]+/gi, 'Twitter profile')
+    // Remove all remaining raw URLs so speech engine doesn't read out "h-t-t-p-s colon slash slash..."
+    .replace(/https?:\/\/[^\s)\]]+/gi, '')
+    .replace(/www\.[^\s)\]]+/gi, '')
+    // Replace 32-64 character hexadecimal hashes with friendly phrase
+    .replace(/\b[a-f0-9]{32,64}\b/gi, 'verified hash')
+    // Remove markdown formatting symbols
     .replace(/[*_#`~>[\]]/g, '')
     .replace(/^[-•*]\s+/gm, '')
     .replace(/\n+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 
-  if (clean.length > 350) {
-    const sentenceMatch = clean.slice(0, 350).match(/^(.*?[.!?])(?:\s|$)/);
+  if (clean.length > 400) {
+    const sentenceMatch = clean.slice(0, 400).match(/^(.*?[.!?])(?:\s|$)/);
     if (sentenceMatch && sentenceMatch[1] && sentenceMatch[1].length > 40) {
       clean = sentenceMatch[1];
     } else {
-      clean = clean.slice(0, 300) + '.';
+      clean = clean.slice(0, 350) + '.';
     }
   }
   return clean;

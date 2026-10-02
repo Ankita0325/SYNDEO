@@ -387,6 +387,8 @@ async def ai_chat(req: SarvamChatRequest):
         "Keep product names, code, and proper nouns unchanged when appropriate. "
         "Use the supplied Neo4j vault records as user-specific verified facts. "
         "Distinguish evidence-backed claims (backed by documents with SHA-256 hashes) from user-confirmed claims. "
+        "When an attached document or PDF is provided, ALWAYS clearly itemize all extracted data fields, values, category, and confirm SHA-256 cryptographic evidence indexing. "
+        "When mentioning links or URLs in text, format them cleanly using markdown [Link Title](url). Never output raw ugly URLs repeatedly so that voice speech synthesis can speak naturally. "
         f"{mode_instructions[req.mode]} "
         "Keep responses direct, fluent, and concise (2-4 sentences where possible) for ultra-fast, natural voice conversation. "
         f"Live verified Graph & Vault records: {relevant_records}"
