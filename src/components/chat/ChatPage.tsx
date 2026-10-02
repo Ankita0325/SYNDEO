@@ -27,9 +27,7 @@ import {
   FileText,
   X,
   Plus,
-  Activity,
   CheckCircle2,
-  Cpu,
   Loader2,
   Edit3,
 } from 'lucide-react';
@@ -141,7 +139,6 @@ export const ChatPage: React.FC = () => {
 
   // Multi-Agent Pipeline Execution State
   const [agentSteps, setAgentSteps] = useState<AgentProgressStep[]>(DEFAULT_AGENT_STEPS);
-  const [activePipelineSummary, setActivePipelineSummary] = useState<string>('');
   const [isProcessingDoc, setIsProcessingDoc] = useState<boolean>(false);
 
   interface AttachedFile {
@@ -1086,7 +1083,6 @@ export const ChatPage: React.FC = () => {
       },
     ];
     setAgentSteps(initialSteps);
-    setActivePipelineSummary(hasDoc ? `OCR scanning ${currentAttached!.name}...` : 'Resolving query through multi-agent graph pipeline...');
 
     const t1 = setTimeout(() => {
       setOrbState('generating');
@@ -1239,7 +1235,6 @@ export const ChatPage: React.FC = () => {
               : s
             )
         );
-        setActivePipelineSummary('Verifying zero-knowledge disclosure policy...');
         await new Promise((r) => setTimeout(r, 280));
         setAgentSteps((prev) =>
           prev.map((s) =>
@@ -1261,7 +1256,6 @@ export const ChatPage: React.FC = () => {
               : s
           )
         );
-        setActivePipelineSummary('Querying Neo4j Aura graph topology...');
         await new Promise((r) => setTimeout(r, 280));
         setAgentSteps((prev) =>
           prev.map((s) =>
@@ -1283,7 +1277,6 @@ export const ChatPage: React.FC = () => {
               : s
           )
         );
-        setActivePipelineSummary('Synthesizing grounded response with Gemini...');
 
         const history = messages.slice(-20).map((message) => ({
           role: message.sender,
@@ -1938,147 +1931,94 @@ export const ChatPage: React.FC = () => {
 
           {isTyping && !isStreaming && (
             isProcessingDoc ? (
-              <motion.div
-                initial={{ opacity: 0, y: 8, scale: 0.98 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: -6, scale: 0.98 }}
-                className="w-full max-w-2xl mr-auto rounded-3xl p-4 sm:p-5 relative overflow-hidden backdrop-blur-2xl
-                           bg-white/90 dark:bg-[#0a0915]/95
-                           border border-blue-200/80 dark:border-white/20
-                           shadow-[0_12px_40px_rgba(90,70,255,0.12)]
-                           dark:shadow-[0_16px_50px_rgba(0,0,0,0.7),0_0_25px_rgba(255,255,255,0.08)]"
-              >
-                {/* Ambient pure-white / laser glow background in dark mode */}
-                <div className="absolute top-0 right-0 w-48 h-48 bg-white/10 dark:bg-white/5 rounded-full blur-3xl pointer-events-none" />
-                <div className="absolute bottom-0 left-0 w-48 h-48 bg-[#5a25eb]/10 dark:bg-white/5 rounded-full blur-3xl pointer-events-none" />
+              /* One-by-One Vertical Agent Cards in Chat */
+              <div className="flex flex-col gap-2 max-w-xl mr-auto w-full">
+                <AnimatePresence mode="popLayout">
+                  {agentSteps
+                    .filter((step) => step.status !== 'pending')
+                    .map((step) => {
+                      const isRunning = step.status === 'running';
+                      const isDone = step.status === 'completed';
 
-                {/* Header */}
-                <div className="flex items-center justify-between gap-2 pb-3 mb-3 border-b border-zinc-200/70 dark:border-white/10 relative z-10">
-                  <div className="flex items-center gap-2.5">
-                    <div className="relative w-8 h-8 rounded-full bg-white dark:bg-white/20 border border-zinc-200 dark:border-white/40 flex items-center justify-center shadow-[0_0_15px_rgba(255,255,255,0.85)]">
-                      <ThinkingOrb state={currentThinkingStep.state} size={20} theme="dark" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs sm:text-sm font-bold text-zinc-900 dark:text-white tracking-tight">
-                          Multi-Agent Orchestration Flow
-                        </span>
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                          Live Pipeline
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400 truncate max-w-[260px] sm:max-w-md">
-                        {activePipelineSummary || 'Executing zero-knowledge multi-hop reasoning...'}
-                      </p>
-                    </div>
-                  </div>
+                      return (
+                        <motion.div
+                          key={step.id}
+                          layout
+                          initial={{ opacity: 0, y: 12, scale: 0.96 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, scale: 0.95 }}
+                          transition={{ type: 'spring', stiffness: 350, damping: 25 }}
+                          className={`p-3 rounded-2xl transition-all duration-300 relative overflow-hidden flex flex-col justify-between w-full backdrop-blur-xl ${
+                            isRunning
+                              ? 'bg-white/95 dark:bg-[#121124]/95 border-2 border-[#5a25eb] dark:border-white shadow-[0_4px_25px_rgba(255,255,255,0.2)] ring-1 ring-white/20'
+                              : isDone
+                              ? 'bg-white/70 dark:bg-[#0c0c16]/70 border border-emerald-500/30 dark:border-white/10 opacity-85'
+                              : 'bg-zinc-50/60 dark:bg-white/[0.02] border border-zinc-200/50 dark:border-white/5 opacity-60'
+                          }`}
+                        >
+                          {/* Active glowing sheen */}
+                          {isRunning && (
+                            <motion.div
+                              animate={{ opacity: [0.2, 0.6, 0.2] }}
+                              transition={{ duration: 1.5, repeat: Infinity }}
+                              className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent pointer-events-none"
+                            />
+                          )}
 
-                  <div className="hidden sm:flex items-center gap-1.5 text-[10px] text-zinc-400 font-mono">
-                    <Cpu className="w-3.5 h-3.5 text-[#5a25eb] dark:text-white" />
-                    <span>Agent {Math.max(1, Math.min(agentSteps.filter((s) => s.status !== 'pending').length, 4))} of 4 Active</span>
-                  </div>
-                </div>
-
-                {/* Sequential Multi-Agent Cards (Appearing One by One) */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 relative z-10 w-full min-w-0">
-                  <AnimatePresence mode="popLayout">
-                    {agentSteps
-                      .filter((step) => step.status !== 'pending')
-                      .map((step) => {
-                        const isRunning = step.status === 'running';
-                        const isDone = step.status === 'completed';
-
-                        return (
-                          <motion.div
-                            key={step.id}
-                            layout
-                            initial={{ opacity: 0, scale: 0.9, y: 15 }}
-                            animate={{ opacity: 1, scale: 1, y: 0 }}
-                            exit={{ opacity: 0, scale: 0.9 }}
-                            transition={{ type: 'spring', stiffness: 350, damping: 25 }}
-                            className={`p-3 rounded-2xl transition-all duration-300 relative overflow-hidden flex flex-col justify-between w-full min-w-0 ${
-                              isRunning
-                                ? 'bg-white dark:bg-white/10 border-2 border-[#5a25eb] dark:border-white shadow-[0_0_20px_rgba(255,255,255,0.25)] ring-1 ring-white/20'
-                                : isDone
-                                ? 'bg-emerald-500/5 dark:bg-white/5 border border-emerald-500/30 dark:border-white/15'
-                                : 'bg-zinc-50/60 dark:bg-white/[0.02] border border-zinc-200/50 dark:border-white/5 opacity-60'
-                            }`}
-                          >
-                            {/* Active glowing sheen */}
-                            {isRunning && (
-                              <motion.div
-                                animate={{ opacity: [0.3, 0.7, 0.3] }}
-                                transition={{ duration: 1.5, repeat: Infinity }}
-                                className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent pointer-events-none"
-                              />
-                            )}
-
-                            <div className="flex items-start justify-between gap-2 mb-1.5 min-w-0">
-                              <div className="flex items-center gap-2 min-w-0 flex-1">
-                                {/* White Glowing Orb Animation Container */}
-                                <div
-                                  className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 transition-transform ${
-                                    isRunning
-                                      ? 'scale-110 shadow-[0_0_15px_rgba(255,255,255,0.95)] bg-white/20 border border-white'
-                                      : isDone
-                                      ? 'bg-emerald-500/10 border border-emerald-500/30'
-                                      : 'bg-zinc-200/40 dark:bg-white/5 border border-transparent'
-                                  }`}
-                                >
-                                  <ThinkingOrb
-                                    state={isRunning ? step.orbState : isDone ? 'working' : 'searching'}
-                                    size={20}
-                                    theme="dark"
-                                  />
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                  <h4 className="text-xs font-bold text-zinc-900 dark:text-white leading-tight truncate">
+                          <div className="flex items-start justify-between gap-2.5 min-w-0">
+                            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                              {/* White Glowing Orb Animation Container */}
+                              <div
+                                className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 transition-transform ${
+                                  isRunning
+                                    ? 'scale-110 shadow-[0_0_15px_rgba(255,255,255,0.95)] bg-white/20 border border-white'
+                                    : isDone
+                                    ? 'bg-emerald-500/10 border border-emerald-500/30'
+                                    : 'bg-zinc-200/40 dark:bg-white/5 border border-transparent'
+                                }`}
+                              >
+                                <ThinkingOrb
+                                  state={isRunning ? step.orbState : isDone ? 'working' : 'searching'}
+                                  size={20}
+                                  theme="dark"
+                                />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <h4 className="text-xs font-bold text-zinc-900 dark:text-white leading-tight">
                                     {step.name}
                                   </h4>
-                                  <p className="text-[10px] text-zinc-500 dark:text-zinc-400 font-mono truncate">
-                                    {step.role}
-                                  </p>
+                                  <span className="text-[10px] text-zinc-400 dark:text-zinc-500 font-mono">
+                                    • {step.role}
+                                  </span>
                                 </div>
-                              </div>
-
-                              {/* Status Badge */}
-                              <div className="shrink-0">
-                                {isDone && (
-                                  <span className="inline-flex items-center gap-1 text-[9px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded-md border border-emerald-500/20">
-                                    <CheckCircle2 className="w-2.5 h-2.5" />
-                                    Done
-                                  </span>
-                                )}
-                                {isRunning && (
-                                  <span className="inline-flex items-center gap-1 text-[9px] font-bold text-zinc-900 dark:text-white bg-white/30 dark:bg-white/20 px-1.5 py-0.5 rounded-md border border-white/40 shadow-[0_0_8px_rgba(255,255,255,0.6)] animate-pulse">
-                                    <Loader2 className="w-2.5 h-2.5 animate-spin" />
-                                    Active
-                                  </span>
-                                )}
+                                <p className="text-[11px] leading-snug text-zinc-600 dark:text-zinc-300 font-sans mt-0.5">
+                                  {step.detail}
+                                </p>
                               </div>
                             </div>
 
-                            <p className="text-[10.5px] leading-snug text-zinc-600 dark:text-zinc-300 font-sans mt-0.5 line-clamp-2">
-                              {step.detail}
-                            </p>
-                          </motion.div>
-                        );
-                      })}
-                  </AnimatePresence>
-                </div>
-
-                {/* Bottom Pulse Beam Track */}
-                <div className="mt-3 pt-2.5 border-t border-zinc-100 dark:border-white/5 flex items-center justify-between text-[10px] text-zinc-400">
-                  <div className="flex items-center gap-1.5 font-mono">
-                    <Activity className="w-3 h-3 text-[#5a25eb] dark:text-white animate-pulse" />
-                    <span>SHA-256 Verified · Neo4j AuraDB · Gemini Flash Lite</span>
-                  </div>
-                  <span className="font-mono font-semibold text-zinc-700 dark:text-zinc-200">
-                    {agentSteps.filter((s) => s.status === 'completed').length}/4 Done
-                  </span>
-                </div>
-              </motion.div>
+                            {/* Status Badge */}
+                            <div className="shrink-0 mt-0.5">
+                              {isDone && (
+                                <span className="inline-flex items-center gap-1 text-[9px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                                  <CheckCircle2 className="w-2.5 h-2.5" />
+                                  Done
+                                </span>
+                              )}
+                              {isRunning && (
+                                <span className="inline-flex items-center gap-1 text-[9px] font-bold text-zinc-900 dark:text-white bg-white/30 dark:bg-white/20 px-2 py-0.5 rounded-full border border-white/40 shadow-[0_0_8px_rgba(255,255,255,0.6)] animate-pulse">
+                                  <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                                  Active
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </motion.div>
+                      );
+                    })}
+                </AnimatePresence>
+              </div>
             ) : (
               /* Claude-Style Clean Minimalist Thinking Animation for Normal Queries */
               <motion.div

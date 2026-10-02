@@ -123,6 +123,13 @@ export interface SharedLink {
   accessRequests?: AccessRequestItem[];
   sharedDocumentIds?: string[];
   sharedDocuments?: DocumentItem[];
+  sharedFields?: Array<{
+    id: string;
+    label: string;
+    value: string;
+    category: string;
+    signature?: string;
+  }>;
 }
 
 export interface ShareRequest {

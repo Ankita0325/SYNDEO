@@ -329,10 +329,42 @@ export const SharedLinkViewer: React.FC<SharedLinkViewerProps> = ({ token: propT
         setShareLookupError(error.message);
       } else if (data) {
         const claims = Array.isArray(data.allowed_claims)
-          ? data.allowed_claims as Array<{ document_id?: string; document?: DocumentItem; file_name?: string }>
+          ? (data.allowed_claims as any[])
           : [];
         const selectedDocumentIds = claims.map((claim) => claim.document_id).filter((id): id is string => Boolean(id));
-        const documents = claims.flatMap((claim) => claim.document ? [claim.document] : []);
+        const documents: DocumentItem[] = claims
+          .filter((c) => c.document || (c.type === 'document' && c.file_name))
+          .map((c) => c.document || {
+            id: c.document_id || crypto.randomUUID(),
+            name: c.file_name || 'Document',
+            category: c.category || 'education',
+            fileType: 'pdf',
+            fileSize: 'Evidence Doc',
+            status: 'Verified' as const,
+            extractedFieldsCount: 1,
+            sha256: '0x' + (c.document_id || 'ev').slice(0, 8),
+          });
+
+        const extractedFields: SharedFieldData[] = claims
+          .filter((c) => c.type === 'field' || (c.label && c.value))
+          .map((c, index) => ({
+            id: c.field_id || c.id || `claim-${index}`,
+            category: c.category || 'social',
+            label: c.label || c.fieldName || 'Record',
+            value: c.value || c.fieldValue || '',
+            signature: c.signature || '0x' + crypto.randomUUID().slice(0, 8),
+            lastVerified: 'Recently Verified',
+          }));
+
+        const matchedMaster = ALL_MASTER_FIELDS.filter((f) =>
+          claims.some((claim) => {
+            const name = claim.file_name || claim.label || '';
+            return f.label.toLowerCase().includes(name.toLowerCase()) || name.toLowerCase().includes(f.label.toLowerCase());
+          })
+        );
+
+        const activeFields = extractedFields.length > 0 ? extractedFields : matchedMaster;
+
         const expiryDate = new Date(data.expires_at);
         const isExpired = expiryDate.getTime() <= Date.now() || data.status === 'EXPIRED';
         const { data: accessRows } = await supabase
@@ -340,12 +372,12 @@ export const SharedLinkViewer: React.FC<SharedLinkViewerProps> = ({ token: propT
           .select('id, organization_id, organization_member_id, action, accessed_at, created_at, organizations(id, name, type, purpose, website), organization_members(full_name, work_email, role, department)')
           .eq('share_id', data.id)
           .order('created_at', { ascending: true });
-        const activity = mapShareAccessRows(accessRows || [], claims.map((claim) => claim.file_name || claim.document?.name || '').filter(Boolean));
+        const activity = mapShareAccessRows(accessRows || [], claims.map((claim) => claim.file_name || claim.label || claim.document?.name || '').filter(Boolean));
         const remoteLink: SharedLink = {
           id: packet.token,
           shareId: data.id,
           recipient: data.recipient_organization || data.recipient_name || 'Shared documents',
-          fieldsShared: claims.map((claim) => claim.file_name || claim.document?.name || '').filter(Boolean),
+          fieldsShared: claims.map((claim) => claim.file_name || claim.label || claim.document?.name || '').filter(Boolean),
           createdAt: new Date(data.created_at).toLocaleString(),
           expiry: isExpired ? 'Expired' : expiryDate.getFullYear() >= 9999 ? 'Permanent (Until revoked)' : `Expires ${expiryDate.toLocaleString()}`,
           status: data.status === 'REVOKED' ? 'Revoked' : isExpired ? 'Expired' : 'Active',
@@ -354,6 +386,7 @@ export const SharedLinkViewer: React.FC<SharedLinkViewerProps> = ({ token: propT
           accessRequests: activity.accessRequests,
           sharedDocumentIds: selectedDocumentIds,
           sharedDocuments: documents,
+          sharedFields: activeFields.map((f) => ({ id: f.id, label: f.label, value: f.value, category: f.category, signature: f.signature })),
         };
         setShareLinks((previousLinks) => {
           const localLink = previousLinks.find((link) => link.id === remoteLink.id);
@@ -366,7 +399,14 @@ export const SharedLinkViewer: React.FC<SharedLinkViewerProps> = ({ token: propT
           };
           return [hydratedLink, ...previousLinks.filter((link) => link.id !== remoteLink.id)];
         });
-        setPacket((current) => ({ ...current, status: remoteLink.status, documents, documentShare: true }));
+        setPacket((current) => ({
+          ...current,
+          status: remoteLink.status,
+          documents,
+          fields: activeFields,
+          documentShare: documents.length > 0,
+        }));
+        setFields(activeFields);
       }
 
       setShareLookupComplete(true);
@@ -899,7 +939,7 @@ export const SharedLinkViewer: React.FC<SharedLinkViewerProps> = ({ token: propT
         </div>
       </div>
 
-      {packet.documentShare && (
+      {packet.documents && packet.documents.length > 0 && (
         <section className="space-y-4">
           <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-600 dark:text-[#8c879a]">
             Approved Documents ({packet.documents.length})
@@ -923,8 +963,6 @@ export const SharedLinkViewer: React.FC<SharedLinkViewerProps> = ({ token: propT
         </section>
       )}
 
-      {/* Legacy record shares */}
-      {!packet.documentShare && <>
       {/* Disclosed Records Grid */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
@@ -1056,7 +1094,6 @@ export const SharedLinkViewer: React.FC<SharedLinkViewerProps> = ({ token: propT
           </div>
         </div>
       </Modal>
-      </>}
     </div>
   );
 };

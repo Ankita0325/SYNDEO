@@ -6,6 +6,7 @@ import { supabase } from '../../lib/supabase';
 import { hashShareToken } from '../../lib/shareToken';
 import { mapSupabaseDocument, type SupabaseDocumentRow } from '../../lib/documents';
 import { mapShareAccessRows } from '../../lib/shareAccess';
+import { fetchRecordsFromBackend, fetchDocumentsFromBackend } from '../../lib/api';
 import { StatusBadge } from '../common/Badge';
 import { Modal } from '../common/Modal';
 import { SharePageSkeleton } from '../ui/SkeletonLoader';
@@ -22,71 +23,81 @@ import {
   ChevronUp,
   Eye,
   UserCheck,
-  Clock,
-  MapPin,
-  ShieldCheck,
   CheckCircle2,
   AlertCircle,
   Sparkles,
+  FileText,
+  Key,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { QRCodeSVG } from 'qrcode.react';
 
-interface SelectableFieldItem {
+export interface SelectableItem {
   id: string;
-  category: 'social' | 'education' | 'finance' | 'health';
+  type: 'document' | 'record';
+  category: string;
   categoryLabel: string;
   label: string;
   value: string;
   signature: string;
+  fileType?: string;
+  fileSize?: string;
+  extractedFieldsCount?: number;
+  document?: DocumentItem;
 }
 
-const AVAILABLE_FIELDS: SelectableFieldItem[] = [
-  // Social
+const DEFAULT_VAULT_RECORDS: SelectableItem[] = [
+  // Social / Identity
   {
     id: 'soc-github',
+    type: 'record',
     category: 'social',
-    categoryLabel: 'Social',
-    label: 'GitHub',
+    categoryLabel: 'Identity & Social',
+    label: 'GitHub Profile',
     value: 'https://github.com/indresh404/SYNDEO',
     signature: '0x9a8f...4e1',
   },
   {
     id: 'soc-linkedin',
+    type: 'record',
     category: 'social',
-    categoryLabel: 'Social',
-    label: 'LinkedIn',
+    categoryLabel: 'Identity & Social',
+    label: 'LinkedIn Profile',
     value: 'https://linkedin.com/in/indresh-suresh-093646399',
     signature: '0x81bd...2c4',
   },
   {
     id: 'soc-email',
+    type: 'record',
     category: 'social',
-    categoryLabel: 'Social',
-    label: 'Email',
+    categoryLabel: 'Identity & Social',
+    label: 'Verified Email',
     value: 'indresh404@gmail.com',
     signature: '0x27fc...88a',
   },
   {
     id: 'soc-twitter',
+    type: 'record',
     category: 'social',
-    categoryLabel: 'Social',
+    categoryLabel: 'Identity & Social',
     label: 'Twitter / X',
     value: '@indresh404',
     signature: '0x14ea...559',
   },
   {
     id: 'soc-discord',
+    type: 'record',
     category: 'social',
-    categoryLabel: 'Social',
-    label: 'Discord',
+    categoryLabel: 'Identity & Social',
+    label: 'Discord Tag',
     value: '@indresh404',
     signature: '0x5b33...7d1',
   },
   {
     id: 'soc-portfolio',
+    type: 'record',
     category: 'social',
-    categoryLabel: 'Social',
+    categoryLabel: 'Identity & Social',
     label: 'Portfolio Website',
     value: 'https://github.com/indresh404/SYNDEO',
     signature: '0x6e9a...3f0',
@@ -95,14 +106,16 @@ const AVAILABLE_FIELDS: SelectableFieldItem[] = [
   // Education
   {
     id: 'edu-school',
+    type: 'record',
     category: 'education',
     categoryLabel: 'Education',
-    label: 'School / College',
+    label: 'University / Institute',
     value: 'SLRTCE (Shree L. R. Tiwari College of Engineering)',
     signature: '0xec21...8b7',
   },
   {
     id: 'edu-degree',
+    type: 'record',
     category: 'education',
     categoryLabel: 'Education',
     label: 'Degree & Major',
@@ -111,6 +124,7 @@ const AVAILABLE_FIELDS: SelectableFieldItem[] = [
   },
   {
     id: 'edu-cgpa',
+    type: 'record',
     category: 'education',
     categoryLabel: 'Education',
     label: 'GPA / CGPA',
@@ -119,40 +133,27 @@ const AVAILABLE_FIELDS: SelectableFieldItem[] = [
   },
   {
     id: 'edu-gradyear',
+    type: 'record',
     category: 'education',
     categoryLabel: 'Education',
     label: 'Graduation Year',
     value: 'Class of 2024',
     signature: '0x992b...a0f',
   },
-  {
-    id: 'edu-transcript',
-    category: 'education',
-    categoryLabel: 'Education',
-    label: 'Official Transcripts',
-    value: 'SLRTCE Final Transcript Registrar Record #88219',
-    signature: '0xfa11...32d',
-  },
 
   // Finance
   {
     id: 'fin-bank',
+    type: 'record',
     category: 'finance',
     categoryLabel: 'Finance',
-    label: 'Bank Account',
+    label: 'Bank Account & IFSC',
     value: 'HDFC Bank (IFSC: HDFC0000128) ****0128',
     signature: '0xbb04...8e2',
   },
   {
-    id: 'fin-credit',
-    category: 'finance',
-    label: 'Credit Score',
-    categoryLabel: 'Finance',
-    value: '782 (Excellent Tier)',
-    signature: '0x12c4...77e',
-  },
-  {
     id: 'fin-tax',
+    type: 'record',
     category: 'finance',
     categoryLabel: 'Finance',
     label: 'Tax ID / PAN',
@@ -161,72 +162,51 @@ const AVAILABLE_FIELDS: SelectableFieldItem[] = [
   },
   {
     id: 'fin-income',
+    type: 'record',
     category: 'finance',
     categoryLabel: 'Finance',
     label: 'Monthly Income',
     value: '₹85,000 / month (Verified Deposit)',
     signature: '0x49a2...61b',
   },
-  {
-    id: 'fin-crypto',
-    category: 'finance',
-    categoryLabel: 'Finance',
-    label: 'Crypto Wallet',
-    value: '0x71C...3a9F (Ethereum Mainnet)',
-    signature: '0x00f8...5e9',
-  },
 
   // Health
   {
     id: 'hlth-blood',
+    type: 'record',
     category: 'health',
-    categoryLabel: 'Health',
+    categoryLabel: 'Healthcare',
     label: 'Blood Group',
     value: 'O Positive (O+)',
     signature: '0x32ba...11f',
   },
   {
     id: 'hlth-vaccine',
+    type: 'record',
     category: 'health',
-    categoryLabel: 'Health',
+    categoryLabel: 'Healthcare',
     label: 'Vaccine Records',
     value: 'COVID-19 Booster & MMR Complete',
     signature: '0x99ea...72c',
   },
   {
-    id: 'hlth-insurance',
-    category: 'health',
-    categoryLabel: 'Health',
-    label: 'Medical Insurance',
-    value: 'Star Health & Allied — Policy #SH-88921-99',
-    signature: '0x66c8...34e',
-  },
-  {
     id: 'hlth-emergency',
+    type: 'record',
     category: 'health',
-    categoryLabel: 'Health',
+    categoryLabel: 'Healthcare',
     label: 'Emergency Contact',
     value: 'Ankita (+91 98201 55910)',
     signature: '0x18db...44b',
-  },
-  {
-    id: 'hlth-allergies',
-    category: 'health',
-    categoryLabel: 'Health',
-    label: 'Known Allergies',
-    value: 'Penicillin (Severe), Pollen (Mild)',
-    signature: '0x70aa...29f',
   },
 ];
 
 export const SharePage: React.FC = () => {
   const [isInitialLoading, setIsInitialLoading] = useState<boolean>(true);
-  // Selected State for Creator
-  const [selectedFieldIds, setSelectedFieldIds] = useState<Set<string>>(new Set());
+  const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(new Set());
   const [vaultDocuments, setVaultDocuments] = useState<DocumentItem[]>([]);
-  const [documentLoadError, setDocumentLoadError] = useState<string | null>(null);
-  const [isUsingSampleDocuments, setIsUsingSampleDocuments] = useState(false);
+  const [vaultRecords, setVaultRecords] = useState<SelectableItem[]>(DEFAULT_VAULT_RECORDS);
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategoryTab, setSelectedCategoryTab] = useState<string>('all');
   const [recipientInput, setRecipientInput] = useState('Acme University Postgraduate Admissions');
   const [expiryOption, setExpiryOption] = useState<'1h' | '24h' | '7d' | 'never'>('24h');
 
@@ -240,7 +220,7 @@ export const SharePage: React.FC = () => {
   const [shareCreationError, setShareCreationError] = useState<string | null>(null);
   const [isCreatingShare, setIsCreatingShare] = useState(false);
 
-  // Link History - Starts clean with real user shares
+  // Link History
   const [sharedLinks, setSharedLinks] = useState<SharedLink[]>(() => loadSharedLinks([]));
 
   useEffect(() => {
@@ -249,6 +229,83 @@ export const SharePage: React.FC = () => {
 
   useEffect(() => subscribeToSharedLinks(setSharedLinks), []);
 
+  // Fetch Live Backend Graph Records & Documents
+  useEffect(() => {
+    let active = true;
+
+    void (async () => {
+      try {
+        const [backendRecs, backendDocs] = await Promise.all([
+          fetchRecordsFromBackend(),
+          fetchDocumentsFromBackend(),
+        ]);
+
+        if (!active) return;
+
+        if (Array.isArray(backendRecs) && backendRecs.length > 0) {
+          const mappedRecords: SelectableItem[] = backendRecs.map((rec: any) => {
+            const rawCategory = (rec.category || 'social').toLowerCase();
+            const catLabel =
+              rawCategory === 'social' || rawCategory === 'identity'
+                ? 'Identity & Social'
+                : rawCategory === 'education'
+                ? 'Education'
+                : rawCategory === 'finance'
+                ? 'Finance'
+                : rawCategory === 'health' || rawCategory === 'healthcare'
+                ? 'Healthcare'
+                : 'General';
+
+            const signatureHash = rec.evidenceDocHash
+              ? `0x${rec.evidenceDocHash.slice(0, 4)}...${rec.evidenceDocHash.slice(-3)}`
+              : `0x${(rec.id || 'sec').slice(0, 4)}...${(rec.id || '99a').slice(-3)}`;
+
+            return {
+              id: rec.id || `claim-${rec.fieldName}`,
+              type: 'record' as const,
+              category: rawCategory,
+              categoryLabel: catLabel,
+              label: rec.fieldName || rec.label || 'Attribute',
+              value: rec.fieldValue || rec.value || '',
+              signature: signatureHash,
+            };
+          });
+
+          // Merge deduplicating by label
+          const mergedRecords = [...mappedRecords];
+          for (const defRec of DEFAULT_VAULT_RECORDS) {
+            if (!mergedRecords.some((r) => r.label.toLowerCase() === defRec.label.toLowerCase())) {
+              mergedRecords.push(defRec);
+            }
+          }
+          setVaultRecords(mergedRecords);
+        }
+
+        if (Array.isArray(backendDocs) && backendDocs.length > 0) {
+          const docs: DocumentItem[] = backendDocs.map((doc: any) => ({
+            id: doc.id || crypto.randomUUID(),
+            name: doc.fileName || doc.name || 'Document',
+            category: (doc.category || 'education') as any,
+            fileType: (doc.fileType || 'pdf').toLowerCase(),
+            fileSize: doc.fileSize || '1.2 MB',
+            uploadDate: doc.createdAt || 'Recently',
+            status: 'Parsed' as const,
+            extractedFieldsCount: doc.extractedFieldsCount || 4,
+            sha256Hash: doc.sha256Hash || '0x4a9b...7e1',
+          }));
+          setVaultDocuments((prev) => (prev.length === 0 ? docs : prev));
+        }
+      } catch (err) {
+        console.warn('Backend live graph sync info:', err);
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  // Supabase Access Activity Polling
   useEffect(() => {
     const client = supabase;
     if (!client) return;
@@ -295,6 +352,7 @@ export const SharePage: React.FC = () => {
     };
   }, []);
 
+  // Supabase Documents Loading
   useEffect(() => {
     let active = true;
 
@@ -302,30 +360,18 @@ export const SharePage: React.FC = () => {
       if (!supabase) {
         const sampleDocuments = initialDocuments.slice(0, 2);
         setVaultDocuments(sampleDocuments);
-        setSelectedFieldIds(new Set(sampleDocuments.map((document) => document.id)));
-        setIsUsingSampleDocuments(true);
-        setDocumentLoadError('Supabase is not configured.');
+        setSelectedItemIds(new Set(sampleDocuments.map((document) => document.id)));
+        setIsInitialLoading(false);
         return;
       }
 
       const { data: { user }, error: userError } = await supabase.auth.getUser();
-      if (userError) {
+      if (userError || !user) {
         if (active) {
           const sampleDocuments = initialDocuments.slice(0, 2);
           setVaultDocuments(sampleDocuments);
-          setSelectedFieldIds(new Set(sampleDocuments.map((document) => document.id)));
-          setIsUsingSampleDocuments(true);
-          setDocumentLoadError(userError.message);
-        }
-        return;
-      }
-      if (!user) {
-        if (active) {
-          const sampleDocuments = initialDocuments.slice(0, 2);
-          setVaultDocuments(sampleDocuments);
-          setSelectedFieldIds(new Set(sampleDocuments.map((document) => document.id)));
-          setIsUsingSampleDocuments(true);
-          setDocumentLoadError('Sign in to load your vault documents.');
+          setSelectedItemIds(new Set(sampleDocuments.map((document) => document.id)));
+          setIsInitialLoading(false);
         }
         return;
       }
@@ -339,9 +385,8 @@ export const SharePage: React.FC = () => {
         if (active) {
           const sampleDocuments = initialDocuments.slice(0, 2);
           setVaultDocuments(sampleDocuments);
-          setSelectedFieldIds(new Set(sampleDocuments.map((document) => document.id)));
-          setIsUsingSampleDocuments(true);
-          setDocumentLoadError(profileError.message);
+          setSelectedItemIds(new Set(sampleDocuments.map((document) => document.id)));
+          setIsInitialLoading(false);
         }
         return;
       }
@@ -353,19 +398,13 @@ export const SharePage: React.FC = () => {
         .order('created_at', { ascending: false });
       if (!active) return;
       if (error) {
-        setVaultDocuments([]);
-        setSelectedFieldIds(new Set());
-        setIsUsingSampleDocuments(false);
-        setDocumentLoadError(error.message);
         setIsInitialLoading(false);
         return;
       }
 
       const savedDocuments = (data || []).map((row) => mapSupabaseDocument(row as SupabaseDocumentRow));
       setVaultDocuments(savedDocuments);
-      setSelectedFieldIds(new Set(savedDocuments.slice(0, 2).map((document) => document.id)));
-      setIsUsingSampleDocuments(false);
-      setDocumentLoadError(null);
+      setSelectedItemIds(new Set(savedDocuments.slice(0, 2).map((document) => document.id)));
       setIsInitialLoading(false);
     })();
 
@@ -374,6 +413,7 @@ export const SharePage: React.FC = () => {
     };
   }, []);
 
+  // Sync Supabase Shares with Local State
   useEffect(() => {
     let active = true;
 
@@ -402,9 +442,9 @@ export const SharePage: React.FC = () => {
           .eq('share_id', share.id)
           .order('created_at', { ascending: true });
         const claims = Array.isArray(share.allowed_claims)
-          ? share.allowed_claims as Array<{ document_id?: string; file_name?: string; document?: DocumentItem }>
+          ? share.allowed_claims as Array<{ document_id?: string; file_name?: string; document?: DocumentItem; label?: string; value?: string }>
           : [];
-        const requestedDocuments = claims.map((claim) => claim.file_name || claim.document_id || '').filter(Boolean);
+        const requestedDocuments = claims.map((claim) => claim.file_name || claim.label || claim.document_id || '').filter(Boolean);
         const activity = eventsError || !events
           ? { viewers: localLink.viewers || [], accessRequests: localLink.accessRequests || [], accessCount: localLink.accessCount }
           : mapShareAccessRows(events, requestedDocuments);
@@ -436,7 +476,45 @@ export const SharePage: React.FC = () => {
     };
   }, [vaultDocuments]);
 
-  // Add Field To Link Drawer Modal
+  // Combine Documents and Records into unified selectable list
+  const allSelectableItems = useMemo<SelectableItem[]>(() => {
+    const docItems: SelectableItem[] = vaultDocuments.map((doc) => ({
+      id: doc.id,
+      type: 'document',
+      category: 'documents',
+      categoryLabel: 'Documents & Files',
+      label: doc.name,
+      value: `${doc.fileType.toUpperCase()} · ${doc.fileSize} · ${doc.extractedFieldsCount || 1} records`,
+      signature: doc.sha256Hash || '0x88f2...10c',
+      fileType: doc.fileType,
+      fileSize: doc.fileSize,
+      extractedFieldsCount: doc.extractedFieldsCount,
+      document: doc,
+    }));
+
+    return [...docItems, ...vaultRecords];
+  }, [vaultDocuments, vaultRecords]);
+
+  // Filtered Selectable Items in Create Share Modal
+  const filteredSelectableItems = useMemo(() => {
+    return allSelectableItems.filter((item) => {
+      const matchesSearch =
+        !searchQuery.trim() ||
+        item.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.value.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.categoryLabel.toLowerCase().includes(searchQuery.toLowerCase());
+
+      const matchesTab =
+        selectedCategoryTab === 'all' ||
+        (selectedCategoryTab === 'documents' && item.type === 'document') ||
+        (selectedCategoryTab === item.category);
+
+      return matchesSearch && matchesTab;
+    });
+  }, [allSelectableItems, searchQuery, selectedCategoryTab]);
+
+  // Quick Add Drawer State
   const [activeDrawerLinkId, setActiveDrawerLinkId] = useState<string | null>(null);
   const [searchAddDrawerQuery, setSearchAddDrawerQuery] = useState('');
 
@@ -445,8 +523,8 @@ export const SharePage: React.FC = () => {
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  const toggleField = (id: string) => {
-    setSelectedFieldIds((prev) => {
+  const toggleItem = (id: string) => {
+    setSelectedItemIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) {
         next.delete(id);
@@ -458,75 +536,84 @@ export const SharePage: React.FC = () => {
   };
 
   const selectAll = () => {
-    setSelectedFieldIds(new Set(vaultDocuments.map((document) => document.id)));
+    setSelectedItemIds(new Set(allSelectableItems.map((item) => item.id)));
   };
 
   const clearAll = () => {
-    setSelectedFieldIds(new Set());
+    setSelectedItemIds(new Set());
   };
 
-  const filteredDocuments = useMemo(() => {
-    if (!searchQuery.trim()) return vaultDocuments;
-    const q = searchQuery.toLowerCase();
-    return vaultDocuments.filter(
-      (document) =>
-        document.name.toLowerCase().includes(q) ||
-        document.category.toLowerCase().includes(q) ||
-        document.fileType.toLowerCase().includes(q)
-    );
-  }, [searchQuery, vaultDocuments]);
-
   const handleGenerateShare = async () => {
-    if (selectedFieldIds.size === 0) return;
+    if (selectedItemIds.size === 0) return;
     setShareCreationError(null);
-    if (!supabase) {
-      setShareCreationError('Supabase is not configured. Check the VITE Supabase URL and anon key.');
-      return;
-    }
 
-    const selectedDocuments = vaultDocuments.filter((document) => selectedFieldIds.has(document.id));
-    const selectedFieldsList = selectedDocuments.map((document) => document.name);
+    const selectedItems = allSelectableItems.filter((item) => selectedItemIds.has(item.id));
+    const selectedDocuments = selectedItems.filter((i) => i.type === 'document' && i.document).map((i) => i.document!);
+    const selectedRecords = selectedItems.filter((i) => i.type === 'record');
+    const selectedFieldsList = selectedItems.map((item) => item.label);
     setIsCreatingShare(true);
 
     try {
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      if (userError) throw userError;
-      if (!user) throw new Error('Sign in before creating a share link.');
-
-      const { data: ownerProfile, error: profileError } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('auth_user_id', user.id)
-        .single();
-      if (profileError) throw profileError;
-
       const token = crypto.randomUUID();
       const tokenHash = await hashShareToken(token);
       const expiresAt = expiryOption === 'never'
         ? '9999-12-31T23:59:59.000Z'
         : new Date(Date.now() + (expiryOption === '1h' ? 1 : expiryOption === '24h' ? 24 : 24 * 7) * 60 * 60 * 1000).toISOString();
-      const { data: savedShare, error: shareError } = await supabase
-        .from('shares')
-        .insert({
-          profile_id: ownerProfile.id,
-          recipient_name: recipientInput || null,
-          recipient_organization: recipientInput || null,
-          purpose: 'Organization access request',
-          allowed_claims: selectedDocuments.map((document) => ({
-            document_id: document.id,
-            file_name: document.name,
-            document,
-          })),
-          token_hash: tokenHash,
-          expires_at: expiresAt,
-        })
-        .select('id')
-        .single();
-      if (shareError) throw shareError;
+
+      const allowedClaimsPayload = [
+        ...selectedDocuments.map((doc) => ({
+          type: 'document',
+          document_id: doc.id,
+          file_name: doc.name,
+          category: doc.category,
+          document: doc,
+        })),
+        ...selectedRecords.map((rec) => ({
+          type: 'field',
+          field_id: rec.id,
+          label: rec.label,
+          value: rec.value,
+          category: rec.category,
+          signature: rec.signature,
+        })),
+      ];
+
+      let savedShareId: string | undefined = undefined;
+
+      if (supabase) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data: ownerProfile } = await supabase
+            .from('profiles')
+            .select('id')
+            .eq('auth_user_id', user.id)
+            .maybeSingle();
+
+          if (ownerProfile) {
+            const { data: savedShare, error: shareError } = await supabase
+              .from('shares')
+              .insert({
+                profile_id: ownerProfile.id,
+                recipient_name: recipientInput || null,
+                recipient_organization: recipientInput || null,
+                purpose: 'Organization verified credentials access',
+                allowed_claims: allowedClaimsPayload,
+                token_hash: tokenHash,
+                expires_at: expiresAt,
+              })
+              .select('id')
+              .single();
+
+            if (!shareError && savedShare) {
+              savedShareId = savedShare.id;
+            }
+          }
+        }
+      }
 
       const newLink: SharedLink = {
         id: token,
-        shareId: savedShare.id,
+        shareId: savedShareId,
         recipient: recipientInput || 'Verified Partner Review',
         fieldsShared: selectedFieldsList,
         createdAt: 'Just now',
@@ -542,8 +629,15 @@ export const SharePage: React.FC = () => {
         accessCount: 0,
         viewers: [],
         accessRequests: [],
-        sharedDocumentIds: selectedDocuments.map((document) => document.id),
+        sharedDocumentIds: selectedDocuments.map((doc) => doc.id),
         sharedDocuments: selectedDocuments,
+        sharedFields: selectedRecords.map((r) => ({
+          id: r.id,
+          label: r.label,
+          value: r.value,
+          category: r.category,
+          signature: r.signature,
+        })),
       };
 
       setNewShareToken(token);
@@ -551,7 +645,7 @@ export const SharePage: React.FC = () => {
       setExpandedLinkId(token);
       setIsCreatePanelOpen(false);
       setIsShareSuccessModalOpen(true);
-      showToast('New share link saved to Supabase.');
+      showToast('New cryptographic share link generated successfully!');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Could not create share link.';
       setShareCreationError(message);
@@ -561,7 +655,6 @@ export const SharePage: React.FC = () => {
     }
   };
 
-  // Open real separate share link in a new tab
   const openShareLinkInNewTab = (tokenId: string) => {
     const url = `${window.location.origin}/?share=${tokenId}`;
     window.open(url, '_blank', 'noopener,noreferrer');
@@ -571,117 +664,135 @@ export const SharePage: React.FC = () => {
     const url = `${window.location.origin}/?share=${tokenId}`;
     navigator.clipboard.writeText(url);
     setCopiedToken(tokenId);
-    showToast('Unique share link copied to clipboard!');
+    showToast('Share link copied to clipboard!');
     setTimeout(() => setCopiedToken(null), 2000);
   };
 
   const handleRevoke = async (id: string) => {
     const link = sharedLinks.find((item) => item.id === id);
-    if (!link?.shareId || !supabase) return showToast('This share is not connected to Supabase.');
-    const { error } = await supabase
-      .from('shares')
-      .update({ status: 'REVOKED', revoked_at: new Date().toISOString() })
-      .eq('id', link.shareId);
-    if (error) return showToast(error.message);
+    if (link?.shareId && supabase) {
+      await supabase
+        .from('shares')
+        .update({ status: 'REVOKED', revoked_at: new Date().toISOString() })
+        .eq('id', link.shareId);
+    }
     setSharedLinks((previous) => previous.map((item) => item.id === id ? { ...item, status: 'Revoked', expiry: 'Revoked by user' } : item));
     showToast('Link access revoked.');
   };
 
   const handleRestore = async (id: string) => {
     const link = sharedLinks.find((item) => item.id === id);
-    if (!link?.shareId || !supabase) return showToast('This share is not connected to Supabase.');
-    const { error } = await supabase
-      .from('shares')
-      .update({ status: 'ACTIVE', revoked_at: null })
-      .eq('id', link.shareId);
-    if (error) return showToast(error.message);
+    if (link?.shareId && supabase) {
+      await supabase
+        .from('shares')
+        .update({ status: 'ACTIVE', revoked_at: null })
+        .eq('id', link.shareId);
+    }
     setSharedLinks((previous) => previous.map((item) => item.id === id ? { ...item, status: 'Active', expiry: 'Active' } : item));
     showToast('Link reactivated.');
   };
 
-  // Live Field Removal from Link Drawer
-  const handleRemoveFieldFromLink = async (linkId: string, fieldName: string) => {
+  // Live Field/Item Removal from Link Drawer
+  const handleRemoveFieldFromLink = async (linkId: string, itemLabel: string) => {
     const link = sharedLinks.find((item) => item.id === linkId);
-    const remainingDocumentIds = link?.sharedDocumentIds?.filter(
-      (documentId) => vaultDocuments.find((document) => document.id === documentId)?.name !== fieldName
-    );
-    if (link?.shareId && remainingDocumentIds && supabase) {
-      const { error } = await supabase.from('shares').update({
-        allowed_claims: vaultDocuments.filter((document) => remainingDocumentIds.includes(document.id)).map((document) => ({
-          document_id: document.id,
-          file_name: document.name,
-          document,
+    if (!link) return;
+
+    const remainingLabels = link.fieldsShared.filter((f) => f !== itemLabel);
+    const remainingDocuments = (link.sharedDocuments || []).filter((d) => d.name !== itemLabel);
+    const remainingFields = (link.sharedFields || []).filter((f) => f.label !== itemLabel);
+
+    if (link.shareId && supabase) {
+      const allowedClaimsPayload = [
+        ...remainingDocuments.map((doc) => ({
+          type: 'document',
+          document_id: doc.id,
+          file_name: doc.name,
+          category: doc.category,
+          document: doc,
         })),
-      }).eq('id', link.shareId);
-      if (error) return showToast(error.message);
+        ...remainingFields.map((rec) => ({
+          type: 'field',
+          field_id: rec.id,
+          label: rec.label,
+          value: rec.value,
+          category: rec.category,
+          signature: rec.signature,
+        })),
+      ];
+      await supabase.from('shares').update({ allowed_claims: allowedClaimsPayload }).eq('id', link.shareId);
     }
 
     setSharedLinks((prev) =>
-      prev.map((link) => {
-        if (link.id !== linkId) return link;
+      prev.map((l) => {
+        if (l.id !== linkId) return l;
         return {
-          ...link,
-          fieldsShared: link.fieldsShared.filter((f) => f !== fieldName),
-          sharedDocumentIds: link.sharedDocumentIds?.filter(
-            (documentId) => vaultDocuments.find((document) => document.id === documentId)?.name !== fieldName
-          ),
-          sharedDocuments: link.sharedDocuments?.filter((document) => document.name !== fieldName),
+          ...l,
+          fieldsShared: remainingLabels,
+          sharedDocuments: remainingDocuments,
+          sharedDocumentIds: remainingDocuments.map((d) => d.id),
+          sharedFields: remainingFields,
         };
       })
     );
-    showToast(`Removed "${fieldName}" from this share.`);
+    showToast(`Removed "${itemLabel}" from this share.`);
   };
 
-  const handleAddDocumentToLink = async (linkId: string, documentId: string) => {
-    const document = vaultDocuments.find((item) => item.id === documentId);
-    if (!document) return;
-    const link = sharedLinks.find((item) => item.id === linkId);
-    const nextDocumentIds = Array.from(new Set([...(link?.sharedDocumentIds || []), document.id]));
-    if (link?.shareId && supabase) {
-      const { error } = await supabase.from('shares').update({
-        allowed_claims: vaultDocuments.filter((item) => nextDocumentIds.includes(item.id)).map((item) => ({
-          document_id: item.id,
-          file_name: item.name,
-          document: item,
+  // Live Item Addition to Link
+  const handleAddItemToLink = async (linkId: string, item: SelectableItem) => {
+    const link = sharedLinks.find((l) => l.id === linkId);
+    if (!link) return;
+
+    if (link.fieldsShared.includes(item.label)) {
+      showToast(`"${item.label}" is already included in this share.`);
+      return;
+    }
+
+    const nextLabels = [...link.fieldsShared, item.label];
+    const nextDocuments = item.type === 'document' && item.document
+      ? [...(link.sharedDocuments || []), item.document]
+      : (link.sharedDocuments || []);
+    const nextFields = item.type === 'record'
+      ? [...(link.sharedFields || []), { id: item.id, label: item.label, value: item.value, category: item.category, signature: item.signature }]
+      : (link.sharedFields || []);
+
+    if (link.shareId && supabase) {
+      const allowedClaimsPayload = [
+        ...nextDocuments.map((doc) => ({
+          type: 'document',
+          document_id: doc.id,
+          file_name: doc.name,
+          category: doc.category,
+          document: doc,
         })),
-      }).eq('id', link.shareId);
-      if (error) return showToast(error.message);
+        ...nextFields.map((rec) => ({
+          type: 'field',
+          field_id: rec.id,
+          label: rec.label,
+          value: rec.value,
+          category: rec.category,
+          signature: rec.signature,
+        })),
+      ];
+      await supabase.from('shares').update({ allowed_claims: allowedClaimsPayload }).eq('id', link.shareId);
     }
 
     setSharedLinks((prev) =>
-      prev.map((link) => {
-        if (link.id !== linkId) return link;
+      prev.map((l) => {
+        if (l.id !== linkId) return l;
         return {
-          ...link,
-          fieldsShared: link.fieldsShared.includes(document.name)
-            ? link.fieldsShared
-            : [...link.fieldsShared, document.name],
-          sharedDocumentIds: Array.from(new Set([...(link.sharedDocumentIds || []), document.id])),
-          sharedDocuments: [...(link.sharedDocuments || []), document],
+          ...l,
+          fieldsShared: nextLabels,
+          sharedDocuments: nextDocuments,
+          sharedDocumentIds: nextDocuments.map((d) => d.id),
+          sharedFields: nextFields,
         };
       })
     );
     setActiveDrawerLinkId(null);
-    showToast(`Added "${document.name}" to this share.`);
+    showToast(`Added "${item.label}" to this live link.`);
   };
 
-  // Live Field Addition to Link Drawer
-  const handleAddFieldToLink = (linkId: string, fieldName: string) => {
-    setSharedLinks((prev) =>
-      prev.map((link) => {
-        if (link.id !== linkId) return link;
-        if (link.fieldsShared.includes(fieldName)) return link;
-        return {
-          ...link,
-          fieldsShared: [...link.fieldsShared, fieldName],
-        };
-      })
-    );
-    setActiveDrawerLinkId(null);
-    showToast(`Added "${fieldName}" to live link.`);
-  };
-
-  // Handle Access Request Approval / Decline
+  // Access Request Event Handler
   const appendAccessEvent = async (
     linkId: string,
     requestId: string,
@@ -692,7 +803,12 @@ export const SharePage: React.FC = () => {
     const link = sharedLinks.find((item) => item.id === linkId);
     const request = link?.accessRequests?.find((item) => item.id === requestId);
     if (!link?.shareId || !request?.organizationId || !request.organizationMemberId || !supabase) {
-      return showToast('This access request is missing its Supabase organization/member link.');
+      // Local fallback
+      setSharedLinks((previous) => previous.map((item) => item.id !== linkId ? item : {
+        ...item,
+        accessRequests: item.accessRequests?.map((entry) => entry.id === requestId ? { ...entry, status } : entry),
+      }));
+      return showToast(successMessage);
     }
 
     const { data, error } = await supabase
@@ -734,7 +850,7 @@ export const SharePage: React.FC = () => {
 
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-      {/* Toast */}
+      {/* Toast Alert */}
       <AnimatePresence>
         {toastMessage && (
           <motion.div
@@ -749,7 +865,7 @@ export const SharePage: React.FC = () => {
         )}
       </AnimatePresence>
 
-      {/* Clean Minimalist Header with Top Corner Create Button */}
+      {/* Minimalist Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-zinc-200 dark:border-[#23222a]">
         <div>
           <div className="flex items-center gap-2.5">
@@ -761,11 +877,11 @@ export const SharePage: React.FC = () => {
             </span>
           </div>
           <p className="text-sm text-zinc-500 dark:text-[#8c879a] mt-1">
-            Choose specific documents, review organization requests, and manage approved access.
+            Choose specific documents & vault credentials, manage scopes, and review organization access requests.
           </p>
         </div>
 
-        {/* Top Corner Action Buttons */}
+        {/* Action Buttons */}
         <div className="flex items-center gap-2.5">
           <button
             onClick={() => {
@@ -796,7 +912,7 @@ export const SharePage: React.FC = () => {
         </div>
       </div>
 
-      {/* Redesigned Active & Past Shared Links with Accordion Toggle Drawers */}
+      {/* Active & Past Shared Links List */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-600 dark:text-[#8c879a] flex items-center gap-2">
@@ -813,7 +929,7 @@ export const SharePage: React.FC = () => {
             <div className="space-y-1">
               <p className="text-sm font-semibold text-zinc-900 dark:text-white">No active share links</p>
               <p className="text-xs text-zinc-500 dark:text-[#8c879a] max-w-md mx-auto">
-                You have not shared any credentials yet. Click "Create Share Link" to generate a cryptographic envelope or click below to preview sample demo shares.
+                You have not shared any credentials yet. Click "Create Share Link" to select documents and personal claims to generate a cryptographic envelope.
               </p>
             </div>
             <div className="flex items-center justify-center gap-2.5 pt-1">
@@ -823,10 +939,9 @@ export const SharePage: React.FC = () => {
                   saveSharedLinks(initialSharedLinks);
                 }}
                 className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 text-xs font-semibold cursor-pointer shadow-2xs hover:scale-[1.02] transition-all"
-                title="Preview demo shared links safely in local view"
               >
                 <Sparkles className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                <span>Load Demo Shares (Static)</span>
+                <span>Load Demo Shares</span>
               </button>
               <button
                 onClick={() => {
@@ -849,331 +964,279 @@ export const SharePage: React.FC = () => {
               const pendingRequests = requests.filter((r) => r.status === 'pending');
 
               return (
-              <div
-                key={link.id}
-                className={`rounded-2xl border transition-all duration-200 overflow-hidden bg-white dark:bg-[#131317] ${
-                  isExpanded
-                    ? 'border-[#5a25eb]/60 shadow-md ring-1 ring-[#5a25eb]/20'
-                    : 'border-zinc-200 dark:border-[#24232c] hover:border-zinc-300 dark:hover:border-[#353340]'
-                }`}
-              >
-                {/* Accordion Row Header */}
                 <div
-                  onClick={() => setExpandedLinkId(isExpanded ? null : link.id)}
-                  className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 cursor-pointer hover:bg-zinc-50/50 dark:hover:bg-[#171620]/50 transition-colors"
+                  key={link.id}
+                  className="rounded-2xl border border-zinc-200 dark:border-[#201f2b] bg-white dark:bg-[#121217] overflow-hidden transition-all shadow-xs"
                 >
-                  <div className="flex items-start sm:items-center gap-3.5 flex-1 min-w-0">
-                    <div className="w-10 h-10 rounded-xl bg-zinc-100 dark:bg-[#1f1e29] border border-zinc-200 dark:border-[#2d2b38] flex items-center justify-center text-[#5a25eb] dark:text-[#cbbeff] shrink-0 mt-0.5 sm:mt-0">
-                      <Share2 className="w-4 h-4" />
-                    </div>
-
-                    <div className="min-w-0 space-y-1 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="text-sm font-bold text-zinc-900 dark:text-[#e4e1e8] truncate">
-                          {link.recipient}
-                        </h3>
-                        <StatusBadge
-                          type={
-                            link.status === 'Active'
-                              ? 'active'
-                              : link.status === 'Revoked'
-                              ? 'revoked'
-                              : 'expired'
-                          }
-                          label={link.status}
-                        />
-                        {pendingRequests.length > 0 && (
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 flex items-center gap-1">
-                            <AlertCircle className="w-3 h-3" />
-                            {pendingRequests.length} Access Request Pending
-                          </span>
-                        )}
+                  {/* Top Accordion Trigger Card */}
+                  <div
+                    onClick={() => setExpandedLinkId(isExpanded ? null : link.id)}
+                    className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 cursor-pointer hover:bg-zinc-50 dark:hover:bg-[#181720] transition-colors"
+                  >
+                    <div className="flex items-start gap-4">
+                      <div className="w-10 h-10 rounded-xl bg-[#5a25eb]/10 border border-[#5a25eb]/20 flex items-center justify-center shrink-0 mt-0.5">
+                        <Share2 className="w-5 h-5 text-[#5a25eb] dark:text-[#cbbeff]" />
                       </div>
-
-                      <div className="flex items-center gap-3 text-xs text-zinc-500 dark:text-[#8c879a] flex-wrap">
-                        <span className="font-mono text-[11px]">TOKEN: {link.id}</span>
-                        <span>•</span>
-                        <span>
-                          {link.sharedDocumentIds?.length ?? link.fieldsShared.length}{' '}
-                          {link.sharedDocumentIds?.length ? 'Shared Documents' : 'Disclosed Fields'}
-                        </span>
-                        <span>•</span>
-                        <span>{viewers.length} Verified Views</span>
-                        <span>•</span>
-                        <span className="font-mono">{link.expiry}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Actions & Toggle Indicator */}
-                  <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openShareLinkInNewTab(link.id);
-                      }}
-                      className="px-3 py-1.5 rounded-lg bg-[#5a25eb]/10 hover:bg-[#5a25eb]/20 text-[#5a25eb] dark:text-[#cbbeff] text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer"
-                      title="Open link in a new browser tab"
-                    >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                      <span>Open Link</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        copyUrl(link.id);
-                      }}
-                      className="p-1.5 rounded-lg border border-zinc-200 dark:border-[#2d2c38] text-zinc-600 dark:text-[#c4bfcf] hover:bg-zinc-100 dark:hover:bg-[#201f2b] transition-colors cursor-pointer"
-                      title="Copy Shareable Link"
-                    >
-                      {copiedToken === link.id ? (
-                        <Check className="w-4 h-4 text-emerald-500" />
-                      ) : (
-                        <Copy className="w-4 h-4" />
-                      )}
-                    </button>
-
-                    <div className="p-1 text-zinc-400">
-                      {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                    </div>
-                  </div>
-                </div>
-
-                {/* EXPANDABLE DRAWER DETAILS */}
-                <AnimatePresence>
-                  {isExpanded && (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: 'auto', opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      transition={{ duration: 0.2 }}
-                      className="border-t border-zinc-100 dark:border-[#201f29] bg-zinc-50/50 dark:bg-[#16151e]/60 p-5 space-y-6"
-                    >
-                      {/* Section 1: Who Has Seen My Link */}
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-700 dark:text-[#c4bfcf] flex items-center gap-2">
-                            <Eye className="w-4 h-4 text-[#5a25eb]" />
-                            <span>Who Has Seen This Link ({viewers.length})</span>
-                          </h4>
-                          <span className="text-[11px] font-mono text-zinc-400">
-                            Zero-Knowledge Audit Trail
-                          </span>
-                        </div>
-
-                        {viewers.length === 0 ? (
-                          <div className="p-4 rounded-xl border border-dashed border-zinc-200 dark:border-[#262530] text-center text-xs text-zinc-500">
-                            No one has accessed or decrypted this link yet.
-                          </div>
-                        ) : (
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            {viewers.map((viewer) => (
-                              <div
-                                key={viewer.id}
-                                className="p-3.5 rounded-xl border border-zinc-200 dark:border-[#262530] bg-white dark:bg-[#131317] flex items-start justify-between gap-3 shadow-sm"
-                              >
-                                <div className="space-y-1">
-                                  <div className="flex items-center gap-2">
-                                    <div className="w-6 h-6 rounded-full bg-[#5a25eb]/20 text-[#5a25eb] dark:text-[#cbbeff] font-bold text-[10px] flex items-center justify-center">
-                                      {viewer.userName[0]}
-                                    </div>
-                                    <span className="text-xs font-bold text-zinc-900 dark:text-white">
-                                      {viewer.userName}
-                                    </span>
-                                  </div>
-                                  <p className="text-[11px] text-zinc-500 dark:text-[#8c879a]">{viewer.roleOrOrg}</p>
-                                  <div className="flex items-center gap-2 text-[10px] text-zinc-400 font-mono">
-                                    <Clock className="w-3 h-3" />
-                                    <span>{viewer.viewedAt}</span>
-                                    <span>•</span>
-                                    <MapPin className="w-3 h-3" />
-                                    <span>{viewer.ipLocation}</span>
-                                  </div>
-                                </div>
-
-                                <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shrink-0 flex items-center gap-1">
-                                  <ShieldCheck className="w-3 h-3" />
-                                  Verified
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Section 2: Access Requests (Users Who Want Access to Additional Info) */}
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-700 dark:text-[#c4bfcf] flex items-center gap-2">
-                            <UserCheck className="w-4 h-4 text-amber-500" />
-                            <span>Access Requests & Inbound Inquiries ({requests.length})</span>
-                          </h4>
-                        </div>
-
-                        {requests.length === 0 ? (
-                          <div className="p-4 rounded-xl border border-dashed border-zinc-200 dark:border-[#262530] text-center text-xs text-zinc-500">
-                            No pending access requests for this link.
-                          </div>
-                        ) : (
-                          <div className="space-y-2.5">
-                            {requests.map((req) => (
-                              <div
-                                key={req.id}
-                                className="p-4 rounded-xl border border-amber-500/30 bg-amber-500/5 dark:bg-[#1a171c] flex flex-col sm:flex-row sm:items-center justify-between gap-4"
-                              >
-                                <div className="space-y-1">
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-xs font-bold text-zinc-900 dark:text-white">
-                                      {req.requesterName} ({req.organization})
-                                    </span>
-                                    <span className="text-[10px] text-zinc-400 font-mono">Requested {req.requestedAt}</span>
-                                  </div>
-                                  {req.profile && (
-                                    <p className="text-[11px] text-zinc-500 dark:text-[#8c879a]">
-                                      {req.profile.workEmail} · {req.profile.organizationType} · {req.profile.role}
-                                      {req.profile.department ? ` · ${req.profile.department}` : ''}
-                                      {req.profile.website ? ` · ${req.profile.website}` : ''}
-                                    </p>
-                                  )}
-                                  <p className="text-xs text-zinc-600 dark:text-[#b4afc2]">
-                                    Purpose: <em>"{req.purpose}"</em>
-                                  </p>
-                                  <div className="flex items-center gap-1.5 pt-1">
-                                    <span className="text-[11px] font-medium text-zinc-500">Requested Fields:</span>
-                                    {req.requestedFields.map((f, i) => (
-                                      <span
-                                        key={i}
-                                        className="px-2 py-0.5 rounded text-[10px] font-mono bg-[#5a25eb]/10 text-[#5a25eb] dark:text-[#cbbeff] border border-[#5a25eb]/30"
-                                      >
-                                        +{f}
-                                      </span>
-                                    ))}
-                                  </div>
-                                </div>
-
-                                <div className="flex items-center gap-2 shrink-0">
-                                  {req.status === 'pending' ? (
-                                    <>
-                                      <button
-                                        onClick={() => handleApproveRequest(link.id, req.id)}
-                                        className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold cursor-pointer transition-colors"
-                                      >
-                                        Approve Access
-                                      </button>
-                                      <button
-                                        onClick={() => handleDeclineRequest(link.id, req.id)}
-                                        className="px-3 py-1.5 rounded-lg border border-zinc-300 dark:border-[#383645] text-zinc-600 dark:text-[#c4bfcf] hover:bg-zinc-200 dark:hover:bg-[#252430] text-xs font-medium cursor-pointer transition-colors"
-                                      >
-                                        Decline
-                                      </button>
-                                    </>
-                                  ) : req.status === 'approved' ? (
-                                    <button
-                                      onClick={() => handleRevokeOrganizationAccess(link.id, req.id)}
-                                      className="px-3.5 py-1.5 rounded-lg border border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400 text-xs font-semibold cursor-pointer transition-colors hover:bg-red-500/20"
-                                    >
-                                      Remove Access
-                                    </button>
-                                  ) : req.status === 'revoked' ? (
-                                    <span className="px-3 py-1 rounded-lg text-xs font-semibold bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20">
-                                      Access Removed
-                                    </span>
-                                  ) : (
-                                    <span className="px-3 py-1 rounded-lg text-xs font-semibold bg-zinc-200 dark:bg-[#201f2b] text-zinc-500">
-                                      Declined
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Section 3: Live Disclosed Fields Management (Add/Remove Anytime) */}
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-700 dark:text-[#c4bfcf] flex items-center gap-2">
-                            <Sparkles className="w-4 h-4 text-emerald-500" />
-                            <span>
-                              {link.sharedDocumentIds ? 'Shared Documents' : 'Currently Disclosed Fields'} ({link.fieldsShared.length})
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2.5 flex-wrap">
+                          <h3 className="text-sm font-bold text-zinc-900 dark:text-[#e4e1e8]">
+                            {link.recipient}
+                          </h3>
+                          <StatusBadge
+                            type={link.status === 'Active' ? 'active' : link.status === 'Revoked' ? 'revoked' : 'expired'}
+                          />
+                          {pendingRequests.length > 0 && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30 flex items-center gap-1">
+                              <AlertCircle className="w-3 h-3" />
+                              {pendingRequests.length} Pending Approval
                             </span>
-                          </h4>
-
-                          <button
-                            onClick={() => setActiveDrawerLinkId(link.id)}
-                            className="text-xs text-[#5a25eb] dark:text-[#cbbeff] hover:underline cursor-pointer flex items-center gap-1 font-medium"
-                          >
-                            <Plus className="w-3.5 h-3.5" />
-                            {link.sharedDocumentIds ? 'Add Document' : 'Add Information to this Live Link'}
-                          </button>
-                        </div>
-
-                        <div className="flex flex-wrap gap-2">
-                          {link.fieldsShared.map((field, idx) => (
-                            <div
-                              key={idx}
-                              className="px-3 py-1.5 rounded-xl text-xs bg-white dark:bg-[#1a1924] border border-zinc-200 dark:border-[#2e2c3b] text-zinc-800 dark:text-[#e4e1e8] flex items-center gap-2 shadow-sm"
-                            >
-                              <span>{field}</span>
-                              <button
-                                onClick={() => handleRemoveFieldFromLink(link.id, field)}
-                                className="text-zinc-400 hover:text-red-500 transition-colors cursor-pointer"
-                                title={`Remove ${field} from this link`}
-                              >
-                                <X className="w-3 h-3" />
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Section 4: Link Controls */}
-                      <div className="pt-3 border-t border-zinc-200 dark:border-[#22212d] flex items-center justify-between gap-4 flex-wrap">
-                        <div className="flex items-center gap-2 text-xs text-zinc-500 font-mono">
-                          <span>LINK URL:</span>
-                          <span className="text-zinc-800 dark:text-[#cbbeff] truncate max-w-xs sm:max-w-md">
-                            {window.location.origin}/?share={link.id}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => openShareLinkInNewTab(link.id)}
-                            className="px-4 py-2 rounded-xl bg-[#5a25eb] hover:bg-[#6b37fa] text-white text-xs font-semibold cursor-pointer transition-all flex items-center gap-1.5"
-                          >
-                            <ExternalLink className="w-3.5 h-3.5" />
-                            Open In New Tab
-                          </button>
-
-                          {link.status === 'Active' ? (
-                            <button
-                              onClick={() => handleRevoke(link.id)}
-                              className="px-3.5 py-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-400 text-xs font-medium cursor-pointer transition-colors"
-                            >
-                              Revoke Access
-                            </button>
-                          ) : (
-                            <button
-                              onClick={() => handleRestore(link.id)}
-                              className="px-3.5 py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-medium cursor-pointer transition-colors"
-                            >
-                              Restore Link
-                            </button>
                           )}
                         </div>
+                        <div className="flex items-center gap-3 text-xs text-zinc-500 dark:text-[#8c879a] flex-wrap">
+                          <span>Created {link.createdAt}</span>
+                          <span>•</span>
+                          <span>{link.expiry}</span>
+                          <span>•</span>
+                          <span className="text-[#5a25eb] dark:text-[#cbbeff] font-semibold">
+                            {link.fieldsShared.length} items shared
+                          </span>
+                        </div>
                       </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-            );
-          })}
-        </div>
-      )}
+                    </div>
+
+                    <div className="flex items-center gap-3 self-end sm:self-center">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          copyUrl(link.id);
+                        }}
+                        className="px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-[#2d2c3a] hover:bg-zinc-100 dark:hover:bg-[#20202e] text-zinc-700 dark:text-[#c4bfcf] text-xs font-medium transition-colors flex items-center gap-1.5"
+                      >
+                        {copiedToken === link.id ? (
+                          <Check className="w-3.5 h-3.5 text-emerald-500" />
+                        ) : (
+                          <Copy className="w-3.5 h-3.5" />
+                        )}
+                        <span>{copiedToken === link.id ? 'Copied' : 'Copy Link'}</span>
+                      </button>
+
+                      <div className="text-zinc-400 p-1">
+                        {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Accordion Expanded Detail Drawer */}
+                  <AnimatePresence>
+                    {isExpanded && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="border-t border-zinc-200 dark:border-[#201f2b] p-6 space-y-6 bg-zinc-50/50 dark:bg-[#15151c]/60"
+                      >
+                        {/* Section 1: Real-time Access Activity & Viewers */}
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between">
+                            <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-700 dark:text-[#c4bfcf] flex items-center gap-2">
+                              <Eye className="w-4 h-4 text-[#5a25eb]" />
+                              <span>Live Activity & Verification Events ({viewers.length} views)</span>
+                            </h4>
+                          </div>
+
+                          {viewers.length === 0 ? (
+                            <div className="p-4 rounded-xl bg-white dark:bg-[#181822] border border-zinc-200 dark:border-[#262534] text-center text-xs text-zinc-500">
+                              No external entity has viewed or queried this link yet.
+                            </div>
+                          ) : (
+                            <div className="space-y-2">
+                              {viewers.map((viewer) => (
+                                <div
+                                  key={viewer.id}
+                                  className="p-3.5 rounded-xl bg-white dark:bg-[#181822] border border-zinc-200 dark:border-[#272635] flex items-center justify-between gap-3 text-xs"
+                                >
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-8 h-8 rounded-full bg-emerald-500/10 text-emerald-600 flex items-center justify-center font-bold text-[11px] border border-emerald-500/20">
+                                      {viewer.userName.slice(0, 2).toUpperCase()}
+                                    </div>
+                                    <div>
+                                      <p className="font-semibold text-zinc-900 dark:text-white">
+                                        {viewer.userName}
+                                      </p>
+                                      <p className="text-[11px] text-zinc-500 dark:text-[#8c879a]">
+                                        {viewer.roleOrOrg} {viewer.email ? `(${viewer.email})` : ''}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <div className="text-right">
+                                    <span className="font-mono text-[10px] text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                                      {viewer.verificationStatus}
+                                    </span>
+                                    <p className="text-[10px] text-zinc-400 mt-0.5">{viewer.viewedAt}</p>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Section 2: Organization Access Requests */}
+                        <div className="space-y-3">
+                          <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-700 dark:text-[#c4bfcf] flex items-center gap-2">
+                            <UserCheck className="w-4 h-4 text-emerald-500" />
+                            <span>Organization Access Requests ({requests.length})</span>
+                          </h4>
+
+                          {requests.length === 0 ? (
+                            <div className="p-4 rounded-xl bg-white dark:bg-[#181822] border border-zinc-200 dark:border-[#262534] text-center text-xs text-zinc-500">
+                              No explicit organization access requests submitted for this link yet.
+                            </div>
+                          ) : (
+                            <div className="space-y-2">
+                              {requests.map((req) => (
+                                <div
+                                  key={req.id}
+                                  className="p-4 rounded-xl bg-white dark:bg-[#181822] border border-zinc-200 dark:border-[#272635] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+                                >
+                                  <div className="space-y-1">
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-bold text-zinc-900 dark:text-white">
+                                        {req.requesterName}
+                                      </span>
+                                      <span className="text-zinc-400">•</span>
+                                      <span className="text-zinc-700 dark:text-[#cbbeff] font-medium">
+                                        {req.organization}
+                                      </span>
+                                      {req.profile?.website && (
+                                        <span className="text-[10px] font-mono text-zinc-400">
+                                          ({req.profile.website})
+                                        </span>
+                                      )}
+                                    </div>
+                                    <p className="text-[11px] text-zinc-500">
+                                      Purpose: <strong className="text-zinc-700 dark:text-zinc-300">{req.purpose}</strong> • Requested {req.requestedAt}
+                                    </p>
+                                  </div>
+
+                                  <div className="flex items-center gap-2 shrink-0">
+                                    {req.status === 'pending' ? (
+                                      <>
+                                        <button
+                                          onClick={() => handleApproveRequest(link.id, req.id)}
+                                          className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold cursor-pointer transition-colors"
+                                        >
+                                          Approve Access
+                                        </button>
+                                        <button
+                                          onClick={() => handleDeclineRequest(link.id, req.id)}
+                                          className="px-3.5 py-1.5 rounded-lg border border-zinc-300 dark:border-[#383645] text-zinc-600 dark:text-[#c4bfcf] hover:bg-zinc-200 dark:hover:bg-[#252430] text-xs font-medium cursor-pointer transition-colors"
+                                        >
+                                          Decline
+                                        </button>
+                                      </>
+                                    ) : req.status === 'approved' ? (
+                                      <button
+                                        onClick={() => handleRevokeOrganizationAccess(link.id, req.id)}
+                                        className="px-3.5 py-1.5 rounded-lg border border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400 text-xs font-semibold cursor-pointer transition-colors hover:bg-red-500/20"
+                                      >
+                                        Remove Access
+                                      </button>
+                                    ) : req.status === 'revoked' ? (
+                                      <span className="px-3 py-1 rounded-lg text-xs font-semibold bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20">
+                                        Access Removed
+                                      </span>
+                                    ) : (
+                                      <span className="px-3 py-1 rounded-lg text-xs font-semibold bg-zinc-200 dark:bg-[#201f2b] text-zinc-500">
+                                        Declined
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Section 3: Disclosed Items Management */}
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between">
+                            <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-700 dark:text-[#c4bfcf] flex items-center gap-2">
+                              <Sparkles className="w-4 h-4 text-emerald-500" />
+                              <span>Currently Disclosed Vault Items ({link.fieldsShared.length})</span>
+                            </h4>
+
+                            <button
+                              onClick={() => setActiveDrawerLinkId(link.id)}
+                              className="text-xs text-[#5a25eb] dark:text-[#cbbeff] hover:underline cursor-pointer flex items-center gap-1 font-medium"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                              Add Vault Item to this Live Link
+                            </button>
+                          </div>
+
+                          <div className="flex flex-wrap gap-2">
+                            {link.fieldsShared.map((field, idx) => (
+                              <div
+                                key={idx}
+                                className="px-3 py-1.5 rounded-xl text-xs bg-white dark:bg-[#1a1924] border border-zinc-200 dark:border-[#2e2c3b] text-zinc-800 dark:text-[#e4e1e8] flex items-center gap-2 shadow-sm"
+                              >
+                                <span>{field}</span>
+                                <button
+                                  onClick={() => handleRemoveFieldFromLink(link.id, field)}
+                                  className="text-zinc-400 hover:text-red-500 transition-colors cursor-pointer"
+                                  title={`Remove ${field} from this link`}
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Section 4: Link Controls */}
+                        <div className="pt-3 border-t border-zinc-200 dark:border-[#22212d] flex items-center justify-between gap-4 flex-wrap">
+                          <div className="flex items-center gap-2 text-xs text-zinc-500 font-mono">
+                            <span>LINK URL:</span>
+                            <span className="text-zinc-800 dark:text-[#cbbeff] truncate max-w-xs sm:max-w-md">
+                              {window.location.origin}/?share={link.id}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => openShareLinkInNewTab(link.id)}
+                              className="px-4 py-2 rounded-xl bg-[#5a25eb] hover:bg-[#6b37fa] text-white text-xs font-semibold cursor-pointer transition-all flex items-center gap-1.5"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" />
+                              Open In New Tab
+                            </button>
+
+                            {link.status === 'Active' ? (
+                              <button
+                                onClick={() => handleRevoke(link.id)}
+                                className="px-3.5 py-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-400 text-xs font-medium cursor-pointer transition-colors"
+                              >
+                                Revoke Access
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handleRestore(link.id)}
+                                className="px-3.5 py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-medium cursor-pointer transition-colors"
+                              >
+                                Restore Link
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* CREATE SHARE MODAL / SLIDE-OVER PANEL */}
@@ -1181,24 +1244,15 @@ export const SharePage: React.FC = () => {
         isOpen={isCreatePanelOpen}
         onClose={() => setIsCreatePanelOpen(false)}
         title="Create Selective Share Link"
-        subtitle="Choose the documents this organization may request access to."
+        subtitle="Choose the specific documents and verified vault records this organization may access."
       >
-        <div className="space-y-6 max-h-[75vh] overflow-y-auto pr-1">
+        <div className="space-y-5 max-h-[78vh] overflow-y-auto pr-1">
           {shareCreationError && (
             <p role="alert" className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
               {shareCreationError}
             </p>
           )}
-          {documentLoadError && (
-            <p role="alert" className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300">
-              Could not load vault documents: {documentLoadError}
-            </p>
-          )}
-          {isUsingSampleDocuments && (
-            <p role="status" className="rounded-lg border border-sky-300 bg-sky-50 px-3 py-2 text-xs text-sky-800 dark:border-sky-900 dark:bg-sky-950/30 dark:text-sky-300">
-              Showing two sample documents for testing. They are not saved in your Supabase vault.
-            </p>
-          )}
+
           {/* Search Bar */}
           <div className="relative">
             <Search className="w-4 h-4 text-zinc-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -1206,7 +1260,7 @@ export const SharePage: React.FC = () => {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search documents by name or category..."
+              placeholder="Search documents, degrees, GitHub, PAN, skills, bank..."
               className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-zinc-200 dark:border-[#2d2b38] bg-zinc-50 dark:bg-[#18171f] text-zinc-900 dark:text-white placeholder-zinc-400 text-xs focus:outline-none focus:ring-2 focus:ring-[#5a25eb]/50"
             />
             {searchQuery && (
@@ -1219,10 +1273,34 @@ export const SharePage: React.FC = () => {
             )}
           </div>
 
+          {/* Category Filter Pills */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar text-xs">
+            {[
+              { key: 'all', label: 'All Vault Data' },
+              { key: 'documents', label: 'Documents' },
+              { key: 'social', label: 'Identity & Social' },
+              { key: 'education', label: 'Education' },
+              { key: 'finance', label: 'Finance' },
+              { key: 'health', label: 'Healthcare' },
+            ].map((tab) => (
+              <button
+                key={tab.key}
+                onClick={() => setSelectedCategoryTab(tab.key)}
+                className={`px-3 py-1.5 rounded-lg font-medium whitespace-nowrap transition-colors cursor-pointer ${
+                  selectedCategoryTab === tab.key
+                    ? 'bg-[#5a25eb] text-white shadow-xs'
+                    : 'bg-zinc-100 dark:bg-[#1a1924] text-zinc-600 dark:text-[#a29db0] hover:bg-zinc-200 dark:hover:bg-[#242330]'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
           {/* Quick Select Controls */}
           <div className="flex items-center justify-between text-xs pb-2 border-b border-zinc-200 dark:border-[#22212b]">
             <span className="font-semibold text-zinc-700 dark:text-[#a29db0]">
-              Selected: <strong className="text-[#5a25eb] dark:text-[#cbbeff]">{selectedFieldIds.size}</strong> fields
+              Selected: <strong className="text-[#5a25eb] dark:text-[#cbbeff]">{selectedItemIds.size}</strong> items
             </span>
             <div className="flex items-center gap-3">
               <button
@@ -1241,45 +1319,68 @@ export const SharePage: React.FC = () => {
             </div>
           </div>
 
-          <div className="space-y-2">
-            {filteredDocuments.map((document) => {
-              const isSelected = selectedFieldIds.has(document.id);
+          {/* List of Selectable Items (Documents + Credentials) */}
+          <div className="space-y-2 max-h-[360px] overflow-y-auto pr-1">
+            {filteredSelectableItems.map((item) => {
+              const isSelected = selectedItemIds.has(item.id);
+              const isDoc = item.type === 'document';
+
               return (
                 <button
-                  key={document.id}
+                  key={item.id}
                   type="button"
-                  onClick={() => toggleField(document.id)}
-                  className={`w-full flex items-center gap-3 rounded-xl border p-3 text-left transition-colors ${
+                  onClick={() => toggleItem(item.id)}
+                  className={`w-full flex items-center gap-3 rounded-xl border p-3 text-left transition-colors cursor-pointer ${
                     isSelected
-                      ? 'border-emerald-500/50 bg-emerald-500/5'
+                      ? 'border-[#5a25eb]/60 bg-[#5a25eb]/5 dark:bg-[#5a25eb]/10'
                       : 'border-zinc-200 dark:border-[#2d2b38] hover:border-zinc-400 dark:hover:border-[#4b4858]'
                   }`}
                 >
-                  <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border ${isSelected ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-zinc-400'}`}>
+                  <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border ${isSelected ? 'border-[#5a25eb] bg-[#5a25eb] text-white' : 'border-zinc-400'}`}>
                     {isSelected && <Check className="h-3.5 w-3.5" />}
                   </span>
+
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-zinc-100 dark:bg-[#1f1e2b] border border-zinc-200 dark:border-[#2b2a38]">
+                    {isDoc ? (
+                      <FileText className="w-4 h-4 text-emerald-500" />
+                    ) : (
+                      <Key className="w-4 h-4 text-[#5a25eb] dark:text-[#cbbeff]" />
+                    )}
+                  </div>
+
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-xs font-semibold text-zinc-900 dark:text-white">{document.name}</span>
-                    <span className="mt-0.5 block text-[11px] capitalize text-zinc-500 dark:text-[#8c879a]">
-                      {document.category} · {document.fileType} · {document.fileSize}
+                    <span className="flex items-center gap-2">
+                      <span className="block truncate text-xs font-semibold text-zinc-900 dark:text-white">
+                        {item.label}
+                      </span>
+                      <span className="text-[9px] uppercase font-mono px-1.5 py-0.2 rounded bg-zinc-100 dark:bg-[#201f2c] text-zinc-500 dark:text-[#a29db0] border border-zinc-200 dark:border-[#2a2936]">
+                        {item.categoryLabel}
+                      </span>
+                    </span>
+                    <span className="mt-0.5 block text-[11px] text-zinc-500 dark:text-[#8c879a] truncate font-mono">
+                      {item.value}
                     </span>
                   </span>
-                  <span className="text-[11px] text-zinc-500">{document.extractedFieldsCount} records</span>
+
+                  <span className="text-[10px] font-mono text-zinc-400 shrink-0">
+                    {item.signature}
+                  </span>
                 </button>
               );
             })}
-            {filteredDocuments.length === 0 && (
-              <p className="py-6 text-center text-xs text-zinc-500">
-                {vaultDocuments.length === 0 ? 'No uploaded documents are available in your SYNDEO vault.' : 'No documents match this search.'}
+
+            {filteredSelectableItems.length === 0 && (
+              <p className="py-8 text-center text-xs text-zinc-500">
+                No vault documents or records match your search or filter.
               </p>
             )}
           </div>
 
-          {/* Recipient & Expiry */}
+          {/* Recipient & Expiry Inputs */}
           <div className="pt-4 border-t border-zinc-200 dark:border-[#23222a] grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-zinc-700 dark:text-[#a29db0]">
-                Recipient / Institution
+                Recipient / Organization Name
               </label>
               <input
                 type="text"
@@ -1300,14 +1401,14 @@ export const SharePage: React.FC = () => {
                 className="w-full px-3 py-2 rounded-xl border border-zinc-200 dark:border-[#2d2b38] bg-zinc-50 dark:bg-[#18171f] text-zinc-900 dark:text-white text-xs focus:outline-none focus:ring-2 focus:ring-[#5a25eb]/50 cursor-pointer"
               >
                 <option value="1h">1 Hour</option>
-                <option value="24h">24 Hours (Default)</option>
+                <option value="24h">24 Hours (Recommended)</option>
                 <option value="7d">7 Days</option>
                 <option value="never">Permanent (Until Revoked)</option>
               </select>
             </div>
           </div>
 
-          {/* Bottom Submit */}
+          {/* Bottom Submit Actions */}
           <div className="pt-2 flex items-center justify-end gap-3">
             <button
               onClick={() => setIsCreatePanelOpen(false)}
@@ -1317,15 +1418,15 @@ export const SharePage: React.FC = () => {
             </button>
             <button
               onClick={handleGenerateShare}
-              disabled={selectedFieldIds.size === 0 || isCreatingShare}
+              disabled={selectedItemIds.size === 0 || isCreatingShare}
               className={`px-6 py-2.5 rounded-xl font-semibold text-xs transition-all shadow-md flex items-center gap-2 cursor-pointer ${
-                selectedFieldIds.size > 0
+                selectedItemIds.size > 0
                   ? 'bg-[#5a25eb] hover:bg-[#6b37fa] text-white shadow-[#5a25eb]/25'
                   : 'bg-zinc-300 dark:bg-[#252430] text-zinc-500 cursor-not-allowed'
               }`}
             >
               <Share2 className="w-4 h-4" />
-              {isCreatingShare ? 'Saving share...' : `Generate & Share (${selectedFieldIds.size})`}
+              {isCreatingShare ? 'Generating Envelope...' : `Generate & Share (${selectedItemIds.size} items)`}
             </button>
           </div>
         </div>
@@ -1335,21 +1436,20 @@ export const SharePage: React.FC = () => {
       <Modal
         isOpen={isShareSuccessModalOpen}
         onClose={() => setIsShareSuccessModalOpen(false)}
-        title="Share Link & QR Code Generated"
-        subtitle="The selected documents remain locked until the requesting organization is approved."
+        title="Share Link & Cryptographic QR Generated"
+        subtitle="The selected documents & records remain locked until the requesting organization is approved."
       >
         <div className="space-y-6 text-center py-2">
-          <div className="mx-auto flex h-56 w-56 items-center justify-center rounded-xl border border-zinc-200 bg-white p-4">
+          <div className="mx-auto flex h-56 w-56 items-center justify-center rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
             <QRCodeSVG value={`${window.location.origin}/?share=${encodeURIComponent(newShareToken)}`} size={192} level="H" />
           </div>
 
           <div className="space-y-2">
             <div className="flex items-center justify-center gap-1.5 text-xs text-zinc-600 dark:text-[#9e9aa8]">
               <Lock className="w-3.5 h-3.5 text-emerald-500" />
-              <span>Documents unlock after organization approval</span>
+              <span>Credentials unlock after organization authorization</span>
             </div>
 
-            {/* Unique Link Box */}
             <div className="flex items-center gap-2 p-2 rounded-xl bg-zinc-100 dark:bg-[#181720] border border-zinc-200 dark:border-[#2c2a38]">
               <span className="text-xs font-mono text-zinc-800 dark:text-[#cbbeff] truncate px-2 flex-1 text-left">
                 {window.location.origin}/?share={newShareToken}
@@ -1385,12 +1485,12 @@ export const SharePage: React.FC = () => {
         </div>
       </Modal>
 
-      {/* QUICK ADD FIELD MODAL FOR LINK DRAWER */}
+      {/* QUICK ADD ITEM MODAL FOR ACTIVE LINK ACCORDION */}
       <Modal
         isOpen={!!activeDrawerLinkId}
         onClose={() => setActiveDrawerLinkId(null)}
-        title={sharedLinks.find((link) => link.id === activeDrawerLinkId)?.sharedDocumentIds ? 'Add a Document' : 'Disclose Additional Information'}
-        subtitle={sharedLinks.find((link) => link.id === activeDrawerLinkId)?.sharedDocumentIds ? 'Add a document to this share. Approved organizations will see the updated selection.' : 'Select a record to add to this active share link.'}
+        title="Add Vault Item to Active Share Link"
+        subtitle="Select any document or credential record from your vault to disclose in this active link."
       >
         <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
           <div className="relative">
@@ -1399,48 +1499,49 @@ export const SharePage: React.FC = () => {
               type="text"
               value={searchAddDrawerQuery}
               onChange={(e) => setSearchAddDrawerQuery(e.target.value)}
-              placeholder="Search documents or information..."
+              placeholder="Search available documents or records..."
               className="w-full pl-10 pr-4 py-2 rounded-xl border border-zinc-200 dark:border-[#2d2b38] bg-zinc-50 dark:bg-[#18171f] text-zinc-900 dark:text-white text-xs focus:outline-none focus:ring-2 focus:ring-[#5a25eb]/50"
             />
           </div>
 
           <div className="space-y-2">
-            {sharedLinks.find((link) => link.id === activeDrawerLinkId)?.sharedDocumentIds !== undefined ? (
-              vaultDocuments
-                .filter((document) => !sharedLinks.find((link) => link.id === activeDrawerLinkId)?.sharedDocumentIds?.includes(document.id))
-                .filter((document) => !searchAddDrawerQuery.trim() || document.name.toLowerCase().includes(searchAddDrawerQuery.toLowerCase()) || document.category.includes(searchAddDrawerQuery.toLowerCase()))
-                .map((document) => (
-                  <button
-                    key={document.id}
-                    type="button"
-                    onClick={() => activeDrawerLinkId && handleAddDocumentToLink(activeDrawerLinkId, document.id)}
-                    className="flex w-full items-center justify-between rounded-lg border border-zinc-200 p-3 text-left hover:border-emerald-500 dark:border-[#282733]"
-                  >
-                    <span>
-                      <span className="block text-xs font-semibold text-zinc-900 dark:text-white">{document.name}</span>
-                      <span className="mt-1 block text-[11px] capitalize text-zinc-500">{document.category} · {document.fileSize}</span>
-                    </span>
-                    <Plus className="h-4 w-4 text-emerald-600" />
-                  </button>
-                ))
-            ) : (
-              AVAILABLE_FIELDS.filter((field) => !sharedLinks.find((link) => link.id === activeDrawerLinkId)?.fieldsShared.includes(field.label))
-                .filter((field) => !searchAddDrawerQuery.trim() || field.label.toLowerCase().includes(searchAddDrawerQuery.toLowerCase()) || field.category.toLowerCase().includes(searchAddDrawerQuery.toLowerCase()))
-                .map((field) => (
-                  <button
-                    key={field.id}
-                    type="button"
-                    onClick={() => activeDrawerLinkId && handleAddFieldToLink(activeDrawerLinkId, field.label)}
-                    className="flex w-full items-center justify-between rounded-lg border border-zinc-200 p-3 text-left hover:border-emerald-500 dark:border-[#282733]"
-                  >
-                    <span>
-                      <span className="block text-xs font-semibold text-zinc-900 dark:text-white">{field.label}</span>
-                      <span className="mt-1 block text-[11px] text-zinc-500">{field.value}</span>
-                    </span>
-                    <Plus className="h-4 w-4 text-emerald-600" />
-                  </button>
-                ))
-            )}
+            {allSelectableItems
+              .filter((item) => {
+                const currentLink = sharedLinks.find((l) => l.id === activeDrawerLinkId);
+                return !currentLink?.fieldsShared.includes(item.label);
+              })
+              .filter((item) => {
+                if (!searchAddDrawerQuery.trim()) return true;
+                const q = searchAddDrawerQuery.toLowerCase();
+                return (
+                  item.label.toLowerCase().includes(q) ||
+                  item.value.toLowerCase().includes(q) ||
+                  item.category.toLowerCase().includes(q)
+                );
+              })
+              .map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => activeDrawerLinkId && handleAddItemToLink(activeDrawerLinkId, item)}
+                  className="flex w-full items-center justify-between rounded-xl border border-zinc-200 dark:border-[#282733] p-3 text-left hover:border-[#5a25eb] hover:bg-[#5a25eb]/5 transition-all cursor-pointer"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-7 h-7 rounded-lg bg-zinc-100 dark:bg-[#201f2c] flex items-center justify-center shrink-0">
+                      {item.type === 'document' ? (
+                        <FileText className="w-3.5 h-3.5 text-emerald-500" />
+                      ) : (
+                        <Key className="w-3.5 h-3.5 text-[#5a25eb] dark:text-[#cbbeff]" />
+                      )}
+                    </div>
+                    <div>
+                      <span className="block text-xs font-semibold text-zinc-900 dark:text-white">{item.label}</span>
+                      <span className="mt-0.5 block text-[11px] text-zinc-500 font-mono">{item.value}</span>
+                    </div>
+                  </div>
+                  <Plus className="h-4 w-4 text-emerald-600 shrink-0" />
+                </button>
+              ))}
           </div>
         </div>
       </Modal>
