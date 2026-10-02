@@ -247,8 +247,20 @@ export const HomePage: React.FC = () => {
             </button>
 
             <button
+              onClick={() => {
+                setInPageRecords(initialRecords);
+                scrollToSection('memory-explorer');
+              }}
+              className="inline-flex items-center gap-2 px-6 py-3.5 rounded-xl bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 font-semibold text-sm transition-all shadow-sm cursor-pointer hover:scale-[1.02]"
+              title="Preview demo static records safely without affecting real database"
+            >
+              <Sparkles className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+              <span>⚡ Try Live Demo</span>
+            </button>
+
+            <button
               onClick={() => scrollToSection('memory-explorer')}
-              className="inline-flex items-center gap-2 px-6 py-3.5 rounded-xl bg-white dark:bg-[#101015] hover:bg-zinc-50 dark:hover:bg-[#181822] border border-zinc-200 dark:border-[#272736] text-zinc-800 dark:text-[#f4f4f6] font-semibold text-sm transition-all hover:border-[#5a25eb]/60 shadow-sm dark:shadow-none cursor-pointer"
+              className="inline-flex items-center gap-2 px-5 py-3.5 rounded-xl bg-white dark:bg-[#101015] hover:bg-zinc-50 dark:hover:bg-[#181822] border border-zinc-200 dark:border-[#272736] text-zinc-800 dark:text-[#f4f4f6] font-semibold text-sm transition-all hover:border-[#5a25eb]/60 shadow-sm dark:shadow-none cursor-pointer"
             >
               <Database className="w-4 h-4 text-[#5a25eb] dark:text-[#cbbeff]" />
               <span>Explore Memory</span>

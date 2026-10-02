@@ -808,13 +808,36 @@ export const SharePage: React.FC = () => {
         </div>
 
         {sharedLinks.length === 0 ? (
-          <div className="p-10 text-center rounded-3xl bg-white dark:bg-[#0c0c12] border border-dashed border-zinc-300 dark:border-[#242330] space-y-3">
+          <div className="p-10 text-center rounded-3xl bg-white dark:bg-[#0c0c12] border border-dashed border-zinc-300 dark:border-[#242330] space-y-4">
             <Share2 className="w-8 h-8 text-zinc-400 mx-auto" />
             <div className="space-y-1">
               <p className="text-sm font-semibold text-zinc-900 dark:text-white">No active share links</p>
-              <p className="text-xs text-zinc-500 dark:text-[#8c879a]">
-                You have not shared any credentials yet. Click "Create Share Link" to create a selective disclosure token or "Load Demo Shares" to preview sample shares.
+              <p className="text-xs text-zinc-500 dark:text-[#8c879a] max-w-md mx-auto">
+                You have not shared any credentials yet. Click "Create Share Link" to generate a cryptographic envelope or click below to preview sample demo shares.
               </p>
+            </div>
+            <div className="flex items-center justify-center gap-2.5 pt-1">
+              <button
+                onClick={() => {
+                  setSharedLinks(initialSharedLinks);
+                  saveSharedLinks(initialSharedLinks);
+                }}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 text-xs font-semibold cursor-pointer shadow-2xs hover:scale-[1.02] transition-all"
+                title="Preview demo shared links safely in local view"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                <span>Load Demo Shares (Static)</span>
+              </button>
+              <button
+                onClick={() => {
+                  setShareCreationError(null);
+                  setIsCreatePanelOpen(true);
+                }}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#5a25eb] hover:bg-[#6b37fa] text-white text-xs font-medium cursor-pointer shadow-sm transition-all"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Create Share Link</span>
+              </button>
             </div>
           </div>
         ) : (

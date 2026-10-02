@@ -445,27 +445,37 @@ export const MemoryPage: React.FC = () => {
           </div>
 
           {allRecords.length === 0 && (
-            <div className="p-10 text-center border border-dashed border-zinc-300 dark:border-[#2d2b38] rounded-3xl bg-white dark:bg-[#07070a] space-y-3">
+            <div className="p-10 text-center border border-dashed border-zinc-300 dark:border-[#2d2b38] rounded-3xl bg-white dark:bg-[#07070a] space-y-4">
               <div className="w-12 h-12 rounded-2xl bg-[#5a25eb]/10 dark:bg-[#5a25eb]/20 flex items-center justify-center mx-auto text-[#5a25eb] dark:text-[#cbbeff]">
                 <Database className="w-6 h-6" />
               </div>
-              <h3 className="font-bold text-sm text-zinc-900 dark:text-white">
-                Personal Memory Store is Empty
-              </h3>
-              <p className="text-xs text-zinc-500 dark:text-[#8c879a] max-w-md mx-auto">
-                No mock claims loaded. Upload real documents (PDFs/images) or add verified records to populate your live Neo4j Aura knowledge graph.
-              </p>
-              <div className="flex items-center justify-center gap-2 pt-2">
+              <div className="space-y-1">
+                <h3 className="font-bold text-sm text-zinc-900 dark:text-white">
+                  Personal Memory Store is Empty
+                </h3>
+                <p className="text-xs text-zinc-500 dark:text-[#8c879a] max-w-md mx-auto">
+                  No claims loaded in your current session. You can upload real documents, add verified attributes, or click below to load demo records safely into local view.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center justify-center gap-2.5 pt-2">
+                <button
+                  onClick={handleLoadDemoVault}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 text-xs font-semibold cursor-pointer shadow-2xs hover:scale-[1.02] transition-all"
+                  title="Load sample static claims and documents into view without saving over real database data"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                  <span>Load Demo Vault (Static)</span>
+                </button>
                 <button
                   onClick={() => setIsUploadDocOpen(true)}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#5a25eb] text-white text-xs font-medium cursor-pointer shadow-sm hover:bg-[#6b37fa]"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#5a25eb] text-white text-xs font-medium cursor-pointer shadow-sm hover:bg-[#6b37fa] transition-all"
                 >
                   <UploadCloud className="w-3.5 h-3.5" />
                   <span>Upload Real Document</span>
                 </button>
                 <button
                   onClick={() => setIsAddInfoOpen(true)}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-zinc-100 dark:bg-[#14141e] text-zinc-800 dark:text-zinc-200 text-xs font-medium cursor-pointer hover:bg-zinc-200 dark:hover:bg-[#1c1c28]"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-zinc-100 dark:bg-[#14141e] text-zinc-800 dark:text-zinc-200 text-xs font-medium cursor-pointer hover:bg-zinc-200 dark:hover:bg-[#1c1c28] transition-all"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>Add First Record</span>

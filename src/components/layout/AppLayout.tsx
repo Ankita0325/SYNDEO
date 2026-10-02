@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigation, type RoutePath } from '../../context/NavigationContext';
 import { useTheme } from '../../context/ThemeContext';
 import { ThemeToggle } from '../ui/ThemeToggle';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, Sparkles } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 import { FloatingSidebar } from './FloatingSidebar';
@@ -120,6 +120,14 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
 
             {isLanding ? (
               <>
+                <button
+                  onClick={() => handleNavClick('/memory')}
+                  className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/25 hover:bg-emerald-500/20 transition-all cursor-pointer shadow-2xs"
+                  title="Try demo static vault data"
+                >
+                  <Sparkles className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                  <span>Demo Mode</span>
+                </button>
                 <button
                   onClick={() => handleNavClick('/auth')}
                   className="hidden sm:inline-block px-3.5 py-1.5 rounded-full text-xs font-semibold text-zinc-700 dark:text-[#e4e4e7] hover:text-zinc-900 dark:hover:text-white bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 transition-all cursor-pointer"
