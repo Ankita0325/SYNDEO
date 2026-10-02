@@ -184,7 +184,7 @@ export const NavigationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       }, { onConflict: 'auth_user_id', ignoreDuplicates: true });
     if (upsertError) throw upsertError;
 
-    setUserName(existingProfile?.full_name || normalizedName);
+    setUserName(normalizedName);
     setProfileExists(true);
     setIsAuthenticated(true);
     navigate('/memory');

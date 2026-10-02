@@ -50,8 +50,6 @@ const AppContent: React.FC = () => {
     switch (currentPath) {
       case '/':
         return <HomePage />;
-      case '/auth':
-        return <AuthPage />;
       case '/chat':
         return <ChatPage />;
       case '/memory':

@@ -431,10 +431,11 @@ export const SharedLinkViewer: React.FC<SharedLinkViewerProps> = ({ token: propT
   const hasApprovedAccess = currentRequest?.status === 'approved' && currentShare?.status === 'Active';
 
   useEffect(() => {
-    if (!supabase || !currentShare?.shareId || !currentRequest?.organizationMemberId || !registeredEmail) return;
+    const client = supabase;
+    if (!client || !currentShare?.shareId || !currentRequest?.organizationMemberId || !registeredEmail) return;
 
     const refreshAccess = async () => {
-      const { data: shareState, error: shareError } = await supabase
+      const { data: shareState, error: shareError } = await client
         .from('shares')
         .select('status, expires_at')
         .eq('id', currentShare.shareId)
@@ -449,7 +450,7 @@ export const SharedLinkViewer: React.FC<SharedLinkViewerProps> = ({ token: propT
         }
       }
 
-      const { data, error } = await supabase
+      const { data, error } = await client
         .from('share_access')
         .select('id, action, created_at')
         .eq('share_id', currentShare.shareId)
@@ -564,7 +565,7 @@ export const SharedLinkViewer: React.FC<SharedLinkViewerProps> = ({ token: propT
         .maybeSingle();
       if (accessLookupError) throw accessLookupError;
 
-      let action = previousAccess?.action as 'REQUESTED' | 'APPROVED' | 'DENIED' | 'REVOKED' | undefined;
+      let action: string | undefined = previousAccess?.action;
       let accessId = previousAccess?.id;
       if (!action || action === 'DENIED' || action === 'REVOKED') {
         const { data: newAccess, error: requestError } = await supabase

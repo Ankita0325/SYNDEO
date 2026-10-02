@@ -248,20 +248,21 @@ export const SharePage: React.FC = () => {
   useEffect(() => subscribeToSharedLinks(setSharedLinks), []);
 
   useEffect(() => {
-    if (!supabase) return;
+    const client = supabase;
+    if (!client) return;
     let active = true;
 
     const refreshAccessActivity = async () => {
       const persistedLinks = loadSharedLinks(initialSharedLinks).filter((link) => link.shareId);
       const updates = await Promise.all(persistedLinks.map(async (link) => {
-        const { data: share, error: shareError } = await supabase
+        const { data: share, error: shareError } = await client
           .from('shares')
           .select('status, expires_at')
           .eq('id', link.shareId)
           .maybeSingle();
         if (shareError || !share) return null;
 
-        const { data: events, error: eventsError } = await supabase
+        const { data: events, error: eventsError } = await client
           .from('share_access')
           .select('id, organization_id, organization_member_id, action, accessed_at, created_at, organizations(id, name, type, purpose, website), organization_members(full_name, work_email, role, department)')
           .eq('share_id', link.shareId)
@@ -375,13 +376,14 @@ export const SharePage: React.FC = () => {
     let active = true;
 
     void (async () => {
-      if (!supabase) return;
-      const { data: { user } } = await supabase.auth.getUser();
+      const client = supabase;
+      if (!client) return;
+      const { data: { user } } = await client.auth.getUser();
       if (!user) return;
-      const { data: profile } = await supabase.from('profiles').select('id').eq('auth_user_id', user.id).maybeSingle();
+      const { data: profile } = await client.from('profiles').select('id').eq('auth_user_id', user.id).maybeSingle();
       if (!profile) return;
 
-      const { data: shares, error: sharesError } = await supabase
+      const { data: shares, error: sharesError } = await client
         .from('shares')
         .select('id, recipient_name, recipient_organization, allowed_claims, status, expires_at, created_at')
         .eq('profile_id', profile.id);
@@ -392,7 +394,7 @@ export const SharePage: React.FC = () => {
         const localLink = knownLinks.find((link) => link.shareId === share.id);
         if (!localLink) return null;
 
-        const { data: events, error: eventsError } = await supabase
+        const { data: events, error: eventsError } = await client
           .from('share_access')
           .select('id, organization_id, organization_member_id, action, accessed_at, created_at, organizations(id, name, type, purpose, website), organization_members(full_name, work_email, role, department)')
           .eq('share_id', share.id)

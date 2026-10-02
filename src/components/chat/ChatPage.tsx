@@ -653,63 +653,6 @@ export const ChatPage: React.FC = () => {
             }}
           />
 
-          {/* === HEADER === */}
-          <div className="hidden sm:flex py-2 px-3 my-1 rounded-2xl
-                          bg-white/80 dark:bg-[#0a0a10]/80
-                          backdrop-blur-md
-                          border border-blue-200/70 dark:border-[#1c1c28]
-                          items-center justify-between
-                          shadow-[0_4px_20px_-8px_rgba(59,130,246,0.25)]
-                          dark:shadow-2xs
-                          shrink-0 relative z-20 mx-3 mt-3">
-            <div className="flex items-center gap-2">
-              <div className="relative flex items-center justify-center">
-                <div className="w-7 h-7 rounded-full bg-[#5a25eb]/10 dark:bg-[#5a25eb]/20 border border-[#5a25eb]/30 flex items-center justify-center shadow-xs overflow-hidden">
-                  <AILoaderOrb state={currentOrbState} variant="avatar" size={20} />
-                </div>
-                <span className="absolute -bottom-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-black" />
-              </div>
-
-              <div>
-                <div className="flex items-center gap-1.5">
-                  <h1 className="text-xs sm:text-sm font-bold tracking-tight text-zinc-900 dark:text-white">
-                    SYNDEO AI
-                  </h1>
-                  <span className="px-1.5 py-0.2 rounded text-[9px] font-mono font-medium bg-[#5a25eb]/10 dark:bg-[#5a25eb]/20 text-[#5a25eb] dark:text-[#cbbeff]">
-                    Vault
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-1.5">
-              <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-blue-50 dark:bg-[#12121a] border border-blue-200 dark:border-[#222230] text-[10px] text-zinc-600 dark:text-[#a1a1aa]">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#5a25eb] dark:bg-[#cbbeff] animate-pulse" />
-                <span className="capitalize font-mono font-bold text-[10px]">
-                  {currentOrbState}
-                </span>
-              </div>
-
-              {isSpeakingVoice && (
-                <button
-                  onClick={stopAudio}
-                  className="p-1.5 rounded-lg text-red-500 hover:bg-red-500/10 transition-colors cursor-pointer"
-                  title="Stop Audio"
-                >
-                  <VolumeX className="w-3.5 h-3.5" />
-                </button>
-              )}
-
-              <button
-                onClick={handleResetChat}
-                className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors cursor-pointer"
-                title="Reset Chat"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-
           {/* === MESSAGES STREAM === */}
           <div ref={messagesContainerRef} className="flex-1 min-h-0 overflow-y-auto px-1 sm:px-2 py-2.5 space-y-3.5 scrollbar-none no-scrollbar flex flex-col justify-start relative z-10">
 
@@ -969,9 +912,30 @@ export const ChatPage: React.FC = () => {
                 </button>
               </div>
 
-              <div className="hidden sm:flex items-center gap-1 text-[10px] text-zinc-400">
-                <ShieldCheck className="w-3 h-3 text-emerald-500" />
-                <span>Encrypted</span>
+              <div className="flex items-center gap-2 text-[10px] text-zinc-400">
+                {isSpeakingVoice && (
+                  <button
+                    onClick={stopAudio}
+                    className="p-1 rounded-lg text-red-500 hover:bg-red-500/10 transition-colors cursor-pointer"
+                    title="Stop Audio"
+                  >
+                    <VolumeX className="w-3.5 h-3.5" />
+                  </button>
+                )}
+                {messages.length > 0 && (
+                  <button
+                    onClick={handleResetChat}
+                    className="flex items-center gap-1 px-2 py-1 rounded-lg text-zinc-500 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-200/60 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                    title="Reset Chat"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    <span className="text-[10px]">Clear</span>
+                  </button>
+                )}
+                <div className="hidden sm:flex items-center gap-1 text-[10px] text-zinc-400">
+                  <ShieldCheck className="w-3 h-3 text-emerald-500" />
+                  <span>Encrypted</span>
+                </div>
               </div>
             </div>
 
