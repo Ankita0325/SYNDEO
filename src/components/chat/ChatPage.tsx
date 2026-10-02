@@ -1162,108 +1162,174 @@ export const ChatPage: React.FC = () => {
             )}
           </AnimatePresence>
 
-          {/* Intelligent Control Panel / Composer with Animated Border Beam */}
-          <div className="relative w-full max-w-[1050px] mx-auto rounded-[30px] sm:rounded-[34px] p-[1.5px] overflow-hidden group">
-            {/* Animated Rotating Conic Glow Beam */}
+          {/* Intelligent Control Panel / Composer with Animated Border Beam & Floating Particles */}
+          <div className="relative w-full max-w-[1050px] mx-auto rounded-[30px] sm:rounded-[34px] p-[2px] overflow-hidden group select-none">
+            
+            {/* Primary Rotating Conic Glow Beam */}
             <motion.div
               animate={{ rotate: 360 }}
-              transition={{ duration: 8, repeat: Infinity, ease: 'linear' }}
-              className="absolute -inset-[150%] w-[400%] h-[400%] left-[-150%] top-[-150%] pointer-events-none z-0"
+              transition={{ duration: 7, repeat: Infinity, ease: 'linear' }}
+              className="absolute -inset-[180%] w-[460%] h-[460%] left-[-180%] top-[-180%] pointer-events-none z-0 opacity-90 group-hover:opacity-100 transition-opacity"
               style={{
                 background:
                   theme === 'dark'
-                    ? 'conic-gradient(from 0deg, transparent 0deg, transparent 70deg, rgba(90, 37, 235, 0.7) 120deg, rgba(56, 189, 248, 0.85) 180deg, rgba(203, 190, 255, 0.75) 240deg, transparent 290deg, transparent 360deg)'
-                    : 'conic-gradient(from 0deg, transparent 0deg, transparent 70deg, rgba(90, 37, 235, 0.45) 120deg, rgba(56, 189, 248, 0.6) 180deg, rgba(140, 110, 255, 0.5) 240deg, transparent 290deg, transparent 360deg)',
+                    ? 'conic-gradient(from 0deg, transparent 0deg, transparent 60deg, rgba(90, 37, 235, 0.85) 110deg, rgba(56, 189, 248, 0.95) 160deg, rgba(236, 72, 153, 0.8) 210deg, rgba(203, 190, 255, 0.9) 260deg, transparent 320deg, transparent 360deg)'
+                    : 'conic-gradient(from 0deg, transparent 0deg, transparent 60deg, rgba(90, 37, 235, 0.65) 110deg, rgba(56, 189, 248, 0.8) 160deg, rgba(217, 70, 239, 0.65) 210deg, rgba(140, 110, 255, 0.7) 260deg, transparent 320deg, transparent 360deg)',
               }}
             />
 
-            {/* Inner Composer Body */}
-            <div
-              className="w-full rounded-[28px] sm:rounded-[32px] p-2.5 sm:p-3.5 relative z-10 transition-all
-                         border border-white/60 dark:border-white/10
-                         shadow-[0_12px_45px_rgba(90,70,255,0.12)]
-                         dark:shadow-[0_12px_45px_rgba(0,0,0,0.45)]
-                         backdrop-blur-xl"
+            {/* Counter-Rotating Soft Ambient Sheen */}
+            <motion.div
+              animate={{ rotate: -360 }}
+              transition={{ duration: 11, repeat: Infinity, ease: 'linear' }}
+              className="absolute -inset-[150%] w-[400%] h-[400%] left-[-150%] top-[-150%] pointer-events-none z-0 opacity-50 blur-[6px]"
               style={{
                 background:
                   theme === 'dark'
-                    ? 'radial-gradient(circle at 20% 0%, rgba(90, 37, 235, 0.18), transparent 50%), radial-gradient(circle at 90% 100%, rgba(139, 92, 246, 0.14), transparent 55%), linear-gradient(135deg, rgba(22, 20, 38, 0.94), rgba(14, 13, 28, 0.92))'
-                    : 'radial-gradient(circle at 20% 0%, rgba(210, 220, 255, 0.40), transparent 50%), radial-gradient(circle at 90% 100%, rgba(220, 205, 255, 0.35), transparent 55%), linear-gradient(135deg, rgba(248, 250, 255, 0.96), rgba(241, 243, 255, 0.92))',
+                    ? 'conic-gradient(from 180deg, transparent 0deg, rgba(56, 189, 248, 0.5) 120deg, rgba(147, 51, 234, 0.6) 240deg, transparent 360deg)'
+                    : 'conic-gradient(from 180deg, transparent 0deg, rgba(90, 70, 255, 0.35) 120deg, rgba(56, 189, 248, 0.4) 240deg, transparent 360deg)',
+              }}
+            />
+
+            {/* Inner Composer Body Surface */}
+            <div
+              className="w-full rounded-[28px] sm:rounded-[32px] p-2.5 sm:p-3.5 relative z-10 transition-all
+                         border border-white/70 dark:border-white/10
+                         shadow-[0_12px_45px_rgba(90,70,255,0.14)]
+                         dark:shadow-[0_12px_45px_rgba(0,0,0,0.5)]
+                         backdrop-blur-2xl overflow-hidden"
+              style={{
+                background:
+                  theme === 'dark'
+                    ? 'radial-gradient(circle at 20% 0%, rgba(90, 37, 235, 0.22), transparent 50%), radial-gradient(circle at 85% 100%, rgba(56, 189, 248, 0.16), transparent 55%), linear-gradient(135deg, rgba(20, 18, 36, 0.96), rgba(12, 11, 24, 0.94))'
+                    : 'radial-gradient(circle at 20% 0%, rgba(210, 225, 255, 0.48), transparent 50%), radial-gradient(circle at 85% 100%, rgba(230, 215, 255, 0.40), transparent 55%), linear-gradient(135deg, rgba(252, 253, 255, 0.97), rgba(244, 246, 255, 0.94))',
               }}
             >
-              {/* Elevated Inner Input Surface */}
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  handleSendMessage();
-                }}
-                className="relative flex items-center
-                           bg-white/80 dark:bg-[#0a0a14]/80
-                           rounded-[18px] sm:rounded-[20px]
-                           border border-[#96aaff]/25 dark:border-white/10
-                           shadow-[inset_0_1px_0_rgba(255,255,255,0.85)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]
-                           focus-within:border-[#6e5aff]/50 focus-within:shadow-[0_0_24px_rgba(110,90,255,0.14)]
-                           transition-all p-1.5 z-10 backdrop-blur-md"
-              >
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  onChange={handleFileChange}
-                  className="hidden"
-                  accept=".pdf,.png,.jpg,.jpeg,.doc,.docx,.txt,.json,.csv"
+              {/* Floating Ambient Glowing Particles */}
+              <div className="absolute inset-0 pointer-events-none z-0 overflow-hidden">
+                {[
+                  { top: '18%', left: '12%', size: 4, color: 'rgba(90, 37, 235, 0.7)', duration: 4.2, delay: 0 },
+                  { top: '70%', left: '28%', size: 5, color: 'rgba(56, 189, 248, 0.8)', duration: 5.5, delay: 0.8 },
+                  { top: '30%', left: '55%', size: 3, color: 'rgba(236, 72, 153, 0.7)', duration: 4.8, delay: 1.4 },
+                  { top: '75%', left: '78%', size: 5, color: 'rgba(147, 51, 234, 0.75)', duration: 6.0, delay: 0.4 },
+                  { top: '22%', left: '88%', size: 4, color: 'rgba(56, 189, 248, 0.7)', duration: 5.0, delay: 2.1 },
+                  { top: '55%', left: '42%', size: 3.5, color: 'rgba(90, 37, 235, 0.6)', duration: 4.6, delay: 1.0 },
+                ].map((particle, idx) => (
+                  <motion.div
+                    key={idx}
+                    animate={{
+                      y: [0, -10, 0],
+                      x: [0, (idx % 2 === 0 ? 6 : -6), 0],
+                      opacity: [0.25, 0.8, 0.25],
+                      scale: [0.85, 1.25, 0.85],
+                    }}
+                    transition={{
+                      duration: particle.duration,
+                      repeat: Infinity,
+                      ease: 'easeInOut',
+                      delay: particle.delay,
+                    }}
+                    className="absolute rounded-full pointer-events-none blur-[0.5px]"
+                    style={{
+                      top: particle.top,
+                      left: particle.left,
+                      width: particle.size,
+                      height: particle.size,
+                      backgroundColor: particle.color,
+                      boxShadow: `0 0 10px ${particle.color}`,
+                    }}
+                  />
+                ))}
+              </div>
+
+              {/* Elevated Inner Input Surface with Laser Edge Beam */}
+              <div className="relative rounded-[20px] sm:rounded-[22px] p-[1.5px] overflow-hidden group/input z-10">
+                {/* Moving Border Laser Glow Line on Input Form */}
+                <motion.div
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 5.5, repeat: Infinity, ease: 'linear' }}
+                  className="absolute -inset-[150%] w-[400%] h-[400%] left-[-150%] top-[-150%] pointer-events-none z-0 opacity-70 group-focus-within/input:opacity-100 transition-opacity"
+                  style={{
+                    background:
+                      theme === 'dark'
+                        ? 'conic-gradient(from 0deg, transparent 0deg, transparent 80deg, rgba(56, 189, 248, 0.9) 140deg, rgba(168, 85, 247, 0.9) 180deg, rgba(236, 72, 153, 0.85) 220deg, transparent 280deg, transparent 360deg)'
+                        : 'conic-gradient(from 0deg, transparent 0deg, transparent 80deg, rgba(90, 37, 235, 0.7) 140deg, rgba(56, 189, 248, 0.8) 180deg, rgba(217, 70, 239, 0.7) 220deg, transparent 280deg, transparent 360deg)',
+                  }}
                 />
 
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="p-2 rounded-xl text-zinc-400 hover:text-zinc-700 dark:text-zinc-500 dark:hover:text-white transition-colors cursor-pointer ml-1"
-                  title="Attach document or image"
-                  aria-label="Attach file"
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    handleSendMessage();
+                  }}
+                  className="relative flex items-center
+                             bg-white/85 dark:bg-[#090814]/90
+                             rounded-[18px] sm:rounded-[20px]
+                             border border-[#96aaff]/20 dark:border-white/10
+                             shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]
+                             focus-within:border-[#6e5aff]/60 focus-within:shadow-[0_0_28px_rgba(110,90,255,0.18)]
+                             transition-all p-1.5 z-10 backdrop-blur-md"
                 >
-                  <Paperclip className="w-4 h-4" />
-                </button>
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleFileChange}
+                    className="hidden"
+                    accept=".pdf,.png,.jpg,.jpeg,.doc,.docx,.txt,.json,.csv"
+                  />
 
-                <input
-                  type="text"
-                  value={inputText}
-                  onChange={(e) => setInputText(e.target.value)}
-                  placeholder={
-                    voiceState === 'listening'
-                      ? 'Listening...'
-                      : attachedFile
-                      ? `Message with ${attachedFile.name}...`
-                      : chatMode === 'save'
-                      ? 'Save record (e.g. "Passport: Z8921098")...'
-                      : chatMode === 'share'
-                      ? 'Share fields (e.g. "Degree with Acme")...'
-                      : 'Ask me anything...'
-                  }
-                  className="flex-1 bg-transparent px-3 py-2 text-sm sm:text-base text-zinc-900 dark:text-zinc-100 placeholder-[#6B7280] focus:outline-none"
-                />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="p-2 rounded-xl text-zinc-400 hover:text-zinc-700 dark:text-zinc-500 dark:hover:text-white transition-colors cursor-pointer ml-1"
+                    title="Attach document or image"
+                    aria-label="Attach file"
+                  >
+                    <Paperclip className="w-4 h-4" />
+                  </button>
 
-                <button
-                  type="button"
-                  onClick={openVoiceModal}
-                  className={`p-2 rounded-xl transition-all cursor-pointer mr-1.5 ${
-                    voiceState === 'listening' || isVoiceModalOpen
-                      ? 'bg-red-500 text-white animate-pulse'
-                      : 'text-zinc-400 hover:text-zinc-700 dark:text-zinc-500 dark:hover:text-white'
-                  }`}
-                  title="Open Voice Chat Mode"
-                  aria-label="Voice Chat Mode"
-                >
-                  {voiceState === 'listening' ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-                </button>
+                  <input
+                    type="text"
+                    value={inputText}
+                    onChange={(e) => setInputText(e.target.value)}
+                    placeholder={
+                      voiceState === 'listening'
+                        ? 'Listening...'
+                        : attachedFile
+                        ? `Message with ${attachedFile.name}...`
+                        : chatMode === 'save'
+                        ? 'Save record (e.g. "Passport: Z8921098")...'
+                        : chatMode === 'share'
+                        ? 'Share fields (e.g. "Degree with Acme")...'
+                        : 'Ask me anything...'
+                    }
+                    className="flex-1 bg-transparent px-3 py-2 text-sm sm:text-base text-zinc-900 dark:text-zinc-100 placeholder-[#6B7280] focus:outline-none"
+                  />
 
-                <button
-                  type="submit"
-                  disabled={(!inputText.trim() && !attachedFile) || isTyping || isStreaming}
-                  className="w-9 h-9 sm:w-10 sm:h-10 rounded-[14px] bg-gradient-to-br from-[#c9b8ff] to-[#b9a4ff] dark:from-[#8b5cf6] dark:to-[#6d28d9] text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-[0_5px_15px_rgba(120,90,255,0.22)] cursor-pointer flex items-center justify-center shrink-0 mr-0.5"
-                  aria-label="Send"
-                >
-                  <ArrowUp className="w-4 h-4 stroke-[3]" />
-                </button>
-              </form>
+                  <button
+                    type="button"
+                    onClick={openVoiceModal}
+                    className={`p-2 rounded-xl transition-all cursor-pointer mr-1.5 ${
+                      voiceState === 'listening' || isVoiceModalOpen
+                        ? 'bg-red-500 text-white animate-pulse'
+                        : 'text-zinc-400 hover:text-zinc-700 dark:text-zinc-500 dark:hover:text-white'
+                    }`}
+                    title="Open Voice Chat Mode"
+                    aria-label="Voice Chat Mode"
+                  >
+                    {voiceState === 'listening' ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                  </button>
+
+                  <button
+                    type="submit"
+                    disabled={(!inputText.trim() && !attachedFile) || isTyping || isStreaming}
+                    className="w-9 h-9 sm:w-10 sm:h-10 rounded-[14px] bg-gradient-to-br from-[#c9b8ff] to-[#b9a4ff] dark:from-[#8b5cf6] dark:to-[#6d28d9] text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-[0_5px_15px_rgba(120,90,255,0.22)] cursor-pointer flex items-center justify-center shrink-0 mr-0.5"
+                    aria-label="Send"
+                  >
+                    <ArrowUp className="w-4 h-4 stroke-[3]" />
+                  </button>
+                </form>
+              </div>
 
               {/* Lower Toolbar */}
               <div className="flex items-center justify-between gap-3 pt-2.5 mt-2.5 border-t border-black/[0.05] dark:border-white/[0.06] px-1 relative z-10">

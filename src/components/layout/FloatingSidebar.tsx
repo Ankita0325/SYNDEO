@@ -85,24 +85,25 @@ export const FloatingSidebar: React.FC<FloatingSidebarProps> = ({
       </AnimatePresence>
 
       {/* =========================================================================
-          DESKTOP FLOATING SIDEBAR (Expandable 82px <-> 320px & Increased Height 340px <-> 620px)
+          DESKTOP FLOATING SIDEBAR (Capsule: Black in Light theme, White in Dark theme)
          ========================================================================= */}
       <motion.nav
         initial={false}
         animate={{
-          width: isExpanded ? 320 : 82,
-          height: isExpanded ? 620 : 340,
+          width: isExpanded ? 300 : 76,
+          height: isExpanded ? 490 : 300,
         }}
         transition={{
-          duration: 0.45,
+          duration: 0.4,
           ease: [0.22, 1, 0.36, 1],
         }}
-        className="fixed left-5 top-1/2 -translate-y-1/2 z-50 hidden md:flex flex-col p-3 rounded-[32px]
-                   bg-white/75 dark:bg-[#0c0c16]/85
-                   backdrop-blur-[30px] backdrop-saturate-[160%]
-                   border border-black/[0.08] dark:border-white/[0.12]
-                   shadow-[0_20px_60px_rgba(30,20,80,0.12)] dark:shadow-[0_20px_60px_rgba(0,0,0,0.55)]
-                   select-none overflow-hidden justify-between"
+        className={`fixed left-4 sm:left-5 top-[52%] -translate-y-1/2 z-50 hidden md:flex flex-col p-2.5 sm:p-3 rounded-[30px] sm:rounded-[34px]
+                   backdrop-blur-[32px] backdrop-saturate-[180%]
+                   select-none overflow-hidden justify-between transition-colors duration-300 ${
+                     isDark
+                       ? 'bg-white/95 text-zinc-900 border border-black/10 shadow-[0_20px_60px_rgba(0,0,0,0.55),0_0_0_1px_rgba(255,255,255,0.4)]'
+                       : 'bg-[#0d0d14]/95 text-white border border-white/12 shadow-[0_20px_50px_rgba(0,0,0,0.45),0_0_0_1px_rgba(255,255,255,0.08)]'
+                   }`}
         aria-label="Sidebar Navigation"
       >
         {/* TOP / PROFILE HEADER (Visible & Staggered when expanded) */}
@@ -110,23 +111,33 @@ export const FloatingSidebar: React.FC<FloatingSidebarProps> = ({
           <AnimatePresence>
             {isExpanded && (
               <motion.div
-                initial={{ opacity: 0, y: -10 }}
+                initial={{ opacity: 0, y: -8 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -8 }}
-                transition={{ duration: 0.28, delay: 0.05, ease: [0.22, 1, 0.36, 1] }}
-                className="w-full pb-3 border-b border-black/[0.06] dark:border-white/[0.08] flex items-center justify-between"
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.25, delay: 0.04, ease: [0.22, 1, 0.36, 1] }}
+                className={`w-full pb-2.5 flex items-center justify-between border-b ${
+                  isDark ? 'border-black/[0.07]' : 'border-white/10'
+                }`}
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="relative w-9 h-9 rounded-2xl bg-gradient-to-br from-[#111111] to-zinc-800 dark:from-white dark:to-zinc-200 text-white dark:text-[#111111] flex items-center justify-center text-xs font-bold shadow-sm shrink-0">
+                  <div
+                    className={`relative w-8.5 h-8.5 rounded-2xl flex items-center justify-center text-xs font-bold shadow-xs shrink-0 ${
+                      isDark
+                        ? 'bg-[#111111] text-white'
+                        : 'bg-white text-[#111111]'
+                    }`}
+                  >
                     {displayInitials}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <h3 className="text-xs font-bold text-zinc-900 dark:text-white truncate">
+                    <h3 className={`text-xs font-bold truncate ${isDark ? 'text-zinc-900' : 'text-white'}`}>
                       {displayName}
                     </h3>
                     <div className="flex items-center gap-1.5 text-[10px]">
-                      <span className="text-zinc-500 dark:text-zinc-400 truncate max-w-[120px]">{displayEmail}</span>
-                      <span className="text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-0.5 shrink-0">
+                      <span className={`truncate max-w-[110px] ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                        {displayEmail}
+                      </span>
+                      <span className="text-emerald-500 font-medium flex items-center gap-0.5 shrink-0">
                         <ShieldCheck className="w-3 h-3" /> #8921
                       </span>
                     </div>
@@ -135,7 +146,11 @@ export const FloatingSidebar: React.FC<FloatingSidebarProps> = ({
 
                 <button
                   onClick={handleClose}
-                  className="w-7 h-7 rounded-xl bg-black/5 dark:bg-white/10 flex items-center justify-center text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white hover:bg-black/10 dark:hover:bg-white/20 transition-all cursor-pointer"
+                  className={`w-6.5 h-6.5 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
+                    isDark
+                      ? 'bg-black/5 text-zinc-600 hover:text-zinc-950 hover:bg-black/10'
+                      : 'bg-white/10 text-zinc-300 hover:text-white hover:bg-white/20'
+                  }`}
                   title="Close Side Panel"
                 >
                   <X className="w-3.5 h-3.5" />
@@ -151,10 +166,12 @@ export const FloatingSidebar: React.FC<FloatingSidebarProps> = ({
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                transition={{ duration: 0.2 }}
+                transition={{ duration: 0.18 }}
                 className="pt-2 pb-1 px-1 flex items-center justify-between"
               >
-                <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 dark:text-zinc-500 font-bold">
+                <span className={`text-[10px] font-mono uppercase tracking-wider font-bold ${
+                  isDark ? 'text-zinc-400' : 'text-zinc-500'
+                }`}>
                   Navigation
                 </span>
                 <button
@@ -162,7 +179,11 @@ export const FloatingSidebar: React.FC<FloatingSidebarProps> = ({
                     handleNav('/chat');
                     handleClose();
                   }}
-                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#5a25eb]/10 hover:bg-[#5a25eb] text-[#5a25eb] hover:text-white dark:bg-white/10 dark:hover:bg-white dark:text-[#cbbeff] dark:hover:text-[#111111] transition-all cursor-pointer"
+                  className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold transition-all cursor-pointer ${
+                    isDark
+                      ? 'bg-black/5 hover:bg-[#111111] text-zinc-800 hover:text-white'
+                      : 'bg-white/10 hover:bg-white text-[#cbbeff] hover:text-[#111111]'
+                  }`}
                 >
                   <Plus className="w-3 h-3" />
                   <span>New Chat</span>
@@ -172,7 +193,7 @@ export const FloatingSidebar: React.FC<FloatingSidebarProps> = ({
           </AnimatePresence>
 
           {/* Navigation Item Stack */}
-          <div className="relative flex flex-col gap-1.5 w-full mt-1">
+          <div className="relative flex flex-col gap-1 w-full mt-1">
             {navItems.map((item, index) => {
               const isActive = currentPath === item.path;
               const Icon = item.icon;
@@ -185,11 +206,13 @@ export const FloatingSidebar: React.FC<FloatingSidebarProps> = ({
                       layoutId="activeSidebarPointer"
                       transition={{
                         type: 'spring',
-                        stiffness: 380,
+                        stiffness: 400,
                         damping: 32,
                       }}
-                      className={`absolute -left-[15px] w-[5px] h-7 rounded-full z-20 ${
-                        isDark ? 'bg-white shadow-[0_0_10px_rgba(255,255,255,0.6)]' : 'bg-[#111111] shadow-[0_0_8px_rgba(0,0,0,0.3)]'
+                      className={`absolute -left-[14px] w-[4px] h-6 rounded-full z-20 ${
+                        isDark
+                          ? 'bg-[#111111] shadow-[0_0_8px_rgba(0,0,0,0.4)]'
+                          : 'bg-white shadow-[0_0_10px_rgba(255,255,255,0.8)]'
                       }`}
                     />
                   )}
@@ -197,24 +220,26 @@ export const FloatingSidebar: React.FC<FloatingSidebarProps> = ({
                   {/* Main Navigation Capsule Row */}
                   <motion.button
                     onClick={() => handleNav(item.path)}
-                    whileHover={{ x: 2, scale: 1.02 }}
+                    whileHover={{ x: 2, scale: 1.015 }}
                     whileTap={{ scale: 0.98 }}
-                    transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-                    className={`relative w-full h-[50px] rounded-[18px] flex items-center px-3 transition-all duration-300 cursor-pointer overflow-hidden ${
+                    transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+                    className={`relative w-full h-[44px] rounded-[16px] flex items-center px-2.5 transition-all duration-200 cursor-pointer overflow-hidden ${
                       isActive
                         ? isDark
-                          ? 'bg-white text-[#111111] shadow-[0_5px_18px_rgba(255,255,255,0.08)] font-bold'
-                          : 'bg-[#111111] text-white shadow-[0_5px_15px_rgba(0,0,0,0.15)] font-bold'
-                        : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'
+                          ? 'bg-[#111111] text-white shadow-sm font-bold'
+                          : 'bg-white text-[#111111] shadow-sm font-bold'
+                        : isDark
+                        ? 'text-zinc-600 hover:text-zinc-950 hover:bg-black/5'
+                        : 'text-zinc-300 hover:text-white hover:bg-white/10'
                     }`}
                     aria-current={isActive ? 'page' : undefined}
                     title={item.label}
                   >
-                    {/* Icon Container (Centered & Subtle Scaling) */}
-                    <div className="w-8 h-8 flex items-center justify-center shrink-0">
+                    {/* Icon Container */}
+                    <div className="w-7 h-7 flex items-center justify-center shrink-0">
                       <Icon
-                        className={`w-[20px] h-[20px] transition-transform duration-300 ${
-                          isActive ? 'scale-[1.14] stroke-[2.2]' : 'group-hover:scale-110 stroke-[1.8]'
+                        className={`w-[18px] h-[18px] transition-transform duration-200 ${
+                          isActive ? 'scale-[1.12] stroke-[2.2]' : 'group-hover:scale-105 stroke-[1.8]'
                         }`}
                       />
                     </div>
@@ -223,27 +248,29 @@ export const FloatingSidebar: React.FC<FloatingSidebarProps> = ({
                     <AnimatePresence>
                       {isExpanded && (
                         <motion.div
-                          initial={{ opacity: 0, x: -8 }}
+                          initial={{ opacity: 0, x: -6 }}
                           animate={{ opacity: 1, x: 0 }}
-                          exit={{ opacity: 0, x: -6 }}
+                          exit={{ opacity: 0, x: -4 }}
                           transition={{
-                            duration: 0.28,
-                            delay: 0.08 + index * 0.04,
+                            duration: 0.22,
+                            delay: 0.05 + index * 0.03,
                             ease: [0.22, 1, 0.36, 1],
                           }}
-                          className="ml-3 flex-1 flex items-center justify-between min-w-0 overflow-hidden text-left"
+                          className="ml-2.5 flex-1 flex items-center justify-between min-w-0 overflow-hidden text-left"
                         >
-                          <div className="flex flex-col min-w-0 pr-2">
+                          <div className="flex flex-col min-w-0 pr-1.5">
                             <span className="text-xs font-bold truncate leading-tight tracking-tight">
                               {item.label}
                             </span>
                             <span
-                              className={`text-[10px] truncate leading-tight mt-0.5 ${
+                              className={`text-[9px] truncate leading-tight mt-0.5 ${
                                 isActive
                                   ? isDark
-                                    ? 'text-zinc-700'
-                                    : 'text-zinc-300'
-                                  : 'text-zinc-400 dark:text-zinc-500'
+                                    ? 'text-zinc-300'
+                                    : 'text-zinc-600'
+                                  : isDark
+                                  ? 'text-zinc-400'
+                                  : 'text-zinc-400'
                               }`}
                             >
                               {item.desc}
@@ -252,12 +279,14 @@ export const FloatingSidebar: React.FC<FloatingSidebarProps> = ({
 
                           {item.shortcut && (
                             <span
-                              className={`text-[9px] font-mono px-1.5 py-0.5 rounded shrink-0 ${
+                              className={`text-[8.5px] font-mono px-1.5 py-0.5 rounded shrink-0 ${
                                 isActive
                                   ? isDark
-                                    ? 'bg-zinc-200 text-zinc-900 font-bold'
-                                    : 'bg-zinc-800 text-zinc-300 font-bold'
-                                  : 'bg-zinc-100 dark:bg-white/10 text-zinc-400'
+                                    ? 'bg-zinc-800 text-zinc-300'
+                                    : 'bg-zinc-200 text-zinc-900'
+                                  : isDark
+                                  ? 'bg-black/5 text-zinc-500'
+                                  : 'bg-white/10 text-zinc-400'
                               }`}
                             >
                               {item.shortcut}
@@ -274,30 +303,38 @@ export const FloatingSidebar: React.FC<FloatingSidebarProps> = ({
         </div>
 
         {/* BOTTOM SECTION (Preferences, Theme Switch, Settings & Logout) */}
-        <div className="w-full flex flex-col pt-2">
+        <div className="w-full flex flex-col pt-1">
           {/* Expanded Bottom Controls */}
           <AnimatePresence>
             {isExpanded && (
               <motion.div
-                initial={{ opacity: 0, y: 10 }}
+                initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 8 }}
-                transition={{ duration: 0.25, delay: 0.15 }}
-                className="space-y-2.5 pb-2"
+                exit={{ opacity: 0, y: 6 }}
+                transition={{ duration: 0.2, delay: 0.1 }}
+                className="space-y-2 pb-1"
               >
                 {/* Preferences Divider */}
-                <div className="pt-2 border-t border-black/[0.06] dark:border-white/[0.08]">
-                  <div className="px-1 pb-2 text-[10px] font-mono uppercase tracking-wider text-zinc-400 dark:text-zinc-500 font-bold">
+                <div className={`pt-1.5 border-t ${isDark ? 'border-black/[0.06]' : 'border-white/10'}`}>
+                  <div className={`px-1 pb-1.5 text-[9px] font-mono uppercase tracking-wider font-bold ${
+                    isDark ? 'text-zinc-400' : 'text-zinc-500'
+                  }`}>
                     Preferences
                   </div>
 
                   {/* Theme Switch Row */}
-                  <div className="p-2.5 rounded-2xl bg-black/[0.03] dark:bg-white/[0.04] border border-black/[0.04] dark:border-white/[0.06] flex items-center justify-between">
+                  <div className={`p-2 rounded-xl flex items-center justify-between border ${
+                    isDark
+                      ? 'bg-black/[0.03] border-black/[0.05]'
+                      : 'bg-white/5 border-white/10'
+                  }`}>
                     <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 rounded-lg bg-black/5 dark:bg-white/10 flex items-center justify-center">
-                        <Sparkles className="w-3.5 h-3.5 text-[#5a25eb] dark:text-[#cbbeff]" />
+                      <div className={`w-5.5 h-5.5 rounded-md flex items-center justify-center ${
+                        isDark ? 'bg-black/5' : 'bg-white/10'
+                      }`}>
+                        <Sparkles className="w-3 h-3 text-[#5a25eb] dark:text-[#cbbeff]" />
                       </div>
-                      <span className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">
+                      <span className={`text-[11px] font-semibold ${isDark ? 'text-zinc-800' : 'text-zinc-200'}`}>
                         {isDark ? 'Dark Mode' : 'Light Mode'}
                       </span>
                     </div>
@@ -306,26 +343,28 @@ export const FloatingSidebar: React.FC<FloatingSidebarProps> = ({
                 </div>
 
                 {/* Settings & Logout Action Buttons */}
-                <div className="grid grid-cols-2 gap-2 pt-1">
+                <div className="grid grid-cols-2 gap-1.5 pt-0.5">
                   <button
                     onClick={() => handleNav('/settings')}
-                    className={`py-2 rounded-xl text-xs font-semibold text-center transition-all cursor-pointer border shadow-xs flex items-center justify-center gap-1.5 ${
+                    className={`py-1.5 rounded-lg text-[11px] font-semibold text-center transition-all cursor-pointer border shadow-2xs flex items-center justify-center gap-1 ${
                       currentPath === '/settings'
                         ? isDark
-                          ? 'bg-white text-[#111111] border-white font-bold'
-                          : 'bg-[#111111] text-white border-[#111111] font-bold'
-                        : 'text-zinc-700 dark:text-zinc-200 bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 border-transparent'
+                          ? 'bg-[#111111] text-white border-[#111111] font-bold'
+                          : 'bg-white text-[#111111] border-white font-bold'
+                        : isDark
+                        ? 'text-zinc-700 bg-black/5 hover:bg-black/10 border-transparent'
+                        : 'text-zinc-200 bg-white/10 hover:bg-white/15 border-transparent'
                     }`}
                   >
-                    <Settings className="w-3.5 h-3.5" />
+                    <Settings className="w-3 h-3" />
                     <span>Settings</span>
                   </button>
 
                   <button
                     onClick={handleLogout}
-                    className="py-2 rounded-xl text-xs font-semibold text-center text-red-600 dark:text-red-400 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 transition-colors cursor-pointer shadow-xs flex items-center justify-center gap-1.5"
+                    className="py-1.5 rounded-lg text-[11px] font-semibold text-center text-red-500 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 transition-colors cursor-pointer shadow-2xs flex items-center justify-center gap-1"
                   >
-                    <LogOut className="w-3.5 h-3.5" />
+                    <LogOut className="w-3 h-3" />
                     <span>Logout</span>
                   </button>
                 </div>
@@ -335,42 +374,44 @@ export const FloatingSidebar: React.FC<FloatingSidebarProps> = ({
 
           {/* Subtle Divider */}
           <div
-            className={`w-full my-1 h-px ${
-              isDark ? 'bg-white/10' : 'bg-black/[0.07]'
+            className={`w-full my-0.5 h-px ${
+              isDark ? 'bg-black/[0.06]' : 'bg-white/10'
             }`}
           />
 
           {/* Expand / Collapse Toggle Button */}
           <motion.button
             onClick={toggleExpand}
-            whileHover={{ x: 2, scale: 1.03 }}
-            whileTap={{ scale: 0.97 }}
-            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-            className={`relative w-full h-[46px] rounded-[16px] flex items-center px-3 transition-all duration-300 cursor-pointer overflow-hidden ${
+            whileHover={{ x: 2, scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+            className={`relative w-full h-[38px] rounded-[14px] flex items-center px-2.5 transition-all duration-200 cursor-pointer overflow-hidden ${
               isExpanded
                 ? isDark
-                  ? 'bg-white/10 text-white'
-                  : 'bg-black/5 text-zinc-900 font-bold'
-                : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'
+                  ? 'bg-black/5 text-zinc-900 font-bold'
+                  : 'bg-white/10 text-white font-bold'
+                : isDark
+                ? 'text-zinc-600 hover:text-zinc-950 hover:bg-black/5'
+                : 'text-zinc-300 hover:text-white hover:bg-white/10'
             }`}
             title={isExpanded ? 'Collapse Side Panel' : 'Expand Side Panel'}
           >
-            <div className="w-8 h-8 flex items-center justify-center shrink-0">
-              <Menu className="w-5 h-5 stroke-[1.9]" />
+            <div className="w-7 h-7 flex items-center justify-center shrink-0">
+              <Menu className="w-4 h-4 stroke-[1.9]" />
             </div>
 
             <AnimatePresence>
               {isExpanded && (
                 <motion.div
-                  initial={{ opacity: 0, x: -8 }}
+                  initial={{ opacity: 0, x: -6 }}
                   animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -6 }}
+                  exit={{ opacity: 0, x: -4 }}
                   transition={{
-                    duration: 0.28,
-                    delay: 0.12,
+                    duration: 0.22,
+                    delay: 0.08,
                     ease: [0.22, 1, 0.36, 1],
                   }}
-                  className="ml-3 flex-1 flex items-center justify-between text-xs font-bold text-left"
+                  className="ml-2.5 flex-1 flex items-center justify-between text-xs font-bold text-left"
                 >
                   <span>Collapse Panel</span>
                   <ChevronRight className="w-3.5 h-3.5 opacity-60" />
@@ -401,35 +442,44 @@ export const FloatingSidebar: React.FC<FloatingSidebarProps> = ({
               animate={{ x: 0, opacity: 1 }}
               exit={{ x: '-100%', opacity: 0 }}
               transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-              className="relative w-[85vw] max-w-[320px] h-[88vh] my-auto ml-3 rounded-[32px] overflow-hidden shadow-2xl flex flex-col justify-between z-10
-                         bg-white/90 dark:bg-[#0c0c16]/95
-                         backdrop-blur-[30px]
-                         border border-white/70 dark:border-white/10 p-4"
+              className={`relative w-[85vw] max-w-[310px] h-[82vh] my-auto ml-3 rounded-[30px] overflow-hidden shadow-2xl flex flex-col justify-between z-10 p-4 backdrop-blur-[32px] ${
+                isDark
+                  ? 'bg-white/95 text-zinc-900 border border-black/10'
+                  : 'bg-[#0d0d14]/95 text-white border border-white/12'
+              }`}
             >
               {/* Header */}
-              <div className="w-full pb-3 border-b border-black/[0.06] dark:border-white/[0.08] flex items-center justify-between">
+              <div className={`w-full pb-3 border-b flex items-center justify-between ${
+                isDark ? 'border-black/[0.07]' : 'border-white/10'
+              }`}>
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="w-9 h-9 rounded-2xl bg-[#111111] dark:bg-white text-white dark:text-[#111111] flex items-center justify-center text-xs font-bold shadow-sm shrink-0">
+                  <div className={`w-8.5 h-8.5 rounded-2xl flex items-center justify-center text-xs font-bold shadow-xs shrink-0 ${
+                    isDark ? 'bg-[#111111] text-white' : 'bg-white text-[#111111]'
+                  }`}>
                     {displayInitials}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <h3 className="text-xs font-bold text-zinc-900 dark:text-white truncate">{displayName}</h3>
-                    <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
+                    <h3 className={`text-xs font-bold truncate ${isDark ? 'text-zinc-900' : 'text-white'}`}>{displayName}</h3>
+                    <p className="text-[10px] text-emerald-500 font-medium flex items-center gap-1">
                       <ShieldCheck className="w-3 h-3" /> Vault #8921
                     </p>
                   </div>
                 </div>
                 <button
                   onClick={handleClose}
-                  className="w-7 h-7 rounded-xl bg-black/5 dark:bg-white/10 flex items-center justify-center text-zinc-600 dark:text-zinc-300"
+                  className={`w-7 h-7 rounded-xl flex items-center justify-center ${
+                    isDark ? 'bg-black/5 text-zinc-600' : 'bg-white/10 text-zinc-300'
+                  }`}
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
               </div>
 
               {/* Navigation Items */}
-              <div className="flex-1 overflow-y-auto py-3 space-y-2">
-                <div className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 dark:text-zinc-500 font-bold px-1">
+              <div className="flex-1 overflow-y-auto py-3 space-y-1.5">
+                <div className={`text-[10px] font-mono uppercase tracking-wider font-bold px-1 ${
+                  isDark ? 'text-zinc-400' : 'text-zinc-500'
+                }`}>
                   Navigation
                 </div>
                 {navItems.map((item) => {
@@ -445,15 +495,17 @@ export const FloatingSidebar: React.FC<FloatingSidebarProps> = ({
                       className={`w-full flex items-center gap-3 p-2.5 rounded-2xl transition-all cursor-pointer ${
                         isActive
                           ? isDark
-                            ? 'bg-white text-[#111111] font-bold shadow-sm'
-                            : 'bg-[#111111] text-white font-bold shadow-sm'
-                          : 'text-zinc-700 dark:text-zinc-300 hover:bg-black/5 dark:hover:bg-white/5'
+                            ? 'bg-[#111111] text-white font-bold shadow-sm'
+                            : 'bg-white text-[#111111] font-bold shadow-sm'
+                          : isDark
+                          ? 'text-zinc-700 hover:bg-black/5'
+                          : 'text-zinc-300 hover:bg-white/10'
                       }`}
                     >
                       <Icon className="w-5 h-5 shrink-0" />
                       <div className="flex flex-col items-start min-w-0 text-left">
                         <span className="text-xs font-bold truncate">{item.label}</span>
-                        <span className="text-[10px] opacity-70 truncate">{item.desc}</span>
+                        <span className={`text-[10px] truncate ${isActive ? (isDark ? 'text-zinc-300' : 'text-zinc-600') : 'opacity-70'}`}>{item.desc}</span>
                       </div>
                     </button>
                   );
@@ -461,9 +513,13 @@ export const FloatingSidebar: React.FC<FloatingSidebarProps> = ({
               </div>
 
               {/* Footer */}
-              <div className="space-y-2.5 pt-2 border-t border-black/[0.06] dark:border-white/[0.08]">
-                <div className="p-2.5 rounded-2xl bg-black/[0.03] dark:bg-white/[0.04] flex items-center justify-between">
-                  <span className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">
+              <div className={`space-y-2 pt-2 border-t ${
+                isDark ? 'border-black/[0.07]' : 'border-white/10'
+              }`}>
+                <div className={`p-2 rounded-xl flex items-center justify-between ${
+                  isDark ? 'bg-black/[0.03]' : 'bg-white/5'
+                }`}>
+                  <span className={`text-xs font-semibold ${isDark ? 'text-zinc-800' : 'text-zinc-200'}`}>
                     {isDark ? 'Dark Mode' : 'Light Mode'}
                   </span>
                   <ThemeToggle size="sm" />
@@ -474,14 +530,16 @@ export const FloatingSidebar: React.FC<FloatingSidebarProps> = ({
                       handleNav('/settings');
                       handleClose();
                     }}
-                    className="py-2 rounded-xl text-xs font-semibold text-center bg-black/5 dark:bg-white/5 text-zinc-800 dark:text-zinc-200 flex items-center justify-center gap-1.5"
+                    className={`py-2 rounded-xl text-xs font-semibold text-center flex items-center justify-center gap-1.5 ${
+                      isDark ? 'bg-black/5 text-zinc-800' : 'bg-white/10 text-zinc-200'
+                    }`}
                   >
                     <Settings className="w-3.5 h-3.5" />
                     <span>Settings</span>
                   </button>
                   <button
                     onClick={handleLogout}
-                    className="py-2 rounded-xl text-xs font-semibold text-center text-red-600 dark:text-red-400 bg-red-500/10 flex items-center justify-center gap-1.5"
+                    className="py-2 rounded-xl text-xs font-semibold text-center text-red-500 bg-red-500/10 flex items-center justify-center gap-1.5"
                   >
                     <LogOut className="w-3.5 h-3.5" />
                     <span>Logout</span>
