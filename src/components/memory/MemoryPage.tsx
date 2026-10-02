@@ -43,7 +43,7 @@ export const MemoryPage: React.FC = () => {
   const [viewMode, setViewMode] = useState<ViewMode>('graph');
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  const useSampleDocuments = useCallback((error?: string) => {
+  const loadSampleDocuments = useCallback((error?: string) => {
     setDocuments(initialDocuments.slice(0, 2));
     setIsUsingSampleDocuments(true);
     setDocumentLoadError(error || null);
@@ -64,11 +64,11 @@ export const MemoryPage: React.FC = () => {
       if (supabase) {
         const { data: { user }, error: userError } = await supabase.auth.getUser();
         if (userError) {
-          if (active) useSampleDocuments(userError.message);
+          if (active) loadSampleDocuments(userError.message);
           return;
         }
         if (!user) {
-          if (active) useSampleDocuments('Sign in to load your vault documents.');
+          if (active) loadSampleDocuments('Sign in to load your vault documents.');
           return;
         }
 
@@ -78,7 +78,7 @@ export const MemoryPage: React.FC = () => {
           .eq('auth_user_id', user.id)
           .single();
         if (profileError) {
-          if (active) useSampleDocuments(profileError.message);
+          if (active) loadSampleDocuments(profileError.message);
           return;
         }
 
@@ -89,12 +89,12 @@ export const MemoryPage: React.FC = () => {
           .order('created_at', { ascending: false });
         if (!active) return;
         if (error) {
-          useSampleDocuments(error.message);
+          loadSampleDocuments(error.message);
           return;
         }
         const savedDocuments = (data || []).map((row) => mapSupabaseDocument(row as SupabaseDocumentRow));
         if (savedDocuments.length === 0) {
-          useSampleDocuments();
+          loadSampleDocuments();
         } else {
           setDocuments(savedDocuments);
           setIsUsingSampleDocuments(false);
@@ -107,7 +107,7 @@ export const MemoryPage: React.FC = () => {
           setDocuments(backendDocs);
           setIsUsingSampleDocuments(false);
         } else {
-          useSampleDocuments();
+          loadSampleDocuments();
         }
       }
       if (active) {
@@ -118,7 +118,7 @@ export const MemoryPage: React.FC = () => {
     return () => {
       active = false;
     };
-  }, [useSampleDocuments]);
+  }, [loadSampleDocuments]);
 
 
   // Modals state

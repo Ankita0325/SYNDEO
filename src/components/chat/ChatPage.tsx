@@ -249,7 +249,9 @@ export const ChatPage: React.FC = () => {
     if (voiceState === 'listening' && recognitionRef.current) {
       try {
         recognitionRef.current.stop();
-      } catch (e) {}
+      } catch (err) {
+        console.debug('Recognition stop ignored:', err);
+      }
     }
     stopAudio();
     setIsVoiceModalOpen(false);
@@ -274,7 +276,9 @@ export const ChatPage: React.FC = () => {
     if (recognitionRef.current) {
       try {
         recognitionRef.current.stop();
-      } catch (e) {}
+      } catch (err) {
+        console.debug('Recognition stop ignored:', err);
+      }
     }
     setVoiceState('idle');
     setOrbState('idle');
