@@ -27,6 +27,18 @@ export interface DocumentItem {
   sha256Hash?: string;
 }
 
+export interface CandidateClaim {
+  id: string;
+  category: LifeStageCategory;
+  fieldName: string;
+  value: string;
+  status: 'pending' | 'accepted' | 'rejected';
+  isEditing?: boolean;
+  editedValue?: string;
+  evidenceDocName?: string;
+  evidenceDocHash?: string;
+}
+
 export interface ChatMessage {
   id: string;
   sender: 'user' | 'assistant';
@@ -40,6 +52,7 @@ export interface ChatMessage {
     size: string;
     type: string;
   };
+  candidateClaims?: CandidateClaim[];
 }
 
 export interface Conversation {

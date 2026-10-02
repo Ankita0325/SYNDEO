@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import type { ChatMessage } from '../../types';
+import type { ChatMessage, CandidateClaim } from '../../types';
 import { AILoaderOrb, type OrbStateMode } from '../ui/ai-loader';
 import { ThinkingOrb, type OrbState } from '../ui/thinking-orbs';
 import { useNavigation } from '../../context/NavigationContext';
@@ -31,6 +31,7 @@ import {
   CheckCircle2,
   Cpu,
   Loader2,
+  Edit3,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -47,7 +48,7 @@ import {
   type SarvamLanguageCode,
   type SarvamVoiceSpeaker,
 } from '../../lib/sarvam';
-import { uploadDocumentToBackend } from '../../lib/api';
+import { uploadDocumentToBackend, addClaimToBackend } from '../../lib/api';
 import { runLocalOcr } from '../../lib/ocrClient';
 
 export type AgentStepId = 'document' | 'policy' | 'graph' | 'reasoning';
@@ -711,6 +712,114 @@ export const ChatPage: React.FC = () => {
     }, 20);
   };
 
+  const handleAcceptCandidateClaim = async (msgId: string, claimId: string) => {
+    let targetClaim: CandidateClaim | undefined;
+
+    setMessages((prev) =>
+      prev.map((msg) => {
+        if (msg.id !== msgId || !msg.candidateClaims) return msg;
+        const updated: CandidateClaim[] = msg.candidateClaims.map((c) => {
+          if (c.id === claimId) {
+            const finalVal = c.editedValue !== undefined ? c.editedValue : c.value;
+            targetClaim = { ...c, value: finalVal, status: 'accepted' as const, isEditing: false };
+            return targetClaim;
+          }
+          return c;
+        });
+        return { ...msg, candidateClaims: updated };
+      })
+    );
+
+    if (targetClaim) {
+      await addClaimToBackend({
+        category: targetClaim.category,
+        fieldName: targetClaim.fieldName,
+        value: targetClaim.value,
+        source: 'Extracted from document',
+        evidenceDocName: targetClaim.evidenceDocName,
+      });
+    }
+  };
+
+  const handleToggleEditCandidateClaim = (msgId: string, claimId: string, isEditing: boolean) => {
+    setMessages((prev) =>
+      prev.map((msg) => {
+        if (msg.id !== msgId || !msg.candidateClaims) return msg;
+        const updated: CandidateClaim[] = msg.candidateClaims.map((c) => {
+          if (c.id === claimId) {
+            return {
+              ...c,
+              isEditing,
+              editedValue: isEditing ? (c.editedValue ?? c.value) : c.editedValue,
+            };
+          }
+          return c;
+        });
+        return { ...msg, candidateClaims: updated };
+      })
+    );
+  };
+
+  const handleUpdateCandidateClaimValue = (msgId: string, claimId: string, newValue: string) => {
+    setMessages((prev) =>
+      prev.map((msg) => {
+        if (msg.id !== msgId || !msg.candidateClaims) return msg;
+        const updated: CandidateClaim[] = msg.candidateClaims.map((c) => {
+          if (c.id === claimId) {
+            return { ...c, editedValue: newValue };
+          }
+          return c;
+        });
+        return { ...msg, candidateClaims: updated };
+      })
+    );
+  };
+
+  const handleRejectCandidateClaim = (msgId: string, claimId: string) => {
+    setMessages((prev) =>
+      prev.map((msg) => {
+        if (msg.id !== msgId || !msg.candidateClaims) return msg;
+        const updated: CandidateClaim[] = msg.candidateClaims.map((c) => {
+          if (c.id === claimId) {
+            return { ...c, status: 'rejected' as const, isEditing: false };
+          }
+          return c;
+        });
+        return { ...msg, candidateClaims: updated };
+      })
+    );
+  };
+
+  const handleAcceptAllCandidateClaims = async (msgId: string) => {
+    const claimsToSave: CandidateClaim[] = [];
+
+    setMessages((prev) =>
+      prev.map((msg) => {
+        if (msg.id !== msgId || !msg.candidateClaims) return msg;
+        const updated: CandidateClaim[] = msg.candidateClaims.map((c) => {
+          if (c.status === 'pending') {
+            const finalVal = c.editedValue !== undefined ? c.editedValue : c.value;
+            const acceptedClaim: CandidateClaim = { ...c, value: finalVal, status: 'accepted' as const, isEditing: false };
+            claimsToSave.push(acceptedClaim);
+            return acceptedClaim;
+          }
+          return c;
+        });
+        return { ...msg, candidateClaims: updated };
+      })
+    );
+
+    for (const c of claimsToSave) {
+      await addClaimToBackend({
+        category: c.category,
+        fieldName: c.fieldName,
+        value: c.value,
+        source: 'Extracted from document',
+        evidenceDocName: c.evidenceDocName,
+      });
+    }
+  };
+
   const generateFallbackResponse = (
     content: string,
     mode: 'normal' | 'save' | 'share',
@@ -913,6 +1022,7 @@ export const ChatPage: React.FC = () => {
     void (async () => {
       let extractedText = '';
       let docHash = '';
+      let candidateClaims: any[] = [];
 
       try {
         // --- STEP 1: Document Agent (OCR & Hash) ---
@@ -932,6 +1042,48 @@ export const ChatPage: React.FC = () => {
                   .map((f: any) => `• **${f.fieldName}**: ${f.fieldValue}`)
                   .join('\n');
                 extractedText = fieldSummary + (extractedText ? `\n\nOCR Raw Context: ${extractedText.slice(0, 1000)}` : '');
+
+                uploadRes.extractedFields.forEach((f: any, idx: number) => {
+                  candidateClaims.push({
+                    id: `cand-${Date.now()}-${idx}`,
+                    category: f.category || 'identity',
+                    fieldName: f.fieldName || f.name,
+                    value: f.fieldValue || f.value,
+                    status: 'pending',
+                    evidenceDocName: currentAttached?.name,
+                    evidenceDocHash: docHash,
+                  });
+                });
+              }
+            }
+
+            if (candidateClaims.length === 0 && extractedText) {
+              const ghMatch = extractedText.match(/(?:github(?:\.com)?|gh)[\s/:]+([a-zA-Z0-9_-]+(?:\/[a-zA-Z0-9_-]+)?)/i);
+              if (ghMatch) {
+                const handle = ghMatch[1].replace(/^https?:\/\/(?:www\.)?github\.com\//i, '');
+                candidateClaims.push({
+                  id: `cand-${Date.now()}-gh`,
+                  category: 'identity',
+                  fieldName: 'GitHub Profile',
+                  value: handle.startsWith('http') ? handle : `https://github.com/${handle}`,
+                  status: 'pending',
+                  evidenceDocName: currentAttached?.name,
+                  evidenceDocHash: docHash,
+                });
+              }
+
+              const liMatch = extractedText.match(/(?:linkedin(?:\.com)?(?:\/in)?)[\s/:]+([a-zA-Z0-9_-]+)/i);
+              if (liMatch) {
+                const handle = liMatch[1].replace(/^https?:\/\/(?:www\.)?linkedin\.com\/in\//i, '');
+                candidateClaims.push({
+                  id: `cand-${Date.now()}-li`,
+                  category: 'identity',
+                  fieldName: 'LinkedIn Profile',
+                  value: handle.startsWith('http') ? handle : `https://linkedin.com/in/${handle}`,
+                  status: 'pending',
+                  evidenceDocName: currentAttached?.name,
+                  evidenceDocHash: docHash,
+                });
               }
             }
 
@@ -980,7 +1132,7 @@ export const ChatPage: React.FC = () => {
             s.id === 'policy'
               ? { ...s, status: 'running', detail: 'Evaluating zero-knowledge Merkle root & assurance level...' }
               : s
-          )
+            )
         );
         setActivePipelineSummary('Verifying zero-knowledge disclosure policy...');
         await new Promise((r) => setTimeout(r, 120));
@@ -1071,6 +1223,7 @@ export const ChatPage: React.FC = () => {
           sourceType: hasDoc ? 'evidence-backed' : 'user-confirmed',
           sourceNote: hasDoc ? `OCR Extracted (${currentAttached?.name})` : 'Neo4j Graph Verified',
           evidenceDoc: currentAttached?.name,
+          candidateClaims: candidateClaims.length > 0 ? candidateClaims : undefined,
         });
       } catch (error) {
         clearTimeout(t1);
@@ -1096,6 +1249,7 @@ export const ChatPage: React.FC = () => {
           sourceType: fallback.sourceType,
           sourceNote: fallback.sourceNote,
           evidenceDoc: fallback.evidenceDoc,
+          candidateClaims: candidateClaims.length > 0 ? candidateClaims : undefined,
         });
       }
     })();
@@ -1459,6 +1613,143 @@ export const ChatPage: React.FC = () => {
                     )}
 
                     <div>{renderFormattedContent(msg.content, isUser)}</div>
+
+                    {!isUser && msg.candidateClaims && msg.candidateClaims.length > 0 && (
+                      <div className="mt-3.5 pt-3 border-t border-zinc-200/80 dark:border-white/10 space-y-2.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5 text-xs font-bold text-zinc-900 dark:text-white">
+                            <ShieldCheck className="w-4 h-4 text-[#5a25eb] dark:text-[#cbbeff]" />
+                            <span>Confirm Extracted Claims for Vault</span>
+                          </div>
+                          {msg.candidateClaims.some((c) => c.status === 'pending') && (
+                            <button
+                              type="button"
+                              onClick={() => handleAcceptAllCandidateClaims(msg.id)}
+                              className="text-[11px] font-semibold text-[#5a25eb] dark:text-[#cbbeff] hover:underline cursor-pointer flex items-center gap-1"
+                            >
+                              <Check className="w-3 h-3" />
+                              <span>Confirm All</span>
+                            </button>
+                          )}
+                        </div>
+
+                        <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                          Review new attributes discovered from your document. You can accept, update, or discard each claim before syncing to your verified Neo4j vault.
+                        </p>
+
+                        <div className="space-y-2">
+                          {msg.candidateClaims.map((claim) => {
+                            const isAccepted = claim.status === 'accepted';
+                            const isRejected = claim.status === 'rejected';
+                            const isPending = claim.status === 'pending';
+
+                            return (
+                              <div
+                                key={claim.id}
+                                className={`p-2.5 rounded-xl border transition-all ${
+                                  isAccepted
+                                    ? 'bg-emerald-500/10 border-emerald-500/30'
+                                    : isRejected
+                                    ? 'bg-zinc-500/5 border-zinc-500/20 opacity-60'
+                                    : 'bg-zinc-50 dark:bg-[#141422]/90 border-zinc-200 dark:border-white/10'
+                                }`}
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="min-w-0 flex-1 space-y-1">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200">
+                                        {claim.fieldName}
+                                      </span>
+                                      <span className="text-[9px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded bg-zinc-200/60 dark:bg-white/10 text-zinc-600 dark:text-zinc-300 font-mono">
+                                        {claim.category}
+                                      </span>
+                                    </div>
+
+                                    {claim.isEditing ? (
+                                      <div className="flex items-center gap-2 pt-1">
+                                        <input
+                                          type="text"
+                                          value={claim.editedValue ?? claim.value}
+                                          onChange={(e) => handleUpdateCandidateClaimValue(msg.id, claim.id, e.target.value)}
+                                          className="flex-1 px-2.5 py-1 text-xs rounded-lg bg-white dark:bg-black/50 border border-[#5a25eb] text-zinc-900 dark:text-white outline-none"
+                                          autoFocus
+                                        />
+                                        <button
+                                          type="button"
+                                          onClick={() => handleAcceptCandidateClaim(msg.id, claim.id)}
+                                          className="px-2.5 py-1 rounded-md bg-emerald-600 text-white text-[11px] font-semibold hover:bg-emerald-700 cursor-pointer"
+                                        >
+                                          Save & Accept
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleToggleEditCandidateClaim(msg.id, claim.id, false)}
+                                          className="px-2 py-1 rounded-md bg-zinc-200 dark:bg-white/10 text-zinc-700 dark:text-zinc-300 text-[11px] font-medium hover:bg-zinc-300 cursor-pointer"
+                                        >
+                                          Cancel
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      <div className="text-xs font-mono text-zinc-700 dark:text-zinc-300 break-all select-all py-0.5">
+                                        {claim.value}
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* Status and Actions */}
+                                  <div className="flex items-center gap-1.5 shrink-0">
+                                    {isAccepted && (
+                                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                                        <Check className="w-3 h-3" />
+                                        <span>Saved in Vault</span>
+                                      </span>
+                                    )}
+
+                                    {isRejected && (
+                                      <span className="text-[10px] font-medium text-zinc-400 dark:text-zinc-500">
+                                        Dismissed
+                                      </span>
+                                    )}
+
+                                    {isPending && !claim.isEditing && (
+                                      <>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleAcceptCandidateClaim(msg.id, claim.id)}
+                                          title="Accept and store in Neo4j vault"
+                                          className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-semibold cursor-pointer shadow-xs transition-colors"
+                                        >
+                                          <Check className="w-3 h-3" />
+                                          <span>Accept</span>
+                                        </button>
+
+                                        <button
+                                          type="button"
+                                          onClick={() => handleToggleEditCandidateClaim(msg.id, claim.id, true)}
+                                          title="Update value before confirming"
+                                          className="p-1 rounded-lg hover:bg-zinc-200 dark:hover:bg-white/10 text-zinc-600 dark:text-zinc-300 cursor-pointer transition-colors"
+                                        >
+                                          <Edit3 className="w-3.5 h-3.5" />
+                                        </button>
+
+                                        <button
+                                          type="button"
+                                          onClick={() => handleRejectCandidateClaim(msg.id, claim.id)}
+                                          title="Discard this claim"
+                                          className="p-1 rounded-lg hover:bg-rose-500/10 text-zinc-400 hover:text-rose-500 cursor-pointer transition-colors"
+                                        >
+                                          <X className="w-3.5 h-3.5" />
+                                        </button>
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
 
                     {!isUser && (
                       <div className="mt-2.5 pt-2 border-t border-zinc-100 dark:border-white/10 flex items-center justify-between text-[10px] text-zinc-400">
