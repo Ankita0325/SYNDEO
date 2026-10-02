@@ -31,6 +31,15 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 
 import { InChatVoiceStage } from './InChatVoiceStage';
+import {
+  SARVAM_LANGUAGES,
+  SARVAM_TTS_LANGUAGES,
+  chatWithSarvam,
+  transcribeWithSarvam,
+  synthesizeWithSarvam,
+  isSarvamAvailable,
+  type SarvamLanguageCode,
+} from '../../lib/sarvam';
 
 const NORMAL_THINKING_STEPS: Array<{ text: string; state: OrbState }> = [
   { text: 'Thinking...', state: 'searching' },
@@ -63,6 +72,10 @@ export const ChatPage: React.FC = () => {
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [isVoiceModalOpen, setIsVoiceModalOpen] = useState<boolean>(false);
   const [voiceTranscript, setVoiceTranscript] = useState<string>('');
+  const [chatLanguage, setChatLanguage] = useState<SarvamLanguageCode>('en-IN');
+  const [sttLanguage, setSttLanguage] = useState<SarvamLanguageCode>('en-IN');
+  const [ttsLanguage, setTtsLanguage] = useState<SarvamLanguageCode>('en-IN');
+  const [voiceError, setVoiceError] = useState<string | null>(null);
   const [assistantVoiceResponse, setAssistantVoiceResponse] = useState<string>('');
   const [streamingText, setStreamingText] = useState<string>('');
   const [isStreaming, setIsStreaming] = useState<boolean>(false);
@@ -102,6 +115,14 @@ export const ChatPage: React.FC = () => {
   const recognitionRef = useRef<any>(null);
   const streamIntervalRef = useRef<any>(null);
   const timeoutsRef = useRef<any[]>([]);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const sarvamAudioRef = useRef<HTMLAudioElement | null>(null);
+  const sarvamStopResolveRef = useRef<((transcript: string) => void) | null>(null);
+  const sarvamStopPromiseRef = useRef<Promise<string> | null>(null);
+  const sarvamAudioUrlRef = useRef<string | null>(null);
+  const sttLanguageRef = useRef<SarvamLanguageCode>('en-IN');
+  const ttsLanguageRef = useRef<SarvamLanguageCode>('en-IN');
 
   const [thinkingStepIndex, setThinkingStepIndex] = useState<number>(0);
 
@@ -141,12 +162,94 @@ export const ChatPage: React.FC = () => {
       if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
         window.speechSynthesis.cancel();
       }
+      if (sarvamAudioRef.current) {
+        sarvamAudioRef.current.pause();
+        sarvamAudioRef.current = null;
+      }
+      if (sarvamAudioUrlRef.current) {
+        URL.revokeObjectURL(sarvamAudioUrlRef.current);
+        sarvamAudioUrlRef.current = null;
+      }
     };
   }, []);
 
-  // Web Speech API
+  // Audio remains in the browser; only the recording is sent to the backend Sarvam proxy.
+  const startSarvamRecording = async (): Promise<boolean> => {
+    let stream: MediaStream | null = null;
+    try {
+      setVoiceError(null);
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = ['audio/webm;codecs=opus', 'audio/ogg;codecs=opus', 'audio/mp4']
+        .find((candidate) => MediaRecorder.isTypeSupported(candidate));
+      const mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      const recordingType = mediaRecorder.mimeType || mimeType || 'audio/webm';
+      const extension = recordingType.includes('ogg') ? 'ogg' : recordingType.includes('mp4') ? 'm4a' : 'webm';
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event: BlobEvent) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = async () => {
+        stream?.getTracks().forEach((track) => track.stop());
+        const audioBlob = new Blob(audioChunksRef.current, { type: recordingType });
+        let transcript = '';
+
+        try {
+          setVoiceState('thinking');
+          setOrbState('thinking');
+          const result = await transcribeWithSarvam(audioBlob, sttLanguageRef.current, `recording.${extension}`);
+          transcript = result.transcript.trim();
+          setInputText(transcript);
+          setVoiceTranscript(transcript);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Speech recognition failed.';
+          setVoiceError(message);
+          setVoiceTranscript('');
+        } finally {
+          setVoiceState('idle');
+          setOrbState('idle');
+          sarvamStopResolveRef.current?.(transcript);
+          sarvamStopResolveRef.current = null;
+          sarvamStopPromiseRef.current = null;
+        }
+      };
+
+      mediaRecorderRef.current = mediaRecorder;
+      mediaRecorder.start();
+      return true;
+    } catch (err) {
+      stream?.getTracks().forEach((track) => track.stop());
+      console.warn('Microphone access failed:', err);
+      setVoiceError(err instanceof Error ? err.message : 'Microphone access is required for voice chat.');
+      return false;
+    }
+  };
+
+  const stopSarvamRecording = (): Promise<string> => {
+    if (sarvamStopPromiseRef.current) return sarvamStopPromiseRef.current;
+
+    let resolveRecording: (transcript: string) => void = () => undefined;
+    const recording = new Promise<string>((resolve) => {
+      resolveRecording = resolve;
+    });
+    sarvamStopPromiseRef.current = recording;
+
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      sarvamStopResolveRef.current = resolveRecording;
+      mediaRecorderRef.current.stop();
+    } else {
+      sarvamStopPromiseRef.current = null;
+      resolveRecording('');
+    }
+    return recording;
+  };
+
+  // Fallback: browser-native Web Speech API (used only when Sarvam is not configured)
   useEffect(() => {
-    if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && !isSarvamAvailable()) {
       const SpeechRecognition =
         (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
       if (SpeechRecognition) {
@@ -183,8 +286,84 @@ export const ChatPage: React.FC = () => {
     }
   }, []);
 
+  const playSarvamAudio = (base64Audio: string): void => {
+    if (sarvamAudioRef.current) {
+      sarvamAudioRef.current.pause();
+      sarvamAudioRef.current = null;
+    }
+
+    const binaryString = atob(base64Audio);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    const blob = new Blob([bytes], { type: 'audio/wav' });
+    const url = URL.createObjectURL(blob);
+    sarvamAudioUrlRef.current = url;
+    const audio = new Audio(url);
+    sarvamAudioRef.current = audio;
+
+    audio.addEventListener('playing', () => {
+      setIsSpeakingVoice(true);
+      setVoiceState('speaking');
+      setOrbState('speaking');
+    });
+
+    audio.addEventListener('ended', () => {
+      setIsSpeakingVoice(false);
+      setVoiceState('idle');
+      setOrbState('idle');
+      URL.revokeObjectURL(url);
+      sarvamAudioUrlRef.current = null;
+      sarvamAudioRef.current = null;
+    });
+
+    audio.addEventListener('error', () => {
+      setVoiceError('Sarvam audio could not be played by this browser.');
+      setIsSpeakingVoice(false);
+      setVoiceState('idle');
+      setOrbState('idle');
+      URL.revokeObjectURL(url);
+      sarvamAudioUrlRef.current = null;
+      sarvamAudioRef.current = null;
+    });
+
+    audio.play().catch((err) => {
+      console.warn('Sarvam audio playback failed:', err);
+      setVoiceError(err instanceof Error ? err.message : 'Sarvam audio playback failed.');
+      setIsSpeakingVoice(false);
+      setVoiceState('idle');
+      setOrbState('idle');
+      URL.revokeObjectURL(url);
+      sarvamAudioUrlRef.current = null;
+      sarvamAudioRef.current = null;
+    });
+  };
+
   const speakText = (text: string, onComplete?: () => void) => {
-    if (isMuted || typeof window === 'undefined' || !('speechSynthesis' in window)) {
+    if (isMuted || typeof window === 'undefined') {
+      if (onComplete) onComplete();
+      return;
+    }
+
+    stopAudio();
+
+    if (isSarvamAvailable()) {
+      void synthesizeWithSarvam(text, ttsLanguageRef.current).then((result) => {
+        playSarvamAudio(result.audios.join(''));
+        const audio = sarvamAudioRef.current;
+        if (audio && onComplete) audio.addEventListener('ended', onComplete, { once: true });
+      }).catch((error: unknown) => {
+        setVoiceError(error instanceof Error ? error.message : 'Sarvam speech synthesis failed.');
+        setIsSpeakingVoice(false);
+        setVoiceState('idle');
+        setOrbState('idle');
+        onComplete?.();
+      });
+      return;
+    }
+
+    if (!('speechSynthesis' in window)) {
       if (onComplete) onComplete();
       return;
     }
@@ -220,6 +399,14 @@ export const ChatPage: React.FC = () => {
   };
 
   const stopAudio = () => {
+    if (sarvamAudioRef.current) {
+      sarvamAudioRef.current.pause();
+      sarvamAudioRef.current = null;
+    }
+    if (sarvamAudioUrlRef.current) {
+      URL.revokeObjectURL(sarvamAudioUrlRef.current);
+      sarvamAudioUrlRef.current = null;
+    }
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       window.speechSynthesis.cancel();
     }
@@ -229,12 +416,20 @@ export const ChatPage: React.FC = () => {
     setOrbState('idle');
   };
 
-  const openVoiceModal = () => {
+  const openVoiceModal = async () => {
     stopAudio();
+    setVoiceError(null);
     setIsVoiceModalOpen(true);
     setVoiceTranscript('');
     setAssistantVoiceResponse('');
-    if (recognitionRef.current) {
+
+    if (isSarvamAvailable()) {
+      const started = await startSarvamRecording();
+      if (started) {
+        setVoiceState('listening');
+        setOrbState('listening');
+      }
+    } else if (recognitionRef.current) {
       try {
         recognitionRef.current.start();
         setVoiceState('listening');
@@ -246,7 +441,9 @@ export const ChatPage: React.FC = () => {
   };
 
   const closeVoiceModal = () => {
-    if (voiceState === 'listening' && recognitionRef.current) {
+    if (isSarvamAvailable()) {
+      stopSarvamRecording();
+    } else if (voiceState === 'listening' && recognitionRef.current) {
       try {
         recognitionRef.current.stop();
       } catch (err) {
@@ -257,7 +454,16 @@ export const ChatPage: React.FC = () => {
     setIsVoiceModalOpen(false);
   };
 
-  const startVoiceListening = () => {
+  const startVoiceListening = async () => {
+    if (isSarvamAvailable()) {
+      const started = await startSarvamRecording();
+      if (started) {
+        setVoiceState('listening');
+        setOrbState('listening');
+      }
+      return;
+    }
+
     if (!recognitionRef.current) {
       alert('Speech recognition is not supported in this browser.');
       return;
@@ -272,7 +478,15 @@ export const ChatPage: React.FC = () => {
     }
   };
 
-  const stopVoiceListening = () => {
+  const stopVoiceListening = async () => {
+    if (isSarvamAvailable()) {
+      const transcript = await stopSarvamRecording();
+      setVoiceState('idle');
+      setOrbState('idle');
+      if (transcript.trim()) handleSendMessage(transcript);
+      return;
+    }
+
     if (recognitionRef.current) {
       try {
         recognitionRef.current.stop();
@@ -298,6 +512,30 @@ export const ChatPage: React.FC = () => {
     navigator.clipboard.writeText(text);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 1800);
+  };
+
+  const handleChatLanguageChange = (languageCode: string) => {
+    const language = SARVAM_LANGUAGES.find((item) => item.code === languageCode);
+    if (language) {
+      setChatLanguage(language.code);
+      setVoiceError(null);
+    }
+  };
+
+  const handleSpeechRecognitionLanguageChange = (languageCode: string) => {
+    const language = SARVAM_LANGUAGES.find((item) => item.code === languageCode);
+    if (language) {
+      sttLanguageRef.current = language.code;
+      setSttLanguage(language.code);
+    }
+  };
+
+  const handleSpeechSynthesisLanguageChange = (languageCode: string) => {
+    const language = SARVAM_TTS_LANGUAGES.find((item) => item.code === languageCode);
+    if (language) {
+      ttsLanguageRef.current = language.code;
+      setTtsLanguage(language.code);
+    }
   };
 
   const streamAIResponse = (fullResponse: ChatMessage) => {
@@ -337,7 +575,9 @@ export const ChatPage: React.FC = () => {
     const messageContent = textToSend !== undefined ? textToSend : inputText;
     if ((!messageContent.trim() && !attachedFile) || isTyping || isStreaming) return;
 
-    if (voiceState === 'listening' && recognitionRef.current) {
+    if (isSarvamAvailable()) {
+      stopSarvamRecording();
+    } else if (voiceState === 'listening' && recognitionRef.current) {
       recognitionRef.current.stop();
     }
     stopAudio();
@@ -374,123 +614,51 @@ export const ChatPage: React.FC = () => {
       setOrbState('generating');
     }, 1500);
 
-    const t2 = setTimeout(() => {
-      let botResponse: ChatMessage;
-      const lower = messageContent.toLowerCase();
-
-      if (currentAttached) {
-        botResponse = {
+    timeoutsRef.current.push(t1);
+    void (async () => {
+      try {
+        const history = messages.slice(-20).map((message) => ({
+          role: message.sender,
+          content: message.content,
+        }));
+        const answer = await chatWithSarvam(
+          messageContent || `Please help me understand the attached file "${currentAttached?.name ?? ''}".`,
+          history,
+          chatLanguage,
+          chatMode,
+          currentAttached
+            ? {
+                name: currentAttached.name,
+                type: currentAttached.type,
+                size: currentAttached.formattedSize,
+              }
+            : undefined,
+        );
+        clearTimeout(t1);
+        setVoiceError(null);
+        streamAIResponse({
           id: `m-bot-${Date.now()}`,
           sender: 'assistant',
-          content:
-            chatMode === 'save'
-              ? `📄 **Document Verified & Encrypted**\n\nI have processed and indexed **${currentAttached.name}** (${currentAttached.formattedSize}) into your zero-knowledge vault.\n- **Extracted Records**: Evidence-backed Credentials\n- **Vault Security**: AES-256-GCM Envelope Sealed\n- **Graph Indexing**: Attached to your personal life-stage network.`
-              : `📄 **Attached Document Analyzed**\n\nI have parsed **${currentAttached.name}** (${currentAttached.formattedSize}). All cryptographic signatures and metadata match your verified records.`,
+          content: answer,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          sourceType: 'evidence-backed',
-          sourceNote: 'Uploaded Evidence Document Verification',
-          evidenceDoc: currentAttached.name,
-        };
-      } else if (chatMode === 'save') {
-        botResponse = {
+          sourceType: 'unknown',
+          sourceNote: 'Generated by Sarvam AI',
+        });
+      } catch (error) {
+        clearTimeout(t1);
+        const errorMessage = error instanceof Error ? error.message : 'Sarvam chat request failed.';
+        setVoiceError(errorMessage);
+        setMessages((previous) => [...previous, {
           id: `m-bot-${Date.now()}`,
           sender: 'assistant',
-          content: `✅ **Saved to Personal Memory Store**\n\nI have encrypted "${messageContent}" into your private vault envelope.`,
+          content: `I couldn't reach the Sarvam chat service: ${errorMessage}`,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          sourceType: 'user-confirmed',
-          sourceNote: 'Committed self-assertion',
-        };
-      } else if (chatMode === 'share') {
-        botResponse = {
-          id: `m-bot-${Date.now()}`,
-          sender: 'assistant',
-          content: `🔗 **Selective Share Link Generated**\n\n- **Recipient**: 24h Scoped Access Link\n- **Fields**: ${messageContent}\n- **Proof**: zk-SNARK Verified`,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          sourceType: 'evidence-backed',
-          sourceNote: 'Selective Disclosure Grant',
-          evidenceDoc: 'Scope_Access_Envelope.json',
-        };
-      } else if (
-        lower.includes('social') ||
-        lower.includes('github') ||
-        lower.includes('linkedin') ||
-        lower.includes('discord') ||
-        lower.includes('link') ||
-        lower.includes('profile')
-      ) {
-        botResponse = {
-          id: `m-bot-${Date.now()}`,
-          sender: 'assistant',
-          content: `Here are all your verified **Social & Developer Links**:\n\n- **GitHub**: https://github.com/indresh404/SYNDEO\n- **LinkedIn**: https://linkedin.com/in/indresh-suresh-093646399\n- **Discord**: **@indresh404** (SYNDEO Network)\n\nAll cryptographic signatures and repository links are verified on the network.`,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          sourceType: 'evidence-backed',
-          sourceNote: 'Cryptographic Developer Credentials & Social Identity',
-          evidenceDoc: 'Developer_Social_Proofs.json',
-        };
-      } else if (
-        lower.includes('education') ||
-        lower.includes('college') ||
-        lower.includes('slrtce') ||
-        lower.includes('degree') ||
-        lower.includes('engineering') ||
-        lower.includes('university') ||
-        lower.includes('cgpa') ||
-        lower.includes('study')
-      ) {
-        botResponse = {
-          id: `m-bot-${Date.now()}`,
-          sender: 'assistant',
-          content: `Your verified **Education Status**:\n\n- **Degree**: **B.E. in Computer Science & Engineering**\n- **Institution**: **SLRTCE (University of Mumbai)**\n- **CGPA**: **8.45 / 10.0** (First Class with Distinction)\n- **Batch**: **2020 – 2024**\n- **Capstone Collaborator**: **Divya**\n- **Evidence**: Verified by SLRTCE Academic Registry envelope.`,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          sourceType: 'evidence-backed',
-          sourceNote: 'SLRTCE Degree Certificate & Transcript',
-          evidenceDoc: 'Degree_Certificate_SLRTCE_2024.pdf',
-        };
-      } else if (lower.includes('work') || lower.includes('company') || lower.includes('job') || lower.includes('veritas') || lower.includes('role')) {
-        botResponse = {
-          id: `m-bot-${Date.now()}`,
-          sender: 'assistant',
-          content: `You are currently employed at **Veritas Technologies** as a **Systems & Cloud Engineer**. Your peer reviewer is **Monish**.`,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          sourceType: 'evidence-backed',
-          sourceNote: 'Employment Offer Letter & Peer Confirmation',
-          evidenceDoc: 'Employment_Offer_Letter_Veritas.pdf',
-        };
-      } else if (lower.includes('blood') || lower.includes('medical') || lower.includes('health') || lower.includes('ankita')) {
-        botResponse = {
-          id: `m-bot-${Date.now()}`,
-          sender: 'assistant',
-          content: `Your blood group is **O-Positive (O+)**. Emergency kin and health proxy: **Ankita** (Sister, +91 98202 55910). Verified by CityCare Diagnostics.`,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          sourceType: 'evidence-backed',
-          sourceNote: 'Annual Health Checkup & Family Proxy Declaration',
-          evidenceDoc: 'Medical_Summary_2024.pdf',
-        };
-      } else if (lower.includes('credit') || lower.includes('bank') || lower.includes('tax') || lower.includes('pan') || lower.includes('score')) {
-        botResponse = {
-          id: `m-bot-${Date.now()}`,
-          sender: 'assistant',
-          content: `Your verified **CIBIL Score is 785**. PAN: **ABCDE1234F**, Primary Bank: **HDFC Bank**.`,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          sourceType: 'evidence-backed',
-          sourceNote: 'ITR-V Acknowledgement & Experian Credit Report',
-          evidenceDoc: 'ITR_Acknowledgement_AY2024.pdf',
-        };
-      } else {
-        botResponse = {
-          id: `m-bot-${Date.now()}`,
-          sender: 'assistant',
-          content: `I retrieved your records for "${messageContent}". Your verified vault confirms your identity as **${userName}** across Identity, Education (SLRTCE), Employment (Veritas), and Healthcare.`,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          sourceType: 'user-confirmed',
-          sourceNote: 'Personal vault query response',
-        };
+        }]);
+        setIsTyping(false);
+        setVoiceState('idle');
+        setOrbState('idle');
       }
-
-      streamAIResponse(botResponse);
-    }, 3500);
-
-    timeoutsRef.current.push(t1, t2);
+    })();
   };
 
   const handleResetChat = () => {
@@ -672,6 +840,11 @@ export const ChatPage: React.FC = () => {
             onStartListening={startVoiceListening}
             onStopListening={stopVoiceListening}
             onClose={closeVoiceModal}
+            sttLanguage={sttLanguage}
+            onSttLanguageChange={handleSpeechRecognitionLanguageChange}
+            ttsLanguage={ttsLanguage}
+            onTtsLanguageChange={handleSpeechSynthesisLanguageChange}
+            error={voiceError}
             userName={userName}
           />
         )}
@@ -1095,7 +1268,20 @@ export const ChatPage: React.FC = () => {
               {/* Lower Toolbar */}
               <div className="flex items-center justify-between gap-3 pt-2.5 mt-2.5 border-t border-black/[0.05] dark:border-white/[0.06] px-1 relative z-10">
                 <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-                  {/* Voice Mode Button */}
+                    <label className="sr-only" htmlFor="chat-language">Chat language</label>
+                    <select
+                      id="chat-language"
+                      value={chatLanguage}
+                      onChange={(event) => handleChatLanguageChange(event.target.value)}
+                      className="max-w-36 rounded-full border border-[#7d5fff]/22 bg-white/70 dark:bg-white/5 px-3 py-1 text-xs text-zinc-700 dark:text-zinc-200"
+                      aria-label="Chat language"
+                    >
+                      {SARVAM_LANGUAGES.map((language) => (
+                        <option key={language.code} value={language.code}>{language.name}</option>
+                      ))}
+                    </select>
+
+                    {/* Voice Mode Button */}
                   <button
                     type="button"
                     onClick={openVoiceModal}
