@@ -127,10 +127,9 @@ export const NavigationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   useEffect(() => {
     if (!sessionReady || profileLoading || !authUser || profileExists === null) return;
-    if (profileExists) {
-      if (currentPath === '/auth') navigate('/memory');
-    } else if (currentPath !== '/auth') {
-      navigate('/auth');
+    // Only redirect if the user is explicitly on /auth and already has a profile
+    if (profileExists && currentPath === '/auth') {
+      navigate('/memory');
     }
   }, [authUser, currentPath, navigate, profileExists, profileLoading, sessionReady]);
 
