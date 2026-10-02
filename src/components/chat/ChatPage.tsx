@@ -292,56 +292,67 @@ export const ChatPage: React.FC = () => {
     }
   }, []);
 
-  const playSarvamAudio = (base64Audio: string): void => {
+  const playSarvamAudio = (base64Audio: string, onFallback?: () => void): void => {
+    if (!base64Audio) {
+      if (onFallback) onFallback();
+      return;
+    }
     if (sarvamAudioRef.current) {
       sarvamAudioRef.current.pause();
       sarvamAudioRef.current = null;
     }
 
-    const binaryString = atob(base64Audio);
-    const bytes = new Uint8Array(binaryString.length);
-    for (let i = 0; i < binaryString.length; i++) {
-      bytes[i] = binaryString.charCodeAt(i);
+    try {
+      const binaryString = atob(base64Audio);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      const blob = new Blob([bytes], { type: 'audio/wav' });
+      const url = URL.createObjectURL(blob);
+      sarvamAudioUrlRef.current = url;
+      const audio = new Audio(url);
+      sarvamAudioRef.current = audio;
+
+      audio.addEventListener('playing', () => {
+        setIsSpeakingVoice(true);
+        setVoiceState('speaking');
+        setOrbState('speaking');
+      });
+
+      audio.addEventListener('ended', () => {
+        setIsSpeakingVoice(false);
+        setVoiceState('idle');
+        setOrbState('idle');
+        URL.revokeObjectURL(url);
+        sarvamAudioUrlRef.current = null;
+        sarvamAudioRef.current = null;
+      });
+
+      audio.addEventListener('error', () => {
+        setIsSpeakingVoice(false);
+        setVoiceState('idle');
+        setOrbState('idle');
+        URL.revokeObjectURL(url);
+        sarvamAudioUrlRef.current = null;
+        sarvamAudioRef.current = null;
+        if (onFallback) onFallback();
+      });
+
+      audio.play().catch((err) => {
+        console.warn('Sarvam audio playback failed:', err);
+        setIsSpeakingVoice(false);
+        setVoiceState('idle');
+        setOrbState('idle');
+        URL.revokeObjectURL(url);
+        sarvamAudioUrlRef.current = null;
+        sarvamAudioRef.current = null;
+        if (onFallback) onFallback();
+      });
+    } catch (e) {
+      console.warn('Audio decoding error:', e);
+      if (onFallback) onFallback();
     }
-    const blob = new Blob([bytes], { type: 'audio/wav' });
-    const url = URL.createObjectURL(blob);
-    sarvamAudioUrlRef.current = url;
-    const audio = new Audio(url);
-    sarvamAudioRef.current = audio;
-
-    audio.addEventListener('playing', () => {
-      setIsSpeakingVoice(true);
-      setVoiceState('speaking');
-      setOrbState('speaking');
-    });
-
-    audio.addEventListener('ended', () => {
-      setIsSpeakingVoice(false);
-      setVoiceState('idle');
-      setOrbState('idle');
-      URL.revokeObjectURL(url);
-      sarvamAudioUrlRef.current = null;
-      sarvamAudioRef.current = null;
-    });
-
-    audio.addEventListener('error', () => {
-      setIsSpeakingVoice(false);
-      setVoiceState('idle');
-      setOrbState('idle');
-      URL.revokeObjectURL(url);
-      sarvamAudioUrlRef.current = null;
-      sarvamAudioRef.current = null;
-    });
-
-    audio.play().catch((err) => {
-      console.warn('Sarvam audio playback failed:', err);
-      setIsSpeakingVoice(false);
-      setVoiceState('idle');
-      setOrbState('idle');
-      URL.revokeObjectURL(url);
-      sarvamAudioUrlRef.current = null;
-      sarvamAudioRef.current = null;
-    });
   };
 
   const speakText = (text: string, onComplete?: () => void) => {
@@ -394,9 +405,13 @@ export const ChatPage: React.FC = () => {
 
     if (isSarvamAvailable()) {
       void synthesizeWithSarvam(text, ttsLanguageRef.current, speakerRef.current).then((result) => {
-        playSarvamAudio(result.audios.join(''));
-        const audio = sarvamAudioRef.current;
-        if (audio && onComplete) audio.addEventListener('ended', onComplete, { once: true });
+        if (result.audios && result.audios.length > 0 && result.audios.some((a) => a && a.length > 50)) {
+          playSarvamAudio(result.audios.join(''), fallbackNativeSpeak);
+          const audio = sarvamAudioRef.current;
+          if (audio && onComplete) audio.addEventListener('ended', onComplete, { once: true });
+        } else {
+          fallbackNativeSpeak();
+        }
       }).catch(() => {
         // Resilient fallback to browser native speech synthesis on network/502 error
         fallbackNativeSpeak();

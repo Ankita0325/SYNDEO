@@ -25,11 +25,10 @@ logger = logging.getLogger("syndeo.main")
 root_env = Path(__file__).resolve().parent.parent / ".env"
 backend_env = Path(__file__).resolve().parent / ".env"
 if root_env.exists():
-    load_dotenv(root_env)
-elif backend_env.exists():
-    load_dotenv(backend_env)
-else:
-    load_dotenv()
+    load_dotenv(root_env, override=False)
+if backend_env.exists():
+    load_dotenv(backend_env, override=False)
+load_dotenv(override=False)
 
 app = FastAPI(
     title="SYNDEO API - Multi-Agent Personal Identity & Policy-Governed Memory Network",
