@@ -48,6 +48,26 @@ export interface Conversation {
   messages: ChatMessage[];
 }
 
+export interface AccessViewer {
+  id: string;
+  userName: string;
+  roleOrOrg: string;
+  avatar?: string;
+  viewedAt: string;
+  ipLocation: string;
+  verificationStatus: 'zk-verified' | 'authorized';
+}
+
+export interface AccessRequestItem {
+  id: string;
+  requesterName: string;
+  organization: string;
+  requestedFields: string[];
+  purpose: string;
+  requestedAt: string;
+  status: 'pending' | 'approved' | 'declined';
+}
+
 export interface SharedLink {
   id: string;
   recipient: string;
@@ -57,6 +77,8 @@ export interface SharedLink {
   expiry: string;
   status: 'Active' | 'Revoked' | 'Expired';
   accessCount: number;
+  viewers?: AccessViewer[];
+  accessRequests?: AccessRequestItem[];
 }
 
 export interface ShareRequest {
