@@ -61,17 +61,47 @@ interface SarvamTranslationResponse {
   translations?: Array<{ translated_text?: string }>;
 }
 
+const FALLBACK_BACKEND = 'https://syndeo-backend-wks3.onrender.com';
+
+export function cleanTextForSpeech(text: string): string {
+  if (!text) return '';
+  let clean = text
+    .replace(/```[\s\S]*?```/g, '')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/[*_#`~>[\]]/g, '')
+    .replace(/^[-•*]\s+/gm, '')
+    .replace(/\n+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (clean.length > 350) {
+    const sentenceMatch = clean.slice(0, 350).match(/^(.*?[.!?])(?:\s|$)/);
+    if (sentenceMatch && sentenceMatch[1] && sentenceMatch[1].length > 40) {
+      clean = sentenceMatch[1];
+    } else {
+      clean = clean.slice(0, 300) + '.';
+    }
+  }
+  return clean;
+}
+
 async function fetchSarvam(path: string, init: RequestInit): Promise<Response> {
-  const url = `${API_BASE}${path}`;
+  const primaryUrl = API_BASE ? `${API_BASE}${path}` : path;
   try {
-    return await fetch(url, init);
+    const res = await fetch(primaryUrl, init);
+    if (!res.ok && (res.status === 500 || res.status === 502 || res.status === 504) && !primaryUrl.startsWith(FALLBACK_BACKEND)) {
+      console.warn(`Primary backend proxy returned ${res.status}, automatically routing to live cloud backend...`);
+      return await fetch(`${FALLBACK_BACKEND}${path}`, init);
+    }
+    return res;
   } catch (error) {
-    if (error instanceof TypeError) {
-      const backend = API_BASE || 'the local proxy (localhost:8000)';
-      throw new Error(
-        `Cannot reach the SYNDEO backend at ${backend}. Falling back to local vault engine.`,
-        { cause: error },
-      );
+    if (!primaryUrl.startsWith(FALLBACK_BACKEND)) {
+      try {
+        console.warn('Primary backend connection failed, retrying via live cloud backend...', error);
+        return await fetch(`${FALLBACK_BACKEND}${path}`, init);
+      } catch (fallbackErr) {
+        throw new Error(`Cannot reach SYNDEO backend. Falling back to local vault engine.`, { cause: fallbackErr });
+      }
     }
     throw error;
   }
@@ -166,12 +196,12 @@ export async function synthesizeWithSarvam(
   text: string,
   languageCode: SarvamLanguageCode,
   speaker: SarvamVoiceSpeaker = 'shubh',
-  pace: number = 1.0,
+  pace: number = 1.05,
 ): Promise<SarvamTTSResponse> {
   if (languageCode === 'ur-IN') {
     throw new Error('Sarvam Bulbul v3 does not currently list Urdu for text-to-speech. Select another language for spoken replies.');
   }
-  const cleanText = text.replace(/[*_#[\]()]/g, '').trim();
+  const cleanText = cleanTextForSpeech(text);
   if (!cleanText) {
     return { audios: [] };
   }

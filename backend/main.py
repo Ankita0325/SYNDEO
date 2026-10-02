@@ -307,6 +307,7 @@ async def sarvam_chat(req: SarvamChatRequest):
         "Use the supplied Neo4j vault records as user-specific verified facts. "
         "Distinguish evidence-backed claims (backed by documents with SHA-256 hashes) from user-confirmed claims. "
         f"{mode_instructions[req.mode]} "
+        "Keep responses direct, fluent, and concise (2-4 sentences where possible) for ultra-fast, natural voice conversation. "
         f"Live verified Graph & Vault records: {relevant_records}"
     )
     messages = [{"role": "system", "content": system_message}]
@@ -332,8 +333,8 @@ async def sarvam_chat(req: SarvamChatRequest):
         json={
             "model": "sarvam-105b-conversations",
             "messages": messages,
-            "temperature": 0.3,
-            "max_tokens": 1024,
+            "temperature": 0.2,
+            "max_tokens": 512,
         },
     )
     try:

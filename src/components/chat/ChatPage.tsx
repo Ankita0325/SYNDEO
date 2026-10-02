@@ -38,6 +38,7 @@ import {
   chatWithSarvam,
   transcribeWithSarvam,
   synthesizeWithSarvam,
+  cleanTextForSpeech,
   isSarvamAvailable,
   type SarvamLanguageCode,
   type SarvamVoiceSpeaker,
@@ -358,7 +359,11 @@ export const ChatPage: React.FC = () => {
       }
 
       window.speechSynthesis.cancel();
-      const cleanText = text.replace(/[*_#[\]()]/g, '');
+      const cleanText = cleanTextForSpeech(text);
+      if (!cleanText) {
+        if (onComplete) onComplete();
+        return;
+      }
       const utterance = new SpeechSynthesisUtterance(cleanText);
       utterance.rate = 1.05;
       utterance.pitch = 1.0;

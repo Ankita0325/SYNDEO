@@ -1,10 +1,27 @@
 // SYNDEO API Client - Connects React Frontend to FastAPI Production Graph Backend
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_BASE = (import.meta.env.VITE_API_URL || '').trim().replace(/\/+$/, '');
+const FALLBACK_BACKEND = 'https://syndeo-backend-wks3.onrender.com';
+
+async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
+  const primaryUrl = API_BASE ? `${API_BASE}${path}` : path;
+  try {
+    const res = await fetch(primaryUrl, init);
+    if (!res.ok && (res.status === 500 || res.status === 502 || res.status === 504) && !primaryUrl.startsWith(FALLBACK_BACKEND)) {
+      return await fetch(`${FALLBACK_BACKEND}${path}`, init);
+    }
+    return res;
+  } catch (err) {
+    if (!primaryUrl.startsWith(FALLBACK_BACKEND)) {
+      return await fetch(`${FALLBACK_BACKEND}${path}`, init);
+    }
+    throw err;
+  }
+}
 
 export async function fetchHealthStatus() {
   try {
-    const res = await fetch(`${API_BASE}/api/health`);
+    const res = await apiFetch('/api/health');
     if (!res.ok) return null;
     return await res.json();
   } catch {
@@ -14,7 +31,7 @@ export async function fetchHealthStatus() {
 
 export async function fetchNeo4jStatus() {
   try {
-    const res = await fetch(`${API_BASE}/api/neo4j/status`);
+    const res = await apiFetch('/api/neo4j/status');
     if (!res.ok) return null;
     return await res.json();
   } catch {
@@ -24,7 +41,7 @@ export async function fetchNeo4jStatus() {
 
 export async function fetchMemoryStore() {
   try {
-    const res = await fetch(`${API_BASE}/api/memory`);
+    const res = await apiFetch('/api/memory');
     if (!res.ok) throw new Error('Failed to fetch memory store');
     return await res.json();
   } catch (err) {
@@ -35,7 +52,7 @@ export async function fetchMemoryStore() {
 
 export async function fetchGraphTopology() {
   try {
-    const res = await fetch(`${API_BASE}/api/graph/topology`);
+    const res = await apiFetch('/api/graph/topology');
     if (!res.ok) throw new Error('Failed to fetch topology');
     return await res.json();
   } catch (err) {
@@ -46,7 +63,7 @@ export async function fetchGraphTopology() {
 
 export async function fetchRecordsFromBackend() {
   try {
-    const res = await fetch(`${API_BASE}/api/graph/records`);
+    const res = await apiFetch('/api/graph/records');
     if (!res.ok) throw new Error('Failed to fetch records');
     const data = await res.json();
     return data.records;
@@ -58,7 +75,7 @@ export async function fetchRecordsFromBackend() {
 
 export async function fetchDocumentsFromBackend() {
   try {
-    const res = await fetch(`${API_BASE}/api/graph/documents`);
+    const res = await apiFetch('/api/graph/documents');
     if (!res.ok) throw new Error('Failed to fetch documents');
     const data = await res.json();
     return data.documents;
@@ -78,7 +95,7 @@ export async function addClaimToBackend(claim: {
   rawNumericValue?: number;
 }) {
   try {
-    const res = await fetch(`${API_BASE}/api/graph/claims`, {
+    const res = await apiFetch('/api/graph/claims', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(claim),
@@ -97,7 +114,7 @@ export async function uploadDocumentToBackend(file: File, category?: string) {
     formData.append('file', file);
     if (category) formData.append('category', category);
 
-    const res = await fetch(`${API_BASE}/api/documents/upload`, {
+    const res = await apiFetch('/api/documents/upload', {
       method: 'POST',
       body: formData,
     });
@@ -111,7 +128,7 @@ export async function uploadDocumentToBackend(file: File, category?: string) {
 
 export async function queryGraphMemory(question: string) {
   try {
-    const res = await fetch(`${API_BASE}/api/query`, {
+    const res = await apiFetch('/api/query', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ question }),
@@ -130,7 +147,7 @@ export async function fetchPrivacyAdvice(request: {
   requestedFields: Record<string, unknown>[];
 }) {
   try {
-    const res = await fetch(`${API_BASE}/api/privacy/advise`, {
+    const res = await apiFetch('/api/privacy/advise', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(request),
@@ -150,7 +167,7 @@ export async function composeSelectiveProof(shareRequest: {
   expiryHours?: number;
 }) {
   try {
-    const res = await fetch(`${API_BASE}/api/proofs/compose`, {
+    const res = await apiFetch('/api/proofs/compose', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(shareRequest),
@@ -165,7 +182,7 @@ export async function composeSelectiveProof(shareRequest: {
 
 export async function revokeShareLinkBackend(shareId: string) {
   try {
-    const res = await fetch(`${API_BASE}/api/proofs/revoke/${shareId}`, {
+    const res = await apiFetch(`/api/proofs/revoke/${shareId}`, {
       method: 'POST',
     });
     if (!res.ok) throw new Error('Revocation failed');
@@ -178,7 +195,7 @@ export async function revokeShareLinkBackend(shareId: string) {
 
 export async function fetchAuditLogs() {
   try {
-    const res = await fetch(`${API_BASE}/api/audit`);
+    const res = await apiFetch('/api/audit');
     if (!res.ok) throw new Error('Failed to fetch audit log');
     return await res.json();
   } catch {
