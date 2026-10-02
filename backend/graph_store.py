@@ -1,8 +1,19 @@
 import hashlib
 import json
+import logging
+import os
 import uuid
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple, Any
+
+try:
+    from neo4j import GraphDatabase, Driver
+    NEO4J_AVAILABLE = True
+except ImportError:
+    NEO4J_AVAILABLE = False
+    Driver = Any
+
+logger = logging.getLogger("syndeo.graph_store")
 
 class GraphNode:
     def __init__(
@@ -23,7 +34,7 @@ class GraphNode:
         self.id = node_id
         self.category = category
         self.field_name = field_name
-        self.field_value = field_value
+        self.field_value = str(field_value)
         self.source = source
         self.confidence = confidence
         self.assurance_level = assurance_level
@@ -91,23 +102,136 @@ class EvidenceDocument:
 class GraphStore:
     """
     Production Multi-Hop Graph Storage Engine.
-    Implements:
-    - Multi-hop Person -> Category -> Claim -> Evidence & Entity relationships
-    - Singular field conflict detection vs time-versioned history
-    - SHA-256 evidence integrity validation
-    - Graph-first resolution queries
+    Connects to Neo4j Aura Database with automatic failover to in-memory graph mirror.
+    
+    Graph Topology:
+      (:Person {name, person_id})
+          -[:HAS_CLAIM]-> (:Claim {category, field_name, field_value, confidence, assurance_level, status})
+          -[:BACKED_BY]-> (:Document {name, sha256_hash, file_size, upload_date})
     """
     def __init__(self, user_name: str = "Indresh"):
         self.user_name = user_name
-        self.person_id = f"person-{uuid.uuid4()}"
+        self.person_id = f"person-syndeo-{user_name.lower()}"
         self.nodes: Dict[str, GraphNode] = {}
         self.documents: Dict[str, EvidenceDocument] = {}
         self.history: List[Dict[str, Any]] = []
         self.conflicts: List[Dict[str, Any]] = []
+        
+        # Neo4j Driver & State
+        self.neo4j_driver: Optional[Driver] = None
+        self.neo4j_connected: bool = False
+        self.neo4j_error: Optional[str] = None
+        
+        self._init_neo4j_driver()
         self._seed_initial_data()
+        if self.neo4j_connected:
+            self._sync_seed_to_neo4j()
+
+    def _init_neo4j_driver(self):
+        """Initializes Neo4j Aura Connection from environment variables."""
+        if not NEO4J_AVAILABLE:
+            self.neo4j_error = "neo4j python package not installed"
+            logger.warning(self.neo4j_error)
+            return
+
+        uri = os.getenv("NEO4J_URI", "neo4j+s://63ba69f0.databases.neo4j.io")
+        user = os.getenv("NEO4J_USERNAME", "neo4j")
+        password = os.getenv("NEO4J_PASSWORD", "1B2Cwe5I9OonX6NasQTrLC72VO97HIfaJRxbk6z2x_Y")
+
+        if not uri or not password:
+            self.neo4j_error = "NEO4J_URI or NEO4J_PASSWORD not configured"
+            logger.info("Neo4j running in local in-memory graph mode.")
+            return
+
+        try:
+            driver = GraphDatabase.driver(uri, auth=(user, password))
+            driver.verify_connectivity()
+            self.neo4j_driver = driver
+            self.neo4j_connected = True
+            self.neo4j_error = None
+            logger.info(f"Connected to Neo4j database at {uri}")
+            self._init_neo4j_schema()
+        except Exception as e:
+            self.neo4j_connected = False
+            self.neo4j_error = str(e)
+            logger.warning(f"Neo4j connection failed ({e}). Fallback to in-memory graph store.")
+
+    def _init_neo4j_schema(self):
+        """Creates unique constraints and indexes in Neo4j."""
+        if not self.neo4j_driver or not self.neo4j_connected:
+            return
+        cypher_queries = [
+            "CREATE CONSTRAINT unique_person_id IF NOT EXISTS FOR (p:Person) REQUIRE p.person_id IS UNIQUE;",
+            "CREATE CONSTRAINT unique_claim_id IF NOT EXISTS FOR (c:Claim) REQUIRE c.id IS UNIQUE;",
+            "CREATE CONSTRAINT unique_document_hash IF NOT EXISTS FOR (d:Document) REQUIRE d.sha256_hash IS UNIQUE;"
+        ]
+        try:
+            with self.neo4j_driver.session() as session:
+                for q in cypher_queries:
+                    try:
+                        session.run(q)
+                    except Exception as err:
+                        logger.debug(f"Schema query info: {err}")
+        except Exception as e:
+            logger.warning(f"Failed to apply Neo4j schema: {e}")
+
+    def _sync_seed_to_neo4j(self):
+        """Syncs in-memory seed data to Neo4j graph on startup."""
+        if not self.neo4j_driver or not self.neo4j_connected:
+            return
+        try:
+            with self.neo4j_driver.session() as session:
+                # Merge Person
+                session.run(
+                    "MERGE (p:Person {person_id: $person_id}) ON CREATE SET p.name = $name",
+                    person_id=self.person_id, name=self.user_name
+                )
+                # Merge Documents
+                for doc in self.documents.values():
+                    session.run(
+                        """
+                        MERGE (d:Document {sha256_hash: $sha256_hash})
+                        SET d.id = $id, d.name = $name, d.category = $category,
+                            d.file_size = $file_size, d.status = $status, d.upload_date = $upload_date
+                        """,
+                        id=doc.id, name=doc.name, category=doc.category,
+                        file_size=doc.file_size, sha256_hash=doc.sha256_hash,
+                        status=doc.status, upload_date=doc.upload_date
+                    )
+                # Merge Claims
+                for node in self.nodes.values():
+                    session.run(
+                        """
+                        MATCH (p:Person {person_id: $person_id})
+                        MERGE (c:Claim {id: $id})
+                        SET c.category = $category, c.field_name = $field_name,
+                            c.field_value = $field_value, c.source = $source,
+                            c.confidence = $confidence, c.assurance_level = $assurance_level,
+                            c.is_singular = $is_singular, c.is_sensitive = $is_sensitive,
+                            c.status = $status, c.last_updated = $last_updated
+                        MERGE (p)-[:HAS_CLAIM]->(c)
+                        """,
+                        person_id=self.person_id, id=node.id, category=node.category,
+                        field_name=node.field_name, field_value=node.field_value,
+                        source=node.source, confidence=node.confidence,
+                        assurance_level=node.assurance_level, is_singular=node.is_singular,
+                        is_sensitive=node.is_sensitive, status=node.status,
+                        last_updated=node.last_updated
+                    )
+                    if node.evidence_doc_hash:
+                        session.run(
+                            """
+                            MATCH (c:Claim {id: $claim_id})
+                            MATCH (d:Document {sha256_hash: $doc_hash})
+                            MERGE (c)-[:BACKED_BY]->(d)
+                            """,
+                            claim_id=node.id, doc_hash=node.evidence_doc_hash
+                        )
+            logger.info("Successfully synced seed claims to Neo4j graph.")
+        except Exception as e:
+            logger.warning(f"Neo4j seed sync warning: {e}")
 
     def _seed_initial_data(self):
-        # Initial documents with cryptographic hashes
         doc1_hash = hashlib.sha256(b"Degree_Certificate_SLRTCE_2024").hexdigest()
         doc2_hash = hashlib.sha256(b"Final_Semester_Transcript_SLRTCE").hexdigest()
         doc3_hash = hashlib.sha256(b"Employment_Offer_Letter_Veritas").hexdigest()
@@ -121,7 +245,6 @@ class GraphStore:
         for d in [d1, d2, d3, d4]:
             self.documents[d.id] = d
 
-        # Seed Claims
         seed_claims = [
             # Identity
             GraphNode("id-1", "identity", "Full Legal Name", self.user_name, "Extracted from document", "evidence-backed", "LEVEL_2_EVIDENCE_ATTACHED", "Passport_2024_Scan.pdf", hashlib.sha256(b"Passport").hexdigest(), is_singular=True),
@@ -170,7 +293,8 @@ class GraphStore:
         raw_numeric_value: Optional[float] = None
     ) -> Tuple[GraphNode, Optional[Dict[str, Any]]]:
         """
-        Production Graph Commit with Conflict Detection & Time-Versioning.
+        Commits claim to Graph Store and mirrors to Neo4j.
+        Detects singular conflicts and maintains full audit history.
         """
         existing_node = None
         for n in self.nodes.values():
@@ -182,10 +306,9 @@ class GraphStore:
         assurance = "LEVEL_2_EVIDENCE_ATTACHED" if source == "Extracted from document" else "LEVEL_1_USER_ASSERTED"
 
         if existing_node:
-            # Check singular conflict
             if existing_node.is_singular and existing_node.field_value.strip().lower() != field_value.strip().lower():
                 conflict_record = {
-                    "id": f"conflict-{uuid.uuid4()}",
+                    "id": f"conflict-{uuid.uuid4().hex[:8]}",
                     "fieldName": field_name,
                     "existingValue": existing_node.field_value,
                     "existingSource": existing_node.source,
@@ -198,9 +321,8 @@ class GraphStore:
                 existing_node.status = "NEEDS_REVIEW"
                 return existing_node, conflict_record
 
-            # Mutable update -> save history and update current value
             self.history.append({
-                "id": f"hist-{uuid.uuid4()}",
+                "id": f"hist-{uuid.uuid4().hex[:8]}",
                 "nodeId": existing_node.id,
                 "fieldName": field_name,
                 "previousValue": existing_node.field_value,
@@ -219,9 +341,10 @@ class GraphStore:
             if raw_numeric_value is not None:
                 existing_node.raw_numeric_value = raw_numeric_value
             existing_node.last_updated = datetime.now(timezone.utc).strftime("%d %b %Y")
+
+            self._persist_claim_to_neo4j(existing_node)
             return existing_node, None
 
-        # Create new claim node
         new_id = f"rec-{uuid.uuid4().hex[:8]}"
         new_node = GraphNode(
             node_id=new_id,
@@ -237,7 +360,43 @@ class GraphStore:
             raw_numeric_value=raw_numeric_value
         )
         self.nodes[new_id] = new_node
+        self._persist_claim_to_neo4j(new_node)
         return new_node, None
+
+    def _persist_claim_to_neo4j(self, node: GraphNode):
+        if not self.neo4j_driver or not self.neo4j_connected:
+            return
+        try:
+            with self.neo4j_driver.session() as session:
+                session.run(
+                    """
+                    MATCH (p:Person {person_id: $person_id})
+                    MERGE (c:Claim {id: $id})
+                    SET c.category = $category, c.field_name = $field_name,
+                        c.field_value = $field_value, c.source = $source,
+                        c.confidence = $confidence, c.assurance_level = $assurance_level,
+                        c.is_singular = $is_singular, c.is_sensitive = $is_sensitive,
+                        c.status = $status, c.last_updated = $last_updated
+                    MERGE (p)-[:HAS_CLAIM]->(c)
+                    """,
+                    person_id=self.person_id, id=node.id, category=node.category,
+                    field_name=node.field_name, field_value=node.field_value,
+                    source=node.source, confidence=node.confidence,
+                    assurance_level=node.assurance_level, is_singular=node.is_singular,
+                    is_sensitive=node.is_sensitive, status=node.status,
+                    last_updated=node.last_updated
+                )
+                if node.evidence_doc_hash:
+                    session.run(
+                        """
+                        MATCH (c:Claim {id: $claim_id})
+                        MATCH (d:Document {sha256_hash: $doc_hash})
+                        MERGE (c)-[:BACKED_BY]->(d)
+                        """,
+                        claim_id=node.id, doc_hash=node.evidence_doc_hash
+                    )
+        except Exception as e:
+            logger.warning(f"Neo4j claim persistence warning: {e}")
 
     def add_document(self, file_name: str, category: str, file_size: str, content_bytes: bytes) -> EvidenceDocument:
         sha256_hash = hashlib.sha256(content_bytes).hexdigest()
@@ -252,15 +411,77 @@ class GraphStore:
             status="Parsed"
         )
         self.documents[doc_id] = doc
+
+        if self.neo4j_driver and self.neo4j_connected:
+            try:
+                with self.neo4j_driver.session() as session:
+                    session.run(
+                        """
+                        MERGE (d:Document {sha256_hash: $sha256_hash})
+                        SET d.id = $id, d.name = $name, d.category = $category,
+                            d.file_size = $file_size, d.status = $status, d.upload_date = $upload_date
+                        """,
+                        id=doc.id, name=doc.name, category=doc.category,
+                        file_size=doc.file_size, sha256_hash=doc.sha256_hash,
+                        status=doc.status, upload_date=doc.upload_date
+                    )
+            except Exception as e:
+                logger.warning(f"Neo4j document sync error: {e}")
+
         return doc
 
     def query_graph_by_keyword(self, query: str) -> List[GraphNode]:
         q = query.lower()
+        # First try Cypher if connected
+        if self.neo4j_driver and self.neo4j_connected:
+            try:
+                with self.neo4j_driver.session() as session:
+                    result = session.run(
+                        """
+                        MATCH (p:Person {person_id: $person_id})-[:HAS_CLAIM]->(c:Claim)
+                        WHERE c.status = 'ACTIVE' AND (
+                            toLower(c.field_name) CONTAINS $q OR
+                            toLower(c.field_value) CONTAINS $q OR
+                            toLower(c.category) CONTAINS $q
+                        )
+                        OPTIONAL MATCH (c)-[:BACKED_BY]->(d:Document)
+                        RETURN c.id AS id, c.category AS category, c.field_name AS field_name,
+                               c.field_value AS field_value, c.source AS source,
+                               c.confidence AS confidence, c.assurance_level AS assurance_level,
+                               d.name AS evidence_doc_name, d.sha256_hash AS evidence_doc_hash,
+                               c.is_singular AS is_singular, c.is_sensitive AS is_sensitive
+                        """,
+                        person_id=self.person_id, q=q
+                    )
+                    cypher_nodes = []
+                    for record in result:
+                        cypher_nodes.append(GraphNode(
+                            node_id=record["id"],
+                            category=record["category"],
+                            field_name=record["field_name"],
+                            field_value=record["field_value"],
+                            source=record["source"] or "Confirmed by you",
+                            confidence=record["confidence"] or "user-confirmed",
+                            assurance_level=record["assurance_level"] or "LEVEL_1_USER_ASSERTED",
+                            evidence_doc_name=record["evidence_doc_name"],
+                            evidence_doc_hash=record["evidence_doc_hash"],
+                            is_singular=bool(record["is_singular"]),
+                            is_sensitive=bool(record["is_sensitive"])
+                        ))
+                    if cypher_nodes:
+                        return cypher_nodes
+            except Exception as e:
+                logger.warning(f"Cypher query fallback: {e}")
+
+        # In-memory graph search
         matched = []
         for node in self.nodes.values():
             if node.status != "ACTIVE":
                 continue
-            if q in node.field_name.lower() or q in node.field_value.lower() or (node.evidence_doc_name and q in node.evidence_doc_name.lower()):
+            if (q in node.field_name.lower() or 
+                q in node.field_value.lower() or 
+                q in node.category.lower() or 
+                (node.evidence_doc_name and q in node.evidence_doc_name.lower())):
                 matched.append(node)
         return matched
 
@@ -271,9 +492,6 @@ class GraphStore:
         return [d.to_dict() for d in self.documents.values()]
 
     def verify_document_integrity(self, node_id: str) -> Tuple[bool, str]:
-        """
-        Cryptographically verifies that displayed claim node matches source document hash.
-        """
         node = self.nodes.get(node_id)
         if not node or not node.evidence_doc_name:
             return False, "No evidence document linked"
@@ -291,3 +509,14 @@ class GraphStore:
             return False, "INTEGRITY_MISMATCH: Claim hash does not match source PDF hash"
 
         return True, "VERIFIED: Document hash matches stored evidence claim"
+
+    def get_neo4j_status(self) -> Dict[str, Any]:
+        return {
+            "driverConfigured": NEO4J_AVAILABLE,
+            "connected": self.neo4j_connected,
+            "uri": os.getenv("NEO4J_URI", "neo4j+s://63ba69f0.databases.neo4j.io"),
+            "username": os.getenv("NEO4J_USERNAME", "neo4j"),
+            "errorMessage": self.neo4j_error,
+            "activeNodes": len(self.nodes),
+            "sourceDocs": len(self.documents)
+        }

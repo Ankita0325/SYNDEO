@@ -27,12 +27,12 @@ class DocumentAgent:
                 if text:
                     text_lines.append(text)
             return "\n".join(text_lines)
-        except Exception as e:
+        except Exception:
             return f"Raw document binary payload ({len(content_bytes)} bytes)"
 
     def classify_and_extract(self, file_name: str, text_content: str) -> Dict[str, Any]:
         """
-        Extracts candidate fields from text content using deterministic pattern matching / LLM structured JSON output.
+        Extracts candidate fields from text content using deterministic pattern matching / structured extraction.
         """
         file_lower = file_name.lower()
         text_lower = text_content.lower()
@@ -40,7 +40,7 @@ class DocumentAgent:
         category = "identity"
         extracted_fields = []
 
-        if "degree" in file_lower or "transcript" in file_lower or "slrtce" in text_lower or "university" in text_lower or "college" in text_lower:
+        if any(k in file_lower or k in text_lower for k in ["degree", "transcript", "slrtce", "university", "college", "marksheet", "diploma"]):
             category = "education"
             extracted_fields.append({
                 "fieldName": "College / University",
@@ -70,7 +70,7 @@ class DocumentAgent:
                     "assuranceLevel": "LEVEL_2_EVIDENCE_ATTACHED"
                 })
 
-        elif "offer" in file_lower or "experience" in file_lower or "employment" in file_lower or "veritas" in text_lower or "salary" in text_lower or "payslip" in file_lower:
+        elif any(k in file_lower or k in text_lower for k in ["offer", "experience", "employment", "veritas", "salary", "payslip", "joining"]):
             category = "employment"
             extracted_fields.append({
                 "fieldName": "Employer Company",
@@ -94,7 +94,7 @@ class DocumentAgent:
                     "rawNumericValue": 62340
                 })
 
-        elif "health" in file_lower or "lab" in file_lower or "blood" in text_lower or "medical" in text_lower:
+        elif any(k in file_lower or k in text_lower for k in ["health", "lab", "blood", "medical", "hospital", "prescription", "checkup"]):
             category = "healthcare"
             extracted_fields.append({
                 "fieldName": "Blood Group",
@@ -110,8 +110,18 @@ class DocumentAgent:
                 "assuranceLevel": "LEVEL_2_EVIDENCE_ATTACHED"
             })
 
+        elif any(k in file_lower or k in text_lower for k in ["pan", "tax", "itr", "bank", "statement", "credit"]):
+            category = "finance"
+            extracted_fields.append({
+                "fieldName": "Primary Tax Identifier (PAN)",
+                "value": "ABCPS9821K",
+                "confidence": "evidence-backed",
+                "assuranceLevel": "LEVEL_2_EVIDENCE_ATTACHED",
+                "isSensitive": True,
+                "isSingular": True
+            })
+
         else:
-            # Default Identity / Utility
             category = "identity"
             extracted_fields.append({
                 "fieldName": "Verified Document Reference",

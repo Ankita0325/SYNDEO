@@ -34,11 +34,13 @@ import { InChatVoiceStage } from './InChatVoiceStage';
 import {
   SARVAM_LANGUAGES,
   SARVAM_TTS_LANGUAGES,
+  SARVAM_VOICE_SPEAKERS,
   chatWithSarvam,
   transcribeWithSarvam,
   synthesizeWithSarvam,
   isSarvamAvailable,
   type SarvamLanguageCode,
+  type SarvamVoiceSpeaker,
 } from '../../lib/sarvam';
 
 const NORMAL_THINKING_STEPS: Array<{ text: string; state: OrbState }> = [
@@ -72,6 +74,7 @@ export const ChatPage: React.FC = () => {
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [isVoiceModalOpen, setIsVoiceModalOpen] = useState<boolean>(false);
   const [voiceTranscript, setVoiceTranscript] = useState<string>('');
+  const [voiceSpeaker, setVoiceSpeaker] = useState<SarvamVoiceSpeaker>('shubh');
   const [chatLanguage, setChatLanguage] = useState<SarvamLanguageCode>('en-IN');
   const [sttLanguage, setSttLanguage] = useState<SarvamLanguageCode>('en-IN');
   const [ttsLanguage, setTtsLanguage] = useState<SarvamLanguageCode>('en-IN');
@@ -123,6 +126,7 @@ export const ChatPage: React.FC = () => {
   const sarvamAudioUrlRef = useRef<string | null>(null);
   const sttLanguageRef = useRef<SarvamLanguageCode>('en-IN');
   const ttsLanguageRef = useRef<SarvamLanguageCode>('en-IN');
+  const speakerRef = useRef<SarvamVoiceSpeaker>('shubh');
 
   const [thinkingStepIndex, setThinkingStepIndex] = useState<number>(0);
 
@@ -383,7 +387,7 @@ export const ChatPage: React.FC = () => {
     };
 
     if (isSarvamAvailable()) {
-      void synthesizeWithSarvam(text, ttsLanguageRef.current).then((result) => {
+      void synthesizeWithSarvam(text, ttsLanguageRef.current, speakerRef.current).then((result) => {
         playSarvamAudio(result.audios.join(''));
         const audio = sarvamAudioRef.current;
         if (audio && onComplete) audio.addEventListener('ended', onComplete, { once: true });
@@ -535,6 +539,11 @@ export const ChatPage: React.FC = () => {
       ttsLanguageRef.current = language.code;
       setTtsLanguage(language.code);
     }
+  };
+
+  const handleVoiceSpeakerChange = (speakerId: SarvamVoiceSpeaker) => {
+    speakerRef.current = speakerId;
+    setVoiceSpeaker(speakerId);
   };
 
   const streamAIResponse = (fullResponse: ChatMessage) => {
@@ -958,6 +967,8 @@ export const ChatPage: React.FC = () => {
             onSttLanguageChange={handleSpeechRecognitionLanguageChange}
             ttsLanguage={ttsLanguage}
             onTtsLanguageChange={handleSpeechSynthesisLanguageChange}
+            speaker={voiceSpeaker}
+            onSpeakerChange={handleVoiceSpeakerChange}
             error={voiceError}
             userName={userName}
           />
@@ -1547,6 +1558,23 @@ export const ChatPage: React.FC = () => {
                 </div>
 
                 <div className="flex items-center gap-2 text-[10px] text-zinc-400">
+                  {/* Voice Speaker Selector Pill */}
+                  <div className="hidden sm:flex items-center">
+                    <select
+                      value={voiceSpeaker}
+                      onChange={(e) => handleVoiceSpeakerChange(e.target.value as SarvamVoiceSpeaker)}
+                      className="rounded-full border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 px-2.5 py-1 text-[11px] font-medium text-zinc-700 dark:text-zinc-300 transition-all cursor-pointer backdrop-blur-md"
+                      title="Change AI Voice Speaker"
+                      aria-label="Change AI Voice Speaker"
+                    >
+                      {SARVAM_VOICE_SPEAKERS.map((s) => (
+                        <option key={s.id} value={s.id} className="bg-white dark:bg-[#11111d] text-zinc-800 dark:text-zinc-100">
+                          🎙️ {s.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
                   {/* Global Mute Toggle Button */}
                   <button
                     type="button"

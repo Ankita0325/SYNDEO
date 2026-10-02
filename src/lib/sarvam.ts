@@ -19,6 +19,21 @@ export const SARVAM_TTS_LANGUAGES = SARVAM_LANGUAGES.filter(({ code }) => code !
 
 export type SarvamLanguageCode = (typeof SARVAM_LANGUAGES)[number]['code'];
 
+export const SARVAM_VOICE_SPEAKERS = [
+  { id: 'shubh', name: 'Shubh (Male · Clear & Natural)', gender: 'male' },
+  { id: 'meera', name: 'Meera (Female · Professional & Warm)', gender: 'female' },
+  { id: 'pavithra', name: 'Pavithra (Female · Calm & Soft)', gender: 'female' },
+  { id: 'maitreyi', name: 'Maitreyi (Female · Expressive)', gender: 'female' },
+  { id: 'arvind', name: 'Arvind (Male · Deep & Confident)', gender: 'male' },
+  { id: 'amartya', name: 'Amartya (Male · Energetic)', gender: 'male' },
+  { id: 'aditi', name: 'Aditi (Female · Friendly)', gender: 'female' },
+  { id: 'priya', name: 'Priya (Female · Articulate)', gender: 'female' },
+  { id: 'ratan', name: 'Ratan (Male · Reassuring)', gender: 'male' },
+  { id: 'varun', name: 'Varun (Male · Modern & Casual)', gender: 'male' },
+] as const;
+
+export type SarvamVoiceSpeaker = (typeof SARVAM_VOICE_SPEAKERS)[number]['id'];
+
 export interface SarvamSTTResponse {
   request_id?: string;
   transcript: string;
@@ -148,6 +163,8 @@ export async function translateWithSarvam(
 export async function synthesizeWithSarvam(
   text: string,
   languageCode: SarvamLanguageCode,
+  speaker: SarvamVoiceSpeaker = 'shubh',
+  pace: number = 1.0,
 ): Promise<SarvamTTSResponse> {
   if (languageCode === 'ur-IN') {
     throw new Error('Sarvam Bulbul v3 does not currently list Urdu for text-to-speech. Select another language for spoken replies.');
@@ -161,7 +178,12 @@ export async function synthesizeWithSarvam(
   const response = await fetchSarvam('/api/sarvam/text-to-speech', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text: cleanText, target_language_code: languageCode }),
+    body: JSON.stringify({
+      text: cleanText,
+      target_language_code: languageCode,
+      speaker,
+      pace,
+    }),
   });
   const result = await readResponse<SarvamTTSResponse>(response);
   if (!result.audios?.length) throw new Error('Sarvam did not return speech audio.');

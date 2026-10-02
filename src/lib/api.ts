@@ -12,6 +12,16 @@ export async function fetchHealthStatus() {
   }
 }
 
+export async function fetchNeo4jStatus() {
+  try {
+    const res = await fetch(`${API_BASE}/api/neo4j/status`);
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchRecordsFromBackend() {
   try {
     const res = await fetch(`${API_BASE}/api/graph/records`);
@@ -43,6 +53,7 @@ export async function addClaimToBackend(claim: {
   source?: string;
   evidenceDocName?: string;
   isSingular?: boolean;
+  rawNumericValue?: number;
 }) {
   try {
     const res = await fetch(`${API_BASE}/api/graph/claims`, {
@@ -87,6 +98,25 @@ export async function queryGraphMemory(question: string) {
     return await res.json();
   } catch (err) {
     console.warn('Backend API unavailable, processing query locally.', err);
+    return null;
+  }
+}
+
+export async function fetchPrivacyAdvice(request: {
+  recipient: string;
+  purpose: string;
+  requestedFields: Record<string, unknown>[];
+}) {
+  try {
+    const res = await fetch(`${API_BASE}/api/privacy/advise`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    });
+    if (!res.ok) throw new Error('Privacy advice failed');
+    return await res.json();
+  } catch (err) {
+    console.warn('Privacy Advisor unavailable locally.', err);
     return null;
   }
 }

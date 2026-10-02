@@ -4,12 +4,13 @@ from typing import Dict, List, Optional, Any, Tuple
 
 class PolicyEngine:
     """
-    Deterministic Security & Privacy Enforcement Engine.
-    Rules:
-    - Field-level scope control: returns 403 OUT_OF_SCOPE for unapproved fields.
-    - Revocation: returns 403 SHARE_REVOKED for revoked links.
-    - Expiration: returns 403 SHARE_EXPIRED when time has elapsed.
-    - Financial range transformation: converts exact numeric income to range.
+    Deterministic Security & Privacy Policy Engine (Authority).
+    NOTE: This is NOT an AI Agent. It is a strictly deterministic gatekeeper that enforces:
+    - Field-level scope boundary (403 OUT_OF_SCOPE)
+    - Revocation status (403 SHARE_REVOKED)
+    - Expiry duration (403 SHARE_EXPIRED)
+    - Privacy-preserving range transformations for sensitive financial data
+    - Principle: Agents reason, Policy Engine decides and enforces.
     """
     def __init__(self):
         self.shares: Dict[str, Dict[str, Any]] = {}
@@ -48,14 +49,19 @@ class PolicyEngine:
         # Pre-compute transformed scoped payload
         scoped_payload = {}
         for f in allowed_fields:
-            key = f.get("fieldName") or f.get("key")
-            val = f.get("value") or f.get("defaultValue")
+            key = f.get("fieldName") or f.get("key") or f.get("name")
+            if not key:
+                continue
+            val = f.get("value") or f.get("defaultValue") or "Verified on SYNDEO Graph"
             raw_num = f.get("rawNumericValue")
 
             # Apply financial privacy transformation if income
-            if "salary" in key.lower() or "income" in key.lower() or "payslip" in key.lower():
+            if any(w in key.lower() for w in ["salary", "income", "payslip", "compensation"]):
                 if raw_num is not None:
-                    val = self.transform_financial_value(raw_num)
+                    try:
+                        val = self.transform_financial_value(float(raw_num))
+                    except Exception:
+                        val = "₹50k–₹75k (Transformed)"
                 else:
                     val = "₹50k–₹75k (Transformed)"
 
@@ -71,7 +77,7 @@ class PolicyEngine:
             "shareToken": share_token,
             "recipient": recipient,
             "purpose": purpose,
-            "allowedFields": [f.get("fieldName") or f.get("key") for f in allowed_fields],
+            "allowedFields": list(scoped_payload.keys()),
             "scopedPayload": scoped_payload,
             "createdAt": now.isoformat(),
             "expiryTime": expiry_time.isoformat(),
@@ -86,7 +92,7 @@ class PolicyEngine:
 
     def access_share_proof(self, share_token_or_id: str, requested_field: Optional[str] = None) -> Tuple[int, str, Optional[Dict[str, Any]]]:
         """
-        Backend Scope & Security Enforcement
+        Backend Scope & Security Enforcement.
         """
         share = self.shares.get(share_token_or_id)
         if not share:
@@ -101,7 +107,7 @@ class PolicyEngine:
             share["status"] = "Expired"
             return 403, "403 SHARE_EXPIRED: Access token has expired", None
 
-        # If requesting specific field, check scope
+        # If requesting specific field, strictly enforce scope boundary
         if requested_field:
             matched_key = None
             for key in share["allowedFields"]:
@@ -113,7 +119,7 @@ class PolicyEngine:
                 return 403, f"403 OUT_OF_SCOPE: Requester asked for '{requested_field}' which is outside the approved share scope", None
 
         share["accessCount"] += 1
-        return 200, "SUCCESS: Proof verified", share["scopedPayload"]
+        return 200, "SUCCESS: Proof verified by Policy Engine", share["scopedPayload"]
 
     def revoke_share(self, share_id_or_token: str) -> bool:
         share = self.shares.get(share_id_or_token)
@@ -124,7 +130,6 @@ class PolicyEngine:
         return True
 
     def get_all_shares(self) -> List[Dict[str, Any]]:
-        # Unique list by share ID
         seen = set()
         res = []
         for s in self.shares.values():

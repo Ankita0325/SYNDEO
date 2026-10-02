@@ -10,7 +10,13 @@ import {
 } from 'lucide-react';
 import { AILoaderOrb, type OrbStateMode } from '../ui/ai-loader';
 import { useTheme } from '../../context/ThemeContext';
-import { SARVAM_LANGUAGES, SARVAM_TTS_LANGUAGES, type SarvamLanguageCode } from '../../lib/sarvam';
+import {
+  SARVAM_LANGUAGES,
+  SARVAM_TTS_LANGUAGES,
+  SARVAM_VOICE_SPEAKERS,
+  type SarvamLanguageCode,
+  type SarvamVoiceSpeaker,
+} from '../../lib/sarvam';
 
 export type VoiceState = 'idle' | 'listening' | 'thinking' | 'speaking';
 
@@ -27,6 +33,8 @@ interface InChatVoiceStageProps {
   onSttLanguageChange: (languageCode: string) => void;
   ttsLanguage: SarvamLanguageCode;
   onTtsLanguageChange: (languageCode: string) => void;
+  speaker: SarvamVoiceSpeaker;
+  onSpeakerChange: (speaker: SarvamVoiceSpeaker) => void;
   error: string | null;
   userName?: string;
 }
@@ -44,6 +52,8 @@ export const InChatVoiceStage: React.FC<InChatVoiceStageProps> = ({
   onSttLanguageChange,
   ttsLanguage,
   onTtsLanguageChange,
+  speaker,
+  onSpeakerChange,
   error,
   userName = 'You',
 }) => {
@@ -125,8 +135,8 @@ export const InChatVoiceStage: React.FC<InChatVoiceStageProps> = ({
             `,
       }}
     >
-      {/* Top Bar with Minimal Close Exit Button */}
-      <div className="w-full flex items-center justify-between z-20 max-w-5xl mx-auto">
+      {/* Top Bar with Voice and Language Controls */}
+      <div className="w-full flex flex-wrap items-center justify-between gap-3 z-20 max-w-5xl mx-auto">
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 rounded-full bg-[#5a25eb]/15 dark:bg-white/10 flex items-center justify-center">
             <Sparkles className="w-3.5 h-3.5 text-[#5a25eb] dark:text-[#cbbeff]" />
@@ -139,13 +149,33 @@ export const InChatVoiceStage: React.FC<InChatVoiceStageProps> = ({
           </span>
         </div>
 
-        <div className="flex items-center justify-end gap-2 sm:gap-3">
+        <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
+          {/* Voice Speaker Selector */}
+          <div className="relative flex items-center">
+            <label className="sr-only" htmlFor="voice-speaker">AI Voice Speaker</label>
+            <select
+              id="voice-speaker"
+              value={speaker}
+              onChange={(event) => onSpeakerChange(event.target.value as SarvamVoiceSpeaker)}
+              className="max-w-36 sm:max-w-44 rounded-full border border-black/10 dark:border-white/15 bg-white/70 dark:bg-white/10 px-3 py-1.5 text-xs font-medium text-zinc-800 dark:text-zinc-100 backdrop-blur-md cursor-pointer hover:bg-white/90 dark:hover:bg-white/20 transition-all"
+              aria-label="AI Voice Speaker"
+              title="Change AI Voice Speaker"
+            >
+              {SARVAM_VOICE_SPEAKERS.map((s) => (
+                <option key={s.id} value={s.id}>
+                  🎙️ {s.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* STT Language Selector */}
           <label className="sr-only" htmlFor="stt-language">Speech recognition language</label>
           <select
             id="stt-language"
             value={sttLanguage}
             onChange={(event) => onSttLanguageChange(event.target.value)}
-            className="max-w-32 sm:max-w-40 rounded-full border border-black/10 dark:border-white/15 bg-white/60 dark:bg-white/10 px-2 sm:px-3 py-2 text-xs text-zinc-800 dark:text-zinc-100 backdrop-blur-md"
+            className="max-w-28 sm:max-w-36 rounded-full border border-black/10 dark:border-white/15 bg-white/70 dark:bg-white/10 px-2 sm:px-3 py-1.5 text-xs text-zinc-800 dark:text-zinc-100 backdrop-blur-md cursor-pointer"
             aria-label="Speech recognition language"
             title="Speech-to-text language"
           >
@@ -153,12 +183,14 @@ export const InChatVoiceStage: React.FC<InChatVoiceStageProps> = ({
               <option key={language.code} value={language.code}>STT: {language.name}</option>
             ))}
           </select>
+
+          {/* TTS Language Selector */}
           <label className="sr-only" htmlFor="tts-language">Text-to-speech language</label>
           <select
             id="tts-language"
             value={ttsLanguage}
             onChange={(event) => onTtsLanguageChange(event.target.value)}
-            className="max-w-32 sm:max-w-40 rounded-full border border-black/10 dark:border-white/15 bg-white/60 dark:bg-white/10 px-2 sm:px-3 py-2 text-xs text-zinc-800 dark:text-zinc-100 backdrop-blur-md"
+            className="max-w-28 sm:max-w-36 rounded-full border border-black/10 dark:border-white/15 bg-white/70 dark:bg-white/10 px-2 sm:px-3 py-1.5 text-xs text-zinc-800 dark:text-zinc-100 backdrop-blur-md cursor-pointer"
             aria-label="Text-to-speech language"
             title="Text-to-speech language"
           >
@@ -166,13 +198,15 @@ export const InChatVoiceStage: React.FC<InChatVoiceStageProps> = ({
               <option key={language.code} value={language.code}>TTS: {language.name}</option>
             ))}
           </select>
+
+          {/* Close Exit Button */}
           <button
             onClick={onClose}
             aria-label="Close voice mode"
-            className="w-10 h-10 rounded-full bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-zinc-700 dark:text-zinc-200 hover:text-zinc-950 dark:hover:text-white flex items-center justify-center border border-black/10 dark:border-white/15 backdrop-blur-md transition-all cursor-pointer shadow-xs"
+            className="w-9 h-9 rounded-full bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-zinc-700 dark:text-zinc-200 hover:text-zinc-950 dark:hover:text-white flex items-center justify-center border border-black/10 dark:border-white/15 backdrop-blur-md transition-all cursor-pointer shadow-xs"
             title="Exit Voice Mode (Esc)"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
       </div>
@@ -182,7 +216,7 @@ export const InChatVoiceStage: React.FC<InChatVoiceStageProps> = ({
          ========================================================================= */}
       <div className="flex-1 w-full max-w-2xl flex flex-col items-center justify-center text-center space-y-6 my-auto z-10 overflow-visible">
         
-        {/* Large AI Voice Orb with Expansive Non-clipped Atmosphere */}
+        {/* Large AI Voice Orb with Expansive Atmosphere */}
         <div className="relative flex items-center justify-center my-4 select-none overflow-visible isolate">
           {/* Layer 1: Expansive Sonic Expansion Wave */}
           <motion.div
@@ -289,7 +323,7 @@ export const InChatVoiceStage: React.FC<InChatVoiceStageProps> = ({
           )}
         </AnimatePresence>
 
-        {/* AI Spoken Response (Clean Centered Typography, Max-W 680px) */}
+        {/* AI Spoken Response */}
         <AnimatePresence mode="wait">
           {assistantResponse && (
             <motion.div

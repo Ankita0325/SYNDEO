@@ -1,0 +1,59 @@
+services:
+  # ---------------------------------------------------------------------------
+  # SYNDEO Multi-Agent Backend (FastAPI + Neo4j Aura + Sarvam AI)
+  # ---------------------------------------------------------------------------
+  - type: web
+    name: syndeo-backend
+    runtime: python
+    rootDir: backend
+    plan: free
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.8
+      - key: PORT
+        value: 8000
+      - key: NEO4J_URI
+        sync: false
+      - key: NEO4J_USERNAME
+        value: neo4j
+      - key: NEO4J_PASSWORD
+        sync: false
+      - key: NEO4J_DATABASE
+        value: neo4j
+      - key: SARVAM_API_KEY
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+
+  # ---------------------------------------------------------------------------
+  # SYNDEO Frontend (React + Vite + Tailwind + Lucide)
+  # ---------------------------------------------------------------------------
+  - type: web
+    name: syndeo-frontend
+    runtime: static
+    plan: free
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    headers:
+      - path: /*
+        name: Cache-Control
+        value: public, max-age=0, must-revalidate
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_API_URL
+        fromService:
+          type: web
+          name: syndeo-backend
+          property: host
+      - key: VITE_USE_SUPABASE_DOCUMENTS
+        value: "false"
