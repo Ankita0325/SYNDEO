@@ -19,6 +19,7 @@ import {
   MessageSquare,
   X,
   User,
+  Network,
 } from 'lucide-react';
 
 export interface GraphNode {
@@ -53,6 +54,7 @@ interface ObsidianGraphViewProps {
   selectedCategory: LifeStageCategory | 'all';
   onSelectCategory: (cat: LifeStageCategory | 'all') => void;
   onOpenAddModal: () => void;
+  isLoading?: boolean;
 }
 
 const CATEGORY_CONFIG: Record<
@@ -101,6 +103,7 @@ export const ObsidianGraphView: React.FC<ObsidianGraphViewProps> = ({
   documents,
   selectedCategory,
   onSelectCategory,
+  isLoading = false,
 }) => {
   const { userName, navigate } = useNavigation();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -406,6 +409,25 @@ export const ObsidianGraphView: React.FC<ObsidianGraphViewProps> = ({
 
   return (
     <div className="relative w-full h-[720px] rounded-3xl border border-zinc-800 bg-[#09090e] overflow-hidden shadow-2xl select-none">
+      {/* High-Tech Neural Loading State Overlay */}
+      {isLoading && (
+        <div className="absolute inset-0 z-40 flex flex-col items-center justify-center bg-[#09090e]/85 backdrop-blur-md transition-opacity duration-300">
+          <div className="relative w-20 h-20 mb-4 flex items-center justify-center">
+            <div className="absolute inset-0 rounded-full border-2 border-t-[#5a25eb] border-r-transparent border-b-[#96aaff] border-l-transparent animate-spin" />
+            <div className="absolute inset-2 rounded-full border border-white/20 animate-ping opacity-30" />
+            <div className="w-12 h-12 rounded-full bg-[#5a25eb]/20 border border-[#5a25eb]/40 flex items-center justify-center shadow-[0_0_20px_rgba(90,37,235,0.6)]">
+              <Network className="w-6 h-6 text-[#cbbeff] animate-pulse" />
+            </div>
+          </div>
+          <p className="text-sm font-bold text-white tracking-wide">
+            Synchronizing Knowledge Graph
+          </p>
+          <p className="text-xs text-zinc-400 font-mono mt-1">
+            Resolving Neo4j Aura verified nodes & cryptographic links...
+          </p>
+        </div>
+      )}
+
       {/* Top Floating Controls Bar */}
       <div className="absolute top-3 left-3 right-3 z-20 flex flex-wrap items-center justify-between gap-2.5 pointer-events-none">
         {/* Category Filter */}

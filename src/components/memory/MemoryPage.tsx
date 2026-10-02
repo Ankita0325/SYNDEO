@@ -52,22 +52,30 @@ export const MemoryPage: React.FC = () => {
   const [selectedClaim, setSelectedClaim] = useState<RecordField | null>(null);
   const [isProvenanceModalOpen, setIsProvenanceModalOpen] = useState(false);
   const [isOcrViewerOpen, setIsOcrViewerOpen] = useState(false);
+  const [isLoadingVault, setIsLoadingVault] = useState<boolean>(true);
 
   // Sync with live Neo4j backend graph store
   useEffect(() => {
     let active = true;
 
     void (async () => {
-      // 1. Fetch live claims from Neo4j Aura
-      const backendRecs = await fetchRecordsFromBackend();
-      if (active && backendRecs && Array.isArray(backendRecs)) {
-        setRecords(backendRecs);
-      }
+      try {
+        setIsLoadingVault(true);
+        // 1. Fetch live claims from Neo4j Aura
+        const backendRecs = await fetchRecordsFromBackend();
+        if (active && backendRecs && Array.isArray(backendRecs)) {
+          setRecords(backendRecs);
+        }
 
-      // 2. Fetch live documents
-      const backendDocs = await fetchDocumentsFromBackend();
-      if (active && backendDocs && Array.isArray(backendDocs)) {
-        setDocuments(backendDocs);
+        // 2. Fetch live documents
+        const backendDocs = await fetchDocumentsFromBackend();
+        if (active && backendDocs && Array.isArray(backendDocs)) {
+          setDocuments(backendDocs);
+        }
+      } finally {
+        if (active) {
+          setIsLoadingVault(false);
+        }
       }
     })();
 
@@ -321,6 +329,7 @@ export const MemoryPage: React.FC = () => {
           selectedCategory={selectedCategory}
           onSelectCategory={setSelectedCategory}
           onOpenAddModal={() => setIsAddInfoOpen(true)}
+          isLoading={isLoadingVault}
         />
       )}
 

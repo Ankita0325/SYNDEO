@@ -64,7 +64,7 @@ const AVAILABLE_FIELDS: SelectableFieldItem[] = [
     category: 'social',
     categoryLabel: 'Social',
     label: 'Email',
-    value: 'indresh@example.com',
+    value: 'indresh404@gmail.com',
     signature: '0x27fc...88a',
   },
   {
@@ -80,7 +80,7 @@ const AVAILABLE_FIELDS: SelectableFieldItem[] = [
     category: 'social',
     categoryLabel: 'Social',
     label: 'Discord',
-    value: '@indresh404#1337',
+    value: '@indresh404',
     signature: '0x5b33...7d1',
   },
   {
@@ -88,7 +88,7 @@ const AVAILABLE_FIELDS: SelectableFieldItem[] = [
     category: 'social',
     categoryLabel: 'Social',
     label: 'Portfolio Website',
-    value: 'https://indresh.dev',
+    value: 'https://github.com/indresh404/SYNDEO',
     signature: '0x6e9a...3f0',
   },
 
