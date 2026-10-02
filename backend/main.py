@@ -417,7 +417,19 @@ def get_personal_memory_store():
             "categoriesCount": len(set(r["category"] for r in records)),
             "auditStatus": integrity_msg
         }
-    }
+@app.post("/api/memory/clear")
+@app.delete("/api/memory/clear")
+def clear_memory_store():
+    """Wipes all claims, documents, and nodes from memory store and Neo4j database."""
+    graph_store.clear_all()
+    audit_logger.log_event(
+        action="MEMORY_STORE_CLEARED",
+        recipient="Personal Vault",
+        purpose="User initiated vault reset to empty state",
+        fields_accessed=[],
+        assurance_status="EMPTY_RESET"
+    )
+    return {"status": "success", "message": "Personal Memory Store wiped to clean empty state"}
 
 @app.get("/api/graph/topology")
 def get_graph_topology_route():

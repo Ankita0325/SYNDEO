@@ -50,6 +50,19 @@ export async function fetchMemoryStore() {
   }
 }
 
+export async function clearMemoryStore() {
+  try {
+    const res = await apiFetch('/api/memory/clear', {
+      method: 'POST',
+    });
+    if (!res.ok) throw new Error('Failed to clear memory store');
+    return await res.json();
+  } catch (err) {
+    console.warn('Backend API unavailable to clear store.', err);
+    return null;
+  }
+}
+
 export async function fetchGraphTopology() {
   try {
     const res = await apiFetch('/api/graph/topology');

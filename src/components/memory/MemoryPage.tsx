@@ -1,7 +1,6 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { initialDocuments, initialRecords } from '../../data/mockData';
+import React, { useState, useEffect, useRef } from 'react';
 import type { LifeStageCategory, RecordField, DocumentItem, OCRDocumentResult } from '../../types';
-import { fetchRecordsFromBackend, fetchDocumentsFromBackend, addClaimToBackend, uploadDocumentToBackend } from '../../lib/api';
+import { fetchRecordsFromBackend, fetchDocumentsFromBackend, addClaimToBackend, uploadDocumentToBackend, clearMemoryStore } from '../../lib/api';
 import { runLocalOcr } from '../../lib/ocrClient';
 import { StatusBadge } from '../common/Badge';
 import { Modal } from '../common/Modal';
@@ -31,6 +30,7 @@ import {
   Eye,
   ShieldCheck,
   MessageSquare,
+  RotateCcw,
 } from 'lucide-react';
 
 type ViewMode = 'graph' | 'cards' | 'documents';
@@ -39,13 +39,11 @@ type LocalDocument = DocumentItem & { fileUrl: string; ocrResult: OCRDocumentRes
 
 export const MemoryPage: React.FC = () => {
   const { navigate } = useNavigation();
-  const [records, setRecords] = useState<RecordField[]>(initialRecords);
+  const [records, setRecords] = useState<RecordField[]>([]);
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [localDocuments, setLocalDocuments] = useState<LocalDocument[]>([]);
   const [ocrRecords, setOcrRecords] = useState<OCRRecordField[]>([]);
   const localFileUrls = useRef<string[]>([]);
-  const [documentLoadError, setDocumentLoadError] = useState<string | null>(null);
-  const [isUsingSampleDocuments, setIsUsingSampleDocuments] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<LifeStageCategory | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [viewMode, setViewMode] = useState<ViewMode>('graph');
@@ -55,12 +53,6 @@ export const MemoryPage: React.FC = () => {
   const [isProvenanceModalOpen, setIsProvenanceModalOpen] = useState(false);
   const [isOcrViewerOpen, setIsOcrViewerOpen] = useState(false);
 
-  const showSampleDocuments = useCallback((error?: string) => {
-    setDocuments(initialDocuments.slice(0, 4));
-    setIsUsingSampleDocuments(true);
-    setDocumentLoadError(error || null);
-  }, []);
-
   // Sync with live Neo4j backend graph store
   useEffect(() => {
     let active = true;
@@ -68,25 +60,32 @@ export const MemoryPage: React.FC = () => {
     void (async () => {
       // 1. Fetch live claims from Neo4j Aura
       const backendRecs = await fetchRecordsFromBackend();
-      if (active && backendRecs && Array.isArray(backendRecs) && backendRecs.length > 0) {
+      if (active && backendRecs && Array.isArray(backendRecs)) {
         setRecords(backendRecs);
       }
 
       // 2. Fetch live documents
       const backendDocs = await fetchDocumentsFromBackend();
-      if (active && backendDocs && Array.isArray(backendDocs) && backendDocs.length > 0) {
+      if (active && backendDocs && Array.isArray(backendDocs)) {
         setDocuments(backendDocs);
-        setIsUsingSampleDocuments(false);
-        setDocumentLoadError(null);
-      } else {
-        showSampleDocuments();
       }
     })();
 
     return () => {
       active = false;
     };
-  }, [showSampleDocuments]);
+  }, []);
+
+  const handleClearVault = async () => {
+    if (!window.confirm('Are you sure you want to clear your Personal Memory Store? All claims and documents will be wiped from Neo4j Aura.')) {
+      return;
+    }
+    setRecords([]);
+    setDocuments([]);
+    setLocalDocuments([]);
+    setOcrRecords([]);
+    await clearMemoryStore();
+  };
 
 
   // Modals state
@@ -192,6 +191,14 @@ export const MemoryPage: React.FC = () => {
 
         {/* Action Buttons */}
         <div className="flex items-center gap-2">
+          <button
+            onClick={handleClearVault}
+            title="Reset vault and wipe all records to start fresh"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-100 dark:bg-[#14141e] hover:bg-red-500/10 hover:text-red-500 dark:hover:bg-red-500/15 border border-zinc-200 dark:border-[#272736] text-xs font-medium text-zinc-600 dark:text-[#8c879a] transition-colors cursor-pointer shadow-2xs"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span>Reset Vault</span>
+          </button>
           <button
             onClick={() => setIsAddInfoOpen(true)}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-100 dark:bg-[#14141e] hover:bg-zinc-200 dark:hover:bg-[#1c1c28] border border-zinc-200 dark:border-[#272736] text-xs font-medium text-zinc-800 dark:text-[#e4e1e8] transition-colors cursor-pointer shadow-2xs"
@@ -433,9 +440,32 @@ export const MemoryPage: React.FC = () => {
           </div>
 
           {allRecords.length === 0 && (
-            <div className="p-8 text-center border border-dashed border-zinc-300 dark:border-[#2d2b38] rounded-2xl bg-white dark:bg-[#07070a]">
-              <Database className="w-6 h-6 text-zinc-400 mx-auto mb-1.5" />
-              <p className="text-xs text-zinc-500">No matching records found.</p>
+            <div className="p-10 text-center border border-dashed border-zinc-300 dark:border-[#2d2b38] rounded-3xl bg-white dark:bg-[#07070a] space-y-3">
+              <div className="w-12 h-12 rounded-2xl bg-[#5a25eb]/10 dark:bg-[#5a25eb]/20 flex items-center justify-center mx-auto text-[#5a25eb] dark:text-[#cbbeff]">
+                <Database className="w-6 h-6" />
+              </div>
+              <h3 className="font-bold text-sm text-zinc-900 dark:text-white">
+                Personal Memory Store is Empty
+              </h3>
+              <p className="text-xs text-zinc-500 dark:text-[#8c879a] max-w-md mx-auto">
+                No mock claims loaded. Upload real documents (PDFs/images) or add verified records to populate your live Neo4j Aura knowledge graph.
+              </p>
+              <div className="flex items-center justify-center gap-2 pt-2">
+                <button
+                  onClick={() => setIsUploadDocOpen(true)}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#5a25eb] text-white text-xs font-medium cursor-pointer shadow-sm hover:bg-[#6b37fa]"
+                >
+                  <UploadCloud className="w-3.5 h-3.5" />
+                  <span>Upload Real Document</span>
+                </button>
+                <button
+                  onClick={() => setIsAddInfoOpen(true)}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-zinc-100 dark:bg-[#14141e] text-zinc-800 dark:text-zinc-200 text-xs font-medium cursor-pointer hover:bg-zinc-200 dark:hover:bg-[#1c1c28]"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add First Record</span>
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -507,20 +537,25 @@ export const MemoryPage: React.FC = () => {
       {/* VIEW 3: EVIDENCE FILES */}
       {viewMode === 'documents' && (
         <div className="space-y-3">
-          {isUsingSampleDocuments && (
-            <p role="status" className="rounded-lg border border-sky-300 bg-sky-50 px-3 py-2 text-xs text-sky-800 dark:border-sky-900 dark:bg-sky-950/30 dark:text-sky-300">
-              Showing sample documents. Files you add from your device stay in this page only and are not sent to a server.
-            </p>
-          )}
-          {documentLoadError && (
-            <p role="alert" className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300">
-              Could not load vault documents: {documentLoadError}
-            </p>
-          )}
-          {visibleDocuments.length === 0 && !documentLoadError && (
-            <p className="rounded-lg border border-dashed border-zinc-300 p-6 text-center text-xs text-zinc-500 dark:border-[#2d2b38]">
-              No documents uploaded yet.
-            </p>
+          {visibleDocuments.length === 0 && (
+            <div className="p-10 text-center border border-dashed border-zinc-300 dark:border-[#2d2b38] rounded-3xl bg-white dark:bg-[#07070a] space-y-3">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 flex items-center justify-center mx-auto text-emerald-500">
+                <FileText className="w-6 h-6" />
+              </div>
+              <h3 className="font-bold text-sm text-zinc-900 dark:text-white">
+                No Documents in Storage
+              </h3>
+              <p className="text-xs text-zinc-500 dark:text-[#8c879a] max-w-md mx-auto">
+                Upload PDFs or images to extract cryptographic evidence and link them to your personal graph.
+              </p>
+              <button
+                onClick={() => setIsUploadDocOpen(true)}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#5a25eb] text-white text-xs font-medium cursor-pointer shadow-sm hover:bg-[#6b37fa]"
+              >
+                <UploadCloud className="w-3.5 h-3.5" />
+                <span>Upload Document</span>
+              </button>
+            </div>
           )}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {visibleDocuments.map((doc) => {
@@ -907,7 +942,6 @@ export const MemoryPage: React.FC = () => {
                           }
                           if (backendRes && backendRes.document) {
                             setDocuments((prev) => [backendRes.document, ...prev]);
-                            setIsUsingSampleDocuments(false);
                           }
                         })();
 

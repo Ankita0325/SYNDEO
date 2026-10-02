@@ -123,9 +123,80 @@ class GraphStore:
         self.neo4j_error: Optional[str] = None
         
         self._init_neo4j_driver()
-        self._seed_initial_data()
         if self.neo4j_connected:
-            self._sync_seed_to_neo4j()
+            self._load_from_neo4j()
+
+    def _load_from_neo4j(self):
+        """Loads real claims and documents directly from live Neo4j Aura database."""
+        if not self.neo4j_driver or not self.neo4j_connected:
+            return
+        try:
+            with self.neo4j_driver.session() as session:
+                # Merge Person Root
+                session.run(
+                    "MERGE (p:Person {person_id: $person_id}) ON CREATE SET p.name = $name",
+                    person_id=self.person_id, name=self.user_name
+                )
+                # Load Documents
+                doc_res = session.run("MATCH (d:Document) RETURN d")
+                for record in doc_res:
+                    d_node = record["d"]
+                    doc = EvidenceDocument(
+                        doc_id=d_node.get("id", f"doc-{uuid.uuid4().hex[:6]}"),
+                        file_name=d_node.get("name", "Document"),
+                        category=d_node.get("category", "identity"),
+                        file_size=d_node.get("file_size", "1.0 MB"),
+                        sha256_hash=d_node.get("sha256_hash", ""),
+                        status=d_node.get("status", "Parsed")
+                    )
+                    self.documents[doc.id] = doc
+
+                # Load Claims
+                claim_res = session.run(
+                    """
+                    MATCH (c:Claim)
+                    OPTIONAL MATCH (c)-[:BACKED_BY]->(d:Document)
+                    RETURN c, d
+                    """
+                )
+                for record in claim_res:
+                    c = record["c"]
+                    d = record.get("d")
+                    node = GraphNode(
+                        node_id=c.get("id", f"claim-{uuid.uuid4().hex[:6]}"),
+                        category=c.get("category", "identity"),
+                        field_name=c.get("field_name", ""),
+                        field_value=c.get("field_value", ""),
+                        source=c.get("source", "Confirmed by you"),
+                        confidence=c.get("confidence", "user-confirmed"),
+                        assurance_level=c.get("assurance_level", "LEVEL_1_USER_ASSERTED"),
+                        evidence_doc_name=d.get("name") if d else c.get("evidence_doc_name"),
+                        evidence_doc_hash=d.get("sha256_hash") if d else c.get("evidence_doc_hash"),
+                        is_singular=c.get("is_singular", False),
+                        is_sensitive=c.get("is_sensitive", False)
+                    )
+                    self.nodes[node.id] = node
+            logger.info(f"Loaded {len(self.nodes)} real claims and {len(self.documents)} documents from Neo4j Aura.")
+        except Exception as e:
+            logger.warning(f"Failed to load from Neo4j: {e}")
+
+    def clear_all(self):
+        """Wipes all claims, documents, and nodes from memory and Neo4j database."""
+        self.nodes.clear()
+        self.documents.clear()
+        self.history.clear()
+        self.conflicts.clear()
+        if self.neo4j_driver and self.neo4j_connected:
+            try:
+                with self.neo4j_driver.session() as session:
+                    session.run("MATCH (n) DETACH DELETE n")
+                    session.run(
+                        "MERGE (p:Person {person_id: $person_id}) ON CREATE SET p.name = $name",
+                        person_id=self.person_id, name=self.user_name
+                    )
+                logger.info("Successfully wiped Neo4j graph to empty state.")
+            except Exception as e:
+                logger.warning(f"Error wiping Neo4j: {e}")
 
     def _init_neo4j_driver(self):
         """Initializes Neo4j Aura Connection from environment variables."""
