@@ -69,7 +69,119 @@
 
 ---
 
-## 4. Architecture
+## 4. Quick Start & Local Setup 🚀
+
+Follow these steps to run the complete SYNDEO ecosystem (Web Application, FastAPI Multi-Agent Backend, and Chrome Autofill Extension) locally.
+
+### Prerequisites
+- **Node.js** v20.x or later (`node -v`)
+- **Python** 3.11.x (`python --version`)
+- **Git**
+- **Google Chrome** or Chromium-based browser (for the Extension)
+- *(Optional)* [Neo4j AuraDB Free Instance](https://neo4j.com/cloud/platform/aura-graph-database/) & [Google Gemini API Key](https://aistudio.google.com/)
+
+---
+
+### Step 1: Clone the Repository
+
+```bash
+git clone https://github.com/indresh404/SYNDEO.git
+cd SYNDEO
+```
+
+---
+
+### Step 2: Backend Setup (FastAPI Multi-Agent Server)
+
+1. Navigate to the project root and create a Python virtual environment:
+   ```bash
+   # Windows
+   python -m venv venv
+   .\venv\Scripts\activate
+
+   # macOS / Linux
+   python3 -m venv venv
+   source venv/bin/activate
+   ```
+
+2. Install backend dependencies:
+   ```bash
+   pip install -r backend/requirements.txt
+   ```
+
+3. Configure environment variables:
+   ```bash
+   # Copy the example environment template
+   cp backend/.env.example backend/.env
+   ```
+   Open `backend/.env` and provide your credentials (the system also provides offline in-memory graph fallbacks if Neo4j is not configured):
+   ```ini
+   # Neo4j Graph Database (Optional: falls back to in-memory graph store)
+   NEO4J_URI=neo4j+s://your-instance.databases.neo4j.io
+   NEO4J_USERNAME=neo4j
+   NEO4J_PASSWORD=your_neo4j_password
+
+   # AI Inference & OCR (Optional: falls back to local deterministic regex engine)
+   GEMINI_API_KEY=your_gemini_api_key
+   SARVAM_API_KEY=your_sarvam_api_key
+   HUGGINGFACE_API_TOKEN=your_huggingface_token
+   PORT=8000
+   ```
+
+4. Launch the FastAPI server:
+   ```bash
+   python backend/main.py
+   # Or using uvicorn directly:
+   uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
+   ```
+   - **Backend API**: `http://127.0.0.1:8000`
+   - **Interactive API Docs (Swagger)**: `http://127.0.0.1:8000/docs`
+   - **Health & Neo4j Connectivity**: `http://127.0.0.1:8000/api/health`
+
+---
+
+### Step 3: Frontend Setup (React 19 + Vite + Tailwind)
+
+1. In a new terminal window, install frontend dependencies:
+   ```bash
+   npm install
+   ```
+
+2. Start the Vite development server:
+   ```bash
+   npm run dev
+   ```
+   - Open your browser at: `http://localhost:5173`
+
+---
+
+### Step 4: Chrome Extension Setup (MemoryFill Autofill)
+
+1. Open Google Chrome and navigate to `chrome://extensions/`
+2. Enable **Developer mode** using the toggle switch in the top-right corner.
+3. Click the **"Load unpacked"** button in the top-left.
+4. Select the `extension/` directory inside your cloned `SYNDEO` repository (`D:/path/to/SYNDEO/extension`).
+5. Click the puzzle icon in Chrome and **pin** the **SYNDEO MemoryFill** extension.
+6. Navigate to any web form (e.g. Google Forms, job portal, college registration) and click the extension popup to scan and autofill!
+
+---
+
+### Step 5: Running Tests & Quality Verification
+
+```bash
+# Run Backend Security & Document Intelligence Test Suite (14 tests)
+pytest backend/test_document_intelligence.py -v
+
+# Run Frontend Type-Check & Production Build
+npm run build
+
+# Run Frontend Linter
+npm run lint
+```
+
+---
+
+## 5. Architecture
 
 ```text
         React / Vite Web App           Chrome Extension (MV3)
@@ -104,7 +216,7 @@
 
 ---
 
-## 5. Data Model
+## 6. Data Model
 
 **Claim** (central object): `claim_id, person_id, field, value, source, assurance, status, version, supersedes, valid_from, valid_to`
 
@@ -121,7 +233,7 @@
 
 ---
 
-## 6. Storage and Neo4j
+## 7. Storage and Neo4j
 
 | Store | Role |
 | :--- | :--- |
@@ -200,7 +312,7 @@ RETURN c.claim_id, c.version, [n IN nodes(path) | n.claim_id] AS history
 
 ---
 
-## 7. Core Workflows
+## 8. Core Workflows
 
 ### Document ingestion
 
@@ -246,7 +358,7 @@ Request → Disclosure Composer (minimum claims) → Privacy Advisor → Policy 
 
 ---
 
-## 8. Policy Engine and Audit
+## 9. Policy Engine and Audit
 
 **Policy Engine** (deterministic Python) checks: authentication, ownership, token validity, revocation, expiry, field scope, sensitivity, minimum assurance, consent. It runs before the LLM sees data and again before state changes.
 
@@ -254,7 +366,7 @@ Request → Disclosure Composer (minimum claims) → Privacy Advisor → Policy 
 
 ---
 
-## 9. Security
+## 10. Security
 
 - Supabase Auth → verified JWT is the only identity source; `person_id` resolved server-side.
 - BOLA and field-level authorization; implement and test real RLS (note: the service-role key bypasses RLS).
@@ -265,7 +377,7 @@ Request → Disclosure Composer (minimum claims) → Privacy Advisor → Policy 
 
 ---
 
-## 10. API (`/api/v1`)
+## 11. API (`/api/v1`)
 
 | Group | Endpoints |
 | :--- | :--- |
@@ -281,7 +393,7 @@ Errors: `401 UNAUTHENTICATED`, `403 FORBIDDEN / OUT_OF_SCOPE / SHARE_REVOKED / S
 
 ---
 
-## 11. Tech Stack
+## 12. Tech Stack
 
 | Layer | Technology |
 | :--- | :--- |
@@ -296,7 +408,7 @@ Errors: `401 UNAUTHENTICATED`, `403 FORBIDDEN / OUT_OF_SCOPE / SHARE_REVOKED / S
 
 ---
 
-## 12. Roadmap
+## 13. Roadmap
 
 | Phase | Scope |
 | :--- | :--- |
@@ -308,7 +420,7 @@ Errors: `401 UNAUTHENTICATED`, `403 FORBIDDEN / OUT_OF_SCOPE / SHARE_REVOKED / S
 
 ---
 
-## 13. Honest Limitations
+## 14. Honest Limitations
 
 - Hashing proves "unchanged since upload," not "genuine."
 - Without an issuer integration, claims are user-provided or evidence-linked, not certified.
@@ -321,7 +433,7 @@ Errors: `401 UNAUTHENTICATED`, `403 FORBIDDEN / OUT_OF_SCOPE / SHARE_REVOKED / S
 
 ---
 
-## 14. Demo Flow
+## 15. Demo Flow
 
 1. Upload marksheet → AI extracts → user confirms → stored with evidence hash
 2. Graph view shows Person → Education → Claim → Evidence
