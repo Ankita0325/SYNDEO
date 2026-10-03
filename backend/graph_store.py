@@ -169,7 +169,15 @@ class GraphStore:
         self.history: List[Dict[str, Any]] = []
         self.conflicts: List[Dict[str, Any]] = []
         
-        # Neo4j Driver & State
+        # Disk Storage Persistence
+        self.data_dir = os.path.join(os.path.dirname(__file__), "data")
+        os.makedirs(self.data_dir, exist_ok=True)
+        self.storage_file = os.path.join(self.data_dir, "vault_store.json")
+
+        # 1. Load from persistent disk storage first
+        self._load_from_disk()
+
+        # 2. Neo4j Driver & State
         self.neo4j_driver: Optional[Driver] = None
         self.neo4j_connected: bool = False
         self.neo4j_error: Optional[str] = None
@@ -177,6 +185,81 @@ class GraphStore:
         self._init_neo4j_driver()
         if self.neo4j_connected:
             self._load_from_neo4j()
+
+        # 3. If completely empty, seed initial verified claims and persist
+        if len(self.nodes) == 0:
+            self._seed_initial_data()
+            self._ensure_core_identity_claims()
+            self._save_to_disk()
+
+    def _save_to_disk(self):
+        """Persists all claims, documents, and history to local disk storage atomically."""
+        try:
+            payload = {
+                "user_name": self.user_name,
+                "person_id": self.person_id,
+                "nodes": [n.to_dict() for n in self.nodes.values()],
+                "documents": [d.to_dict() for d in self.documents.values()],
+                "history": self.history,
+                "conflicts": self.conflicts,
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            }
+            temp_file = f"{self.storage_file}.tmp"
+            with open(temp_file, "w", encoding="utf-8") as f:
+                json.dump(payload, f, indent=2, ensure_ascii=False)
+            if os.path.exists(self.storage_file):
+                os.remove(self.storage_file)
+            os.rename(temp_file, self.storage_file)
+        except Exception as e:
+            logger.warning(f"Failed to save vault store to disk: {e}")
+
+    def _load_from_disk(self):
+        """Loads claims, documents, and history from local disk storage."""
+        if not os.path.exists(self.storage_file):
+            return
+        try:
+            with open(self.storage_file, "r", encoding="utf-8") as f:
+                payload = json.load(f)
+            
+            raw_nodes = payload.get("nodes", [])
+            for item in raw_nodes:
+                node = GraphNode(
+                    node_id=item.get("id", f"rec-{uuid.uuid4().hex[:6]}"),
+                    category=item.get("category", "identity"),
+                    field_name=item.get("fieldName", item.get("field_name", "")),
+                    field_value=item.get("value", item.get("field_value", "")),
+                    source=item.get("source", "Confirmed by you"),
+                    confidence=item.get("confidence", "user-confirmed"),
+                    assurance_level=item.get("assuranceLevel", item.get("assurance_level", "LEVEL_1_USER_ASSERTED")),
+                    evidence_doc_name=item.get("evidenceDocName", item.get("evidence_doc_name")),
+                    evidence_doc_hash=item.get("evidenceDocHash", item.get("evidence_doc_hash")),
+                    is_singular=bool(item.get("isSingular", item.get("is_singular", False))),
+                    is_sensitive=bool(item.get("isSensitive", item.get("is_sensitive", False))),
+                    raw_numeric_value=item.get("rawNumericValue", item.get("raw_numeric_value")),
+                    status=item.get("status", "ACTIVE"),
+                    last_updated=item.get("lastUpdated", item.get("last_updated"))
+                )
+                self.nodes[node.id] = node
+
+            raw_docs = payload.get("documents", [])
+            for item in raw_docs:
+                doc = EvidenceDocument(
+                    doc_id=item.get("id", f"doc-{uuid.uuid4().hex[:6]}"),
+                    file_name=item.get("name", item.get("file_name", "Document")),
+                    category=item.get("category", "identity"),
+                    file_size=item.get("fileSize", item.get("file_size", "1.0 MB")),
+                    sha256_hash=item.get("sha256Hash", item.get("sha256_hash", "")),
+                    extracted_fields_count=int(item.get("extractedFieldsCount", item.get("extracted_fields_count", 0))),
+                    status=item.get("status", "Parsed"),
+                    upload_date=item.get("uploadDate", item.get("upload_date"))
+                )
+                self.documents[doc.id] = doc
+
+            self.history = payload.get("history", [])
+            self.conflicts = payload.get("conflicts", [])
+            logger.info(f"Loaded {len(self.nodes)} claims and {len(self.documents)} documents from disk storage.")
+        except Exception as e:
+            logger.warning(f"Failed to load vault store from disk: {e}")
 
     def _load_from_neo4j(self):
         """Loads real claims and documents directly from live Neo4j Aura database."""
@@ -287,6 +370,7 @@ class GraphStore:
                 logger.info("Successfully wiped Neo4j graph to empty state.")
             except Exception as e:
                 logger.warning(f"Error wiping Neo4j: {e}")
+        self._save_to_disk()
 
     def _init_neo4j_driver(self):
         """Initializes Neo4j Aura Connection from environment variables."""
@@ -452,11 +536,13 @@ class GraphStore:
         evidence_doc_name: Optional[str] = None,
         evidence_doc_hash: Optional[str] = None,
         is_singular: bool = False,
-        raw_numeric_value: Optional[float] = None
+        raw_numeric_value: Optional[float] = None,
+        force_override: bool = False
     ) -> Tuple[GraphNode, Optional[Dict[str, Any]]]:
         """
         Commits claim to Graph Store and mirrors to Neo4j with strict deduplication.
         Detects singular conflicts and maintains full audit history.
+        When force_override is True (e.g. user confirmation), updates existing node to ACTIVE with the new verified value.
         """
         canon_cat, canon_name, auto_singular = _normalize_field_name(field_name, category)
         target_category = category if category and category != "identity" and canon_cat == "identity" and not any(s in canon_name.lower() for s in ["github", "linkedin", "discord", "twitter", "portfolio"]) else canon_cat
@@ -466,7 +552,7 @@ class GraphStore:
         # Check existing nodes for deduplication
         existing_node = None
         for n in self.nodes.values():
-            if n.status != "ACTIVE":
+            if n.status not in ["ACTIVE", "NEEDS_REVIEW"]:
                 continue
             # 1. Exact or normalized field name match in the same category
             same_cat = (n.category.lower() == target_category.lower())
@@ -493,8 +579,8 @@ class GraphStore:
         assurance = "LEVEL_2_EVIDENCE_ATTACHED" if source == "Extracted from document" else "LEVEL_1_USER_ASSERTED"
 
         if existing_node:
-            # If singular and value changed significantly
-            if (existing_node.is_singular or effective_singular) and existing_node.field_value.strip().lower() != field_value.strip().lower():
+            # If singular conflict and NOT force_override
+            if not force_override and (existing_node.is_singular or effective_singular) and existing_node.field_value.strip().lower() != field_value.strip().lower():
                 conflict_record = {
                     "id": f"conflict-{uuid.uuid4().hex[:8]}",
                     "fieldName": target_name,
@@ -507,6 +593,7 @@ class GraphStore:
                 }
                 self.conflicts.append(conflict_record)
                 existing_node.status = "NEEDS_REVIEW"
+                self._save_to_disk()
                 return existing_node, conflict_record
 
             self.history.append({
@@ -518,13 +605,14 @@ class GraphStore:
                 "changedAt": datetime.now(timezone.utc).isoformat()
             })
 
-            # Update existing node in-place to avoid duplicates
+            # Update existing node in-place to avoid duplicates and ensure active state
             existing_node.field_name = target_name
             existing_node.field_value = field_value.strip()
             existing_node.category = target_category
             existing_node.source = source
             existing_node.confidence = confidence
             existing_node.assurance_level = assurance
+            existing_node.status = "ACTIVE"
             if evidence_doc_name:
                 existing_node.evidence_doc_name = evidence_doc_name
             if evidence_doc_hash:
@@ -533,7 +621,11 @@ class GraphStore:
                 existing_node.raw_numeric_value = raw_numeric_value
             existing_node.last_updated = datetime.now(timezone.utc).strftime("%d %b %Y")
 
+            # Remove resolved conflict if present
+            self.conflicts = [c for c in self.conflicts if c.get("fieldName", "").lower() != target_name.lower()]
+
             self._persist_claim_to_neo4j(existing_node)
+            self._save_to_disk()
             return existing_node, None
 
         new_id = f"rec-{uuid.uuid4().hex[:8]}"
@@ -552,6 +644,7 @@ class GraphStore:
         )
         self.nodes[new_id] = new_node
         self._persist_claim_to_neo4j(new_node)
+        self._save_to_disk()
         return new_node, None
 
     def _persist_claim_to_neo4j(self, node: GraphNode):
@@ -567,6 +660,7 @@ class GraphStore:
                         c.field_value = $field_value, c.source = $source,
                         c.confidence = $confidence, c.assurance_level = $assurance_level,
                         c.is_singular = $is_singular, c.is_sensitive = $is_sensitive,
+                        c.evidence_doc_name = $doc_name, c.evidence_doc_hash = $doc_hash,
                         c.status = $status, c.last_updated = $last_updated
                     MERGE (p)-[:HAS_CLAIM]->(c)
                     """,
@@ -574,26 +668,28 @@ class GraphStore:
                     field_name=node.field_name, field_value=node.field_value,
                     source=node.source, confidence=node.confidence,
                     assurance_level=node.assurance_level, is_singular=node.is_singular,
-                    is_sensitive=node.is_sensitive, status=node.status,
+                    is_sensitive=node.is_sensitive, doc_name=node.evidence_doc_name or "",
+                    doc_hash=node.evidence_doc_hash or "", status=node.status,
                     last_updated=node.last_updated
                 )
-                if node.evidence_doc_hash:
+                if node.evidence_doc_hash or node.evidence_doc_name:
                     session.run(
                         """
                         MATCH (c:Claim {id: $claim_id})
-                        MATCH (d:Document {sha256_hash: $doc_hash})
+                        MATCH (d:Document)
+                        WHERE (d.sha256_hash = $doc_hash OR d.name = $doc_name)
                         MERGE (c)-[:BACKED_BY]->(d)
                         """,
-                        claim_id=node.id, doc_hash=node.evidence_doc_hash
+                        claim_id=node.id, doc_hash=node.evidence_doc_hash or "", doc_name=node.evidence_doc_name or ""
                     )
         except Exception as e:
             logger.warning(f"Neo4j claim persistence warning: {e}")
 
-    def add_document(self, file_name: str, category: str, file_size: str, content_bytes: bytes) -> EvidenceDocument:
+    def add_document(self, file_name: str, category: str, file_size: str, content_bytes: bytes, doc_id: Optional[str] = None) -> EvidenceDocument:
         sha256_hash = hashlib.sha256(content_bytes).hexdigest()
-        doc_id = f"doc-{uuid.uuid4().hex[:8]}"
+        resolved_doc_id = doc_id or f"doc-{uuid.uuid4().hex[:8]}"
         doc = EvidenceDocument(
-            doc_id=doc_id,
+            doc_id=resolved_doc_id,
             file_name=file_name,
             category=category,
             file_size=file_size,
@@ -601,7 +697,7 @@ class GraphStore:
             extracted_fields_count=0,
             status="Parsed"
         )
-        self.documents[doc_id] = doc
+        self.documents[resolved_doc_id] = doc
 
         if self.neo4j_driver and self.neo4j_connected:
             try:
@@ -619,6 +715,7 @@ class GraphStore:
             except Exception as e:
                 logger.warning(f"Neo4j document sync error: {e}")
 
+        self._save_to_disk()
         return doc
 
     def query_graph_by_keyword(self, query: str) -> List[GraphNode]:
@@ -798,10 +895,12 @@ class GraphStore:
                 "type": "cat-to-rec",
                 "color": "rgba(168, 85, 247, 0.3)"
             })
-            if claim.evidence_doc_name:
-                # Link to evidence document
+            if claim.evidence_doc_name or claim.evidence_doc_hash:
+                # Link to evidence document by name or hash
                 for doc in self.documents.values():
-                    if doc.name == claim.evidence_doc_name:
+                    doc_name_match = doc.name and claim.evidence_doc_name and doc.name.strip().lower() == claim.evidence_doc_name.strip().lower()
+                    doc_hash_match = claim.evidence_doc_hash and doc.sha256_hash == claim.evidence_doc_hash
+                    if doc_name_match or doc_hash_match:
                         links.append({
                             "source": claim.id,
                             "target": doc.id,
