@@ -80,7 +80,9 @@ export const MemoryPage: React.FC = () => {
         const parsed = JSON.parse(cached);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
-    } catch {}
+    } catch {
+      // Ignore localStorage read error
+    }
     return [];
   });
   const [documents, setDocuments] = useState<DocumentItem[]>(() => {
@@ -90,7 +92,9 @@ export const MemoryPage: React.FC = () => {
         const parsed = JSON.parse(cached);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
-    } catch {}
+    } catch {
+      // Ignore localStorage read error
+    }
     return [];
   });
   const [localDocuments, setLocalDocuments] = useState<LocalDocument[]>([]);
@@ -117,7 +121,9 @@ export const MemoryPage: React.FC = () => {
     if (records && records.length > 0) {
       try {
         localStorage.setItem('syndeo_vault_records', JSON.stringify(records));
-      } catch {}
+      } catch {
+        // Ignore localStorage write error
+      }
     }
   }, [records]);
 
@@ -125,7 +131,9 @@ export const MemoryPage: React.FC = () => {
     if (documents && documents.length > 0) {
       try {
         localStorage.setItem('syndeo_vault_documents', JSON.stringify(documents));
-      } catch {}
+      } catch {
+        // Ignore localStorage write error
+      }
     }
   }, [documents]);
 
@@ -170,7 +178,9 @@ export const MemoryPage: React.FC = () => {
     try {
       localStorage.removeItem('syndeo_vault_records');
       localStorage.removeItem('syndeo_vault_documents');
-    } catch {}
+    } catch {
+      // Ignore localStorage remove error
+    }
     await clearMemoryStore();
   };
 
@@ -180,7 +190,9 @@ export const MemoryPage: React.FC = () => {
     try {
       localStorage.setItem('syndeo_vault_records', JSON.stringify(initialRecords));
       localStorage.setItem('syndeo_vault_documents', JSON.stringify(initialDocuments));
-    } catch {}
+    } catch {
+      // Ignore localStorage write error
+    }
   };
 
 

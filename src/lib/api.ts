@@ -123,7 +123,9 @@ export async function addClaimToBackend(claim: {
           ? existing.filter((r: any) => r.id !== data.record.id && (r.fieldName.toLowerCase().trim() !== data.record.fieldName.toLowerCase().trim() || r.category !== data.record.category))
           : [];
         localStorage.setItem('syndeo_vault_records', JSON.stringify([data.record, ...filtered]));
-      } catch {}
+      } catch {
+        // Ignore localStorage error
+      }
     }
     return data;
   } catch (err) {
@@ -148,7 +150,9 @@ export async function addClaimToBackend(claim: {
           : [];
         localStorage.setItem('syndeo_vault_records', JSON.stringify([localRec, ...filtered]));
         return { record: localRec, conflict: null };
-      } catch {}
+      } catch {
+        // Ignore localStorage error
+      }
     }
     return null;
   }
