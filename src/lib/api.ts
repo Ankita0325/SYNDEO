@@ -114,28 +114,109 @@ export async function addClaimToBackend(claim: {
       body: JSON.stringify(claim),
     });
     if (!res.ok) throw new Error('Failed to save claim');
-    return await res.json();
+    const data = await res.json();
+    if (data && data.record && typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem('syndeo_vault_records');
+        const existing = cached ? JSON.parse(cached) : [];
+        const filtered = Array.isArray(existing)
+          ? existing.filter((r: any) => r.id !== data.record.id && (r.fieldName.toLowerCase().trim() !== data.record.fieldName.toLowerCase().trim() || r.category !== data.record.category))
+          : [];
+        localStorage.setItem('syndeo_vault_records', JSON.stringify([data.record, ...filtered]));
+      } catch {}
+    }
+    return data;
   } catch (err) {
     console.warn('Backend API unavailable, saving locally.', err);
+    if (typeof window !== 'undefined') {
+      try {
+        const localRec = {
+          id: `rec-${Date.now()}`,
+          category: claim.category || 'identity',
+          fieldName: claim.fieldName,
+          value: claim.value,
+          source: claim.source || 'Confirmed by you',
+          confidence: 'user-confirmed',
+          assuranceLevel: 'LEVEL_1_USER_ASSERTED',
+          lastUpdated: 'Just now',
+          status: 'ACTIVE',
+        };
+        const cached = localStorage.getItem('syndeo_vault_records');
+        const existing = cached ? JSON.parse(cached) : [];
+        const filtered = Array.isArray(existing)
+          ? existing.filter((r: any) => r.fieldName.toLowerCase().trim() !== claim.fieldName.toLowerCase().trim() || r.category !== claim.category)
+          : [];
+        localStorage.setItem('syndeo_vault_records', JSON.stringify([localRec, ...filtered]));
+        return { record: localRec, conflict: null };
+      } catch {}
+    }
     return null;
   }
 }
 
-export async function uploadDocumentToBackend(file: File, category?: string) {
+export async function uploadDocumentToBackend(file: File, category?: string, extractedText?: string) {
   try {
     const formData = new FormData();
     formData.append('file', file);
     if (category) formData.append('category', category);
+    if (extractedText) formData.append('extracted_text', extractedText);
 
     const res = await apiFetch('/api/documents/upload', {
       method: 'POST',
       body: formData,
     });
-    if (!res.ok) throw new Error('Document upload failed');
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.detail || 'Document upload failed');
+    }
     return await res.json();
   } catch (err) {
     console.warn('Backend API unavailable, processing locally.', err);
+    throw err;
+  }
+}
+
+export async function fetchDocumentProposal(documentId: string) {
+  try {
+    const res = await apiFetch(`/api/documents/proposals/${documentId}`);
+    if (!res.ok) throw new Error('Failed to fetch document proposal');
+    return await res.json();
+  } catch (err) {
+    console.warn('Failed to fetch proposal.', err);
     return null;
+  }
+}
+
+export async function confirmDocumentClaims(
+  documentId: string,
+  acceptedClaims: Array<{
+    field: string;
+    value: string;
+    category?: string;
+    is_singular?: boolean;
+    is_sensitive?: boolean;
+    raw_numeric_value?: number;
+  }>,
+  rejectedFields?: string[]
+) {
+  try {
+    const res = await apiFetch('/api/documents/confirm-claims', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        document_id: documentId,
+        accepted_claims: acceptedClaims,
+        rejected_claim_fields: rejectedFields || [],
+      }),
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.detail || 'Failed to confirm claims');
+    }
+    return await res.json();
+  } catch (err) {
+    console.warn('Failed to confirm claims with backend.', err);
+    throw err;
   }
 }
 

@@ -298,74 +298,48 @@ export const ObsidianGraphView: React.FC<ObsidianGraphViewProps> = ({
           baseDistance: 45,
           strength: 0.16,
         });
-
-        // 4. Evidence Documents (8px diameter / radius 4) tightly bound to Claim
-        if (showDocuments && rec.evidenceDocName) {
-          const docId = `doc-${rec.id}`;
-          const docAngle = recAngle + (recIdx % 2 === 0 ? 0.3 : -0.3);
-          const docDistance = recDistance + 24;
-
-          const docX = catX + Math.cos(docAngle) * docDistance;
-          const docY = catY + Math.sin(docAngle) * docDistance;
-
-          const docNode: GraphNode = {
-            id: docId,
-            label: rec.evidenceDocName,
-            sublabel: 'Evidence Document',
-            value: rec.evidenceDocName,
-            type: 'document',
-            category: rec.category,
-            x: docX,
-            y: docY,
-            vx: 0,
-            vy: 0,
-            radius: 4,
-            color: '#10b981',
-            seed: recIdx * 13 + 30,
-            priority: 20,
-          };
-          calculatedNodes.push(docNode);
-
-          calculatedLinks.push({
-            source: rec.id,
-            target: docId,
-            type: 'doc-to-rec',
-            color: '#059669',
-            isDashed: true,
-            baseDistance: 28,
-            strength: 0.20,
-          });
-        }
       });
     });
 
-    // 5. Standalone Vault Documents
-    if (showDocuments && Array.isArray(documents)) {
-      documents.forEach((doc, docIdx) => {
-        if (!calculatedNodes.some((n) => n.id === `doc-${doc.id}` || n.label === doc.name)) {
-          const catKey = doc.category || 'education';
+    // 4. Evidence Documents (Consolidated unique nodes with links from each extracted claim)
+    if (showDocuments) {
+      const docNodeMap = new Map<string, GraphNode>();
+
+      // Register all vault documents first
+      if (Array.isArray(documents)) {
+        documents.forEach((doc, docIdx) => {
+          if (!doc || !doc.name) return;
+          const catKey = (doc.category as LifeStageCategory) || 'education';
           const catNode = calculatedNodes.find((n) => n.id === `cat-${catKey}`);
           const catX = catNode ? catNode.x : centerX;
           const catY = catNode ? catNode.y : centerY;
           const docAngle = Math.random() * Math.PI * 2;
-          const docDistance = 42 + (docIdx % 3) * 14;
+          const docDistance = 46 + (docIdx % 3) * 14;
+
+          const rawType = doc.fileType || (doc as any).file_type || (doc.name.toLowerCase().endsWith('.pdf') ? 'PDF' : 'IMAGE');
+          const fileTypeStr = String(rawType).toUpperCase();
+          const fileSizeStr = doc.fileSize || (doc as any).file_size || '1.0 MB';
 
           const docNode: GraphNode = {
-            id: `doc-${doc.id}`,
+            id: `doc-${doc.id || doc.name}`,
             label: doc.name,
-            sublabel: 'Evidence Document',
-            value: `${doc.fileType.toUpperCase()} · ${doc.fileSize}`,
+            sublabel: `${fileTypeStr} · ${fileSizeStr}`,
+            value: `${doc.name} (${fileTypeStr} · ${fileSizeStr})`,
             type: 'document',
             category: doc.category,
             x: catX + Math.cos(docAngle) * docDistance,
             y: catY + Math.sin(docAngle) * docDistance,
             vx: 0,
             vy: 0,
-            radius: 4,
+            radius: 5.5,
             color: '#10b981',
             seed: docIdx * 19 + 60,
-            priority: 20,
+            priority: 30,
           };
+          docNodeMap.set(doc.name.toLowerCase().trim(), docNode);
+          if (doc.id) {
+            docNodeMap.set(doc.id.toLowerCase().trim(), docNode);
+          }
           calculatedNodes.push(docNode);
 
           if (catNode) {
@@ -375,11 +349,70 @@ export const ObsidianGraphView: React.FC<ObsidianGraphViewProps> = ({
               type: 'doc-to-rec',
               color: '#059669',
               isDashed: true,
-              baseDistance: 34,
-              strength: 0.18,
+              baseDistance: 38,
+              strength: 0.15,
+            });
+          }
+        });
+      }
+
+      // Link each record with evidenceDocName to its corresponding Document node
+      records.forEach((rec, recIdx) => {
+        if (!rec.evidenceDocName) return;
+        const cleanDocName = rec.evidenceDocName.toLowerCase().trim();
+        let docNode = docNodeMap.get(cleanDocName);
+
+        if (!docNode) {
+          // If document was not in documents list, create the unique document node now
+          const catKey = (rec.category as LifeStageCategory) || 'education';
+          const catNode = calculatedNodes.find((n) => n.id === `cat-${catKey}`);
+          const catX = catNode ? catNode.x : centerX;
+          const catY = catNode ? catNode.y : centerY;
+          const docAngle = Math.random() * Math.PI * 2;
+          const docDistance = 50;
+
+          docNode = {
+            id: `doc-${cleanDocName.replace(/[^a-z0-9]/g, '_')}`,
+            label: rec.evidenceDocName,
+            sublabel: rec.evidenceDocName.toLowerCase().endsWith('.pdf') ? 'PDF Document' : 'Evidence Document',
+            value: rec.evidenceDocName,
+            type: 'document',
+            category: rec.category,
+            x: catX + Math.cos(docAngle) * docDistance,
+            y: catY + Math.sin(docAngle) * docDistance,
+            vx: 0,
+            vy: 0,
+            radius: 5.5,
+            color: '#10b981',
+            seed: recIdx * 13 + 30,
+            priority: 25,
+          };
+          docNodeMap.set(cleanDocName, docNode);
+          calculatedNodes.push(docNode);
+
+          if (catNode) {
+            calculatedLinks.push({
+              source: `cat-${catKey}`,
+              target: docNode.id,
+              type: 'doc-to-rec',
+              color: '#059669',
+              isDashed: true,
+              baseDistance: 38,
+              strength: 0.15,
             });
           }
         }
+
+        // Link Claim Record -> Evidence Document Node
+        calculatedLinks.push({
+          source: rec.id,
+          target: docNode.id,
+          type: 'doc-to-rec',
+          color: '#10b981',
+          isDashed: true,
+          baseDistance: 32,
+          strength: 0.22,
+        });
       });
     }
 

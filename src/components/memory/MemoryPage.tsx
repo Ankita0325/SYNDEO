@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { LifeStageCategory, RecordField, DocumentItem, OCRDocumentResult } from '../../types';
 import { initialRecords, initialDocuments } from '../../data/mockData';
-import { fetchRecordsFromBackend, fetchDocumentsFromBackend, addClaimToBackend, uploadDocumentToBackend, clearMemoryStore } from '../../lib/api';
+import { fetchRecordsFromBackend, fetchDocumentsFromBackend, addClaimToBackend, uploadDocumentToBackend, confirmDocumentClaims, clearMemoryStore } from '../../lib/api';
 import { runLocalOcr } from '../../lib/ocrClient';
 import { StatusBadge } from '../common/Badge';
 import { Modal } from '../common/Modal';
@@ -25,22 +25,74 @@ import {
   LayoutGrid,
   Copy,
   Check,
-  FileType,
   X,
   Loader2,
   Eye,
   ShieldCheck,
   MessageSquare,
+  AlertTriangle,
+  Cpu,
 } from 'lucide-react';
 
 type ViewMode = 'graph' | 'cards' | 'documents';
 type OCRRecordField = RecordField & { ocrDocument: OCRDocumentResult };
 type LocalDocument = DocumentItem & { fileUrl: string; ocrResult: OCRDocumentResult };
 
+export interface ProposedClaimItem {
+  field: string;
+  value: string;
+  originalValue: string;
+  confidence: number;
+  category: LifeStageCategory;
+  sourceRegion?: { page?: number };
+  extractionMethod?: string;
+  status: string;
+  assuranceLevel: string;
+  conflictInfo?: {
+    fieldName: string;
+    existingValue: string;
+    conflictingValue: string;
+  };
+  isSingular?: boolean;
+  isSensitive?: boolean;
+  rawNumericValue?: number;
+  accepted: boolean;
+}
+
+export interface DocumentProposalState {
+  documentId: string;
+  fileName: string;
+  fileSize: string;
+  sha256Hash: string;
+  documentType: string;
+  provider: string;
+  model: string;
+  status: string;
+  claims: ProposedClaimItem[];
+}
+
 export const MemoryPage: React.FC = () => {
   const { navigate } = useNavigation();
-  const [records, setRecords] = useState<RecordField[]>([]);
-  const [documents, setDocuments] = useState<DocumentItem[]>([]);
+  const [records, setRecords] = useState<RecordField[]>(() => {
+    try {
+      const cached = localStorage.getItem('syndeo_vault_records');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return [];
+  });
+  const [documents, setDocuments] = useState<DocumentItem[]>(() => {
+    try {
+      const cached = localStorage.getItem('syndeo_vault_documents');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return [];
+  });
   const [localDocuments, setLocalDocuments] = useState<LocalDocument[]>([]);
   const [ocrRecords, setOcrRecords] = useState<OCRRecordField[]>([]);
   const localFileUrls = useRef<string[]>([]);
@@ -54,6 +106,29 @@ export const MemoryPage: React.FC = () => {
   const [isOcrViewerOpen, setIsOcrViewerOpen] = useState(false);
   const [isLoadingVault, setIsLoadingVault] = useState<boolean>(true);
 
+  // Hugging Face Extraction Proposal Review State
+  const [currentProposal, setCurrentProposal] = useState<DocumentProposalState | null>(null);
+  const [isProposalModalOpen, setIsProposalModalOpen] = useState<boolean>(false);
+  const [isProcessingHf, setIsProcessingHf] = useState<boolean>(false);
+  const [isSavingConfirmedClaims, setIsSavingConfirmedClaims] = useState<boolean>(false);
+
+  // Sync state changes with localStorage
+  useEffect(() => {
+    if (records && records.length > 0) {
+      try {
+        localStorage.setItem('syndeo_vault_records', JSON.stringify(records));
+      } catch {}
+    }
+  }, [records]);
+
+  useEffect(() => {
+    if (documents && documents.length > 0) {
+      try {
+        localStorage.setItem('syndeo_vault_documents', JSON.stringify(documents));
+      } catch {}
+    }
+  }, [documents]);
+
   // Sync with live Neo4j backend graph store
   useEffect(() => {
     let active = true;
@@ -63,13 +138,13 @@ export const MemoryPage: React.FC = () => {
         setIsLoadingVault(true);
         // 1. Fetch live claims from Neo4j Aura
         const backendRecs = await fetchRecordsFromBackend();
-        if (active && backendRecs && Array.isArray(backendRecs)) {
+        if (active && backendRecs && Array.isArray(backendRecs) && backendRecs.length > 0) {
           setRecords(backendRecs);
         }
 
         // 2. Fetch live documents
         const backendDocs = await fetchDocumentsFromBackend();
-        if (active && backendDocs && Array.isArray(backendDocs)) {
+        if (active && backendDocs && Array.isArray(backendDocs) && backendDocs.length > 0) {
           setDocuments(backendDocs);
         }
       } finally {
@@ -92,12 +167,20 @@ export const MemoryPage: React.FC = () => {
     setDocuments([]);
     setLocalDocuments([]);
     setOcrRecords([]);
+    try {
+      localStorage.removeItem('syndeo_vault_records');
+      localStorage.removeItem('syndeo_vault_documents');
+    } catch {}
     await clearMemoryStore();
   };
 
   const handleLoadDemoVault = () => {
     setRecords(initialRecords);
     setDocuments(initialDocuments);
+    try {
+      localStorage.setItem('syndeo_vault_records', JSON.stringify(initialRecords));
+      localStorage.setItem('syndeo_vault_documents', JSON.stringify(initialDocuments));
+    } catch {}
   };
 
 
@@ -109,8 +192,6 @@ export const MemoryPage: React.FC = () => {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [ocrResult, setOcrResult] = useState<OCRDocumentResult | null>(null);
   const [isOcrRunning, setIsOcrRunning] = useState(false);
-  const [ocrProgress, setOcrProgress] = useState(0);
-  const [ocrProgressStatus, setOcrProgressStatus] = useState('');
 
   // Add Info Form state
   const [newCategory, setNewCategory] = useState<LifeStageCategory>('identity');
@@ -168,18 +249,22 @@ export const MemoryPage: React.FC = () => {
       confidence: newSourceType === 'Extracted from document' ? 'evidence-backed' : 'user-confirmed',
     };
 
-    setRecords([newRecord, ...records]);
+    setRecords((prev) => [newRecord, ...prev.filter((p) => p.fieldName.trim().toLowerCase() !== newFieldName.trim().toLowerCase() || p.category !== newCategory)]);
     setIsAddInfoOpen(false);
     setNewFieldName('');
     setNewValue('');
 
     // Persist to backend graph store
-    await addClaimToBackend({
+    const res = await addClaimToBackend({
       category: newCategory,
       fieldName: newFieldName,
       value: newValue,
       source: newSourceType,
     });
+
+    if (res && res.record) {
+      setRecords((prev) => [res.record, ...prev.filter((p) => p.id !== res.record.id && (p.fieldName.trim().toLowerCase() !== res.record.fieldName.trim().toLowerCase() || p.category !== res.record.category))]);
+    }
   };
 
   const visibleDocuments = [...localDocuments, ...documents];
@@ -324,8 +409,8 @@ export const MemoryPage: React.FC = () => {
       {/* VIEW 1: OBSIDIAN GRAPH VIEW */}
       {viewMode === 'graph' && (
         <ObsidianGraphView
-          records={records}
-          documents={documents}
+          records={allRecords}
+          documents={visibleDocuments}
           selectedCategory={selectedCategory}
           onSelectCategory={setSelectedCategory}
           onOpenAddModal={() => setIsAddInfoOpen(true)}
@@ -766,8 +851,6 @@ export const MemoryPage: React.FC = () => {
                   setSelectedFile(file);
                   setUploadError(null);
                   setOcrResult(null);
-                  setOcrProgress(0);
-                  setOcrProgressStatus('');
                 }}
                 className="block w-full text-xs text-zinc-600 file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-100 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-zinc-700 hover:file:bg-zinc-200 dark:text-zinc-300 dark:file:bg-[#23222c] dark:file:text-zinc-200"
               />
@@ -804,8 +887,8 @@ export const MemoryPage: React.FC = () => {
                 {categories.map((category) => <option key={category.id} value={category.id}>{category.label}</option>)}
               </select>
             </label>
-            {(!ocrResult || ocrResult.status === 'failed') && !isOcrRunning && (
-              <div className="flex justify-end gap-2">
+            {(!ocrResult || ocrResult.status === 'failed') && !isOcrRunning && !isProcessingHf && (
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2 pt-2">
                 <button
                   type="button"
                   onClick={() => {
@@ -813,7 +896,7 @@ export const MemoryPage: React.FC = () => {
                     setUploadError(null);
                     setSelectedFile(null);
                   }}
-                  className="px-3 py-1.5 rounded-full bg-zinc-100 dark:bg-[#14141e] text-xs cursor-pointer"
+                  className="px-3.5 py-2 rounded-full bg-zinc-100 dark:bg-[#14141e] text-xs font-medium cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -824,166 +907,307 @@ export const MemoryPage: React.FC = () => {
                       setUploadError('Choose a file first.');
                       return;
                     }
-                    setIsOcrRunning(true);
+                    setIsProcessingHf(true);
                     setUploadError(null);
-                    setOcrProgress(0);
-                    setOcrProgressStatus('Starting text extraction');
-                    setOcrResult(null);
                     try {
-                      const result = await runLocalOcr(selectedFile, (progress, status) => {
-                        setOcrProgress(Math.round(progress * 100));
-                        setOcrProgressStatus(status);
-                      });
-                      setOcrResult({
-                        documentId: `local-${crypto.randomUUID()}`,
-                        fileName: selectedFile.name,
-                        fileType: selectedFile.type || selectedFile.name.split('.').pop() || 'file',
-                        fileSize: selectedFile.size,
-                        uploadedAt: new Date().toISOString(),
-                        status: 'completed',
-                        pages: result.pages,
-                        fullText: result.fullText,
-                        extractionMethod: result.extractionMethod,
-                        processingTimeMs: result.processingTimeMs,
-                      });
-                    } catch (error) {
-                      setUploadError(error instanceof Error ? error.message : 'OCR failed');
-                      setOcrResult({
-                        documentId: `local-${crypto.randomUUID()}`,
-                        fileName: selectedFile.name,
-                        fileType: selectedFile.type || selectedFile.name.split('.').pop() || 'file',
-                        fileSize: selectedFile.size,
-                        uploadedAt: new Date().toISOString(),
-                        status: 'failed',
-                        pages: [],
-                        fullText: '',
-                        error: error instanceof Error ? error.message : 'OCR failed',
-                      });
+                      let localOcrText = '';
+                      try {
+                        const ocrTimeout = new Promise<null>((r) => setTimeout(() => r(null), 4000));
+                        const ocrRes = await Promise.race([runLocalOcr(selectedFile), ocrTimeout]);
+                        if (ocrRes && ocrRes.fullText) {
+                          localOcrText = ocrRes.fullText;
+                        }
+                      } catch (oErr) {
+                        console.debug('Local OCR skipped:', oErr);
+                      }
+
+                      const backendRes = await uploadDocumentToBackend(selectedFile, uploadCategory, localOcrText);
+                      if (backendRes && backendRes.proposal) {
+                        const rawClaims = backendRes.proposal.claims || [];
+                        const formattedClaims: ProposedClaimItem[] = rawClaims.map((c: any) => ({
+                          field: c.canonical_field_name || c.field,
+                          value: c.value,
+                          originalValue: c.value,
+                          confidence: typeof c.confidence === 'number' ? c.confidence : 0.95,
+                          category: c.category || uploadCategory,
+                          sourceRegion: c.source_region || { page: 1 },
+                          extractionMethod: c.extraction_method || `Hugging Face (${backendRes.model || 'Qwen/Qwen2.5-Coder-32B-Instruct'})`,
+                          status: c.status || 'PROPOSED',
+                          assuranceLevel: c.assurance_level || 'LEVEL_2_EVIDENCE_ATTACHED',
+                          conflictInfo: c.conflict_info,
+                          isSingular: c.is_singular,
+                          isSensitive: c.is_sensitive,
+                          rawNumericValue: c.raw_numeric_value,
+                          accepted: true,
+                        }));
+
+                        setCurrentProposal({
+                          documentId: backendRes.proposal.document_id,
+                          fileName: backendRes.proposal.file_name,
+                          fileSize: backendRes.proposal.file_size,
+                          sha256Hash: backendRes.proposal.sha256_hash,
+                          documentType: backendRes.proposal.document_type,
+                          provider: backendRes.proposal.provider || 'huggingface',
+                          model: backendRes.proposal.model || 'Qwen/Qwen2.5-Coder-32B-Instruct',
+                          status: backendRes.proposal.status || 'NEEDS_REVIEW',
+                          claims: formattedClaims,
+                        });
+
+                        // Add document to list
+                        if (backendRes.document) {
+                          setDocuments((prev) => [backendRes.document, ...prev.filter((d) => d.id !== backendRes.document.id)]);
+                        }
+
+                        setIsUploadDocOpen(false);
+                        setIsProposalModalOpen(true);
+                      } else {
+                        throw new Error('No extraction proposals returned from backend.');
+                      }
+                    } catch (err: any) {
+                      setUploadError(err.message || 'Hugging Face extraction failed.');
                     } finally {
-                      setIsOcrRunning(false);
+                      setIsProcessingHf(false);
                     }
                   }}
-                  disabled={!selectedFile}
-                  className="px-4 py-1.5 rounded-full bg-[#5a25eb] text-white text-xs font-medium cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 inline-flex items-center gap-1"
+                  disabled={!selectedFile || isProcessingHf}
+                  className="px-4 py-2 rounded-full bg-[#5a25eb] hover:bg-[#6b37fa] text-white text-xs font-semibold cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 inline-flex items-center justify-center gap-1.5 shadow-xs"
                 >
-                  <FileType className="w-3.5 h-3.5" />
-                  <span>Extract Text</span>
+                  <Cpu className="w-3.5 h-3.5" />
+                  <span>Extract with Hugging Face AI</span>
                 </button>
               </div>
             )}
-            {isOcrRunning && (
-              <div className="space-y-2 py-3">
+            {isProcessingHf && (
+              <div className="space-y-3 py-4 text-center">
                 <div className="flex items-center justify-center gap-2">
-                  <Loader2 className="w-4 h-4 animate-spin text-[#5a25eb]" />
-                  <span className="text-[11px] text-zinc-600 dark:text-zinc-300">{ocrProgressStatus} · {ocrProgress}%</span>
-                </div>
-                <div className="h-1.5 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-700">
-                  <div className="h-full rounded-full bg-[#5a25eb] transition-all" style={{ width: `${ocrProgress}%` }} />
-                </div>
-              </div>
-            )}
-            {ocrResult && (
-              <div className="space-y-2 rounded-xl border border-zinc-200 dark:border-[#222230] bg-zinc-50 dark:bg-[#0c0c12] p-3 text-left">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-semibold text-zinc-700 dark:text-zinc-200">OCR Result</span>
-                  <span className={`px-1.5 py-0.2 rounded text-[9px] font-mono border ${
-                    ocrResult.status === 'completed'
-                      ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
-                      : 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20'
-                  }`}>
-                    {ocrResult.status === 'completed' ? 'Completed' : 'Failed'}
+                  <Loader2 className="w-5 h-5 animate-spin text-[#5a25eb]" />
+                  <span className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">
+                    Running Hugging Face Document Intelligence...
                   </span>
                 </div>
-                {ocrResult.status === 'completed' && (
-                  <>
-                    <p className="text-[10px] text-zinc-500">
-                      Pages: {ocrResult.pages.length} · {ocrResult.extractionMethod === 'document-text' ? 'Word text extraction' : 'OCR'} · {ocrResult.processingTimeMs} ms
-                    </p>
-                    <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-white dark:bg-[#18171f] p-2 text-[10px] text-zinc-800 dark:text-zinc-200 border border-zinc-200 dark:border-[#2d2b38]">
-                      {ocrResult.fullText}
-                    </pre>
-                    <details className="text-[10px] text-zinc-600 dark:text-zinc-300">
-                      <summary className="cursor-pointer text-[#5a25eb]">View JSON</summary>
-                      <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-white dark:bg-[#18171f] p-2 text-[10px] text-zinc-800 dark:text-zinc-200 border border-zinc-200 dark:border-[#2d2b38]">
-                        {JSON.stringify(ocrResult, null, 2)}
-                      </pre>
-                    </details>
-                  </>
-                )}
-                {ocrResult.status === 'failed' && (
-                  <p className="text-[10px] text-red-600 dark:text-red-400">{ocrResult.error || 'Unknown error'}</p>
-                )}
-                <div className="flex justify-end gap-2 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setOcrResult(null);
-                      setSelectedFile(null);
-                    }}
-                    className="px-3 py-1.5 rounded-full bg-zinc-100 dark:bg-[#14141e] text-xs cursor-pointer"
-                  >
-                    Clear
-                  </button>
-                  {ocrResult.status === 'completed' && selectedFile && (
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        if (!selectedFile || ocrResult.status !== 'completed') return;
-                        const fileUrl = URL.createObjectURL(selectedFile);
-                        localFileUrls.current.push(fileUrl);
-                        const newRecords: OCRRecordField[] = ocrResult.pages.map((page) => ({
-                          id: `ocr-${ocrResult.documentId}-page-${page.pageNumber}`,
-                          category: uploadCategory,
-                          fieldName: `OCR Text - Page ${page.pageNumber}`,
-                          value: page.text,
-                          source: 'Extracted from document',
-                          evidenceDocName: selectedFile.name,
-                          lastUpdated: 'Just now',
-                          confidence: 'evidence-backed',
-                          ocrDocument: ocrResult,
-                        }));
-                        setOcrRecords((previous) => [...newRecords, ...previous]);
-                        setLocalDocuments((previous) => [{
-                          id: ocrResult.documentId,
-                          name: selectedFile.name,
-                          category: uploadCategory,
-                          fileType: ocrResult.fileType.split('/').pop()?.toUpperCase() || 'FILE',
-                          fileSize: selectedFile.size < 1024 * 1024
-                            ? `${(selectedFile.size / 1024).toFixed(0)} KB`
-                            : `${(selectedFile.size / (1024 * 1024)).toFixed(1)} MB`,
-                          uploadDate: new Date().toLocaleDateString(),
-                          extractedFieldsCount: ocrResult.pages.length,
-                          status: 'Stored locally',
-                          fileUrl,
-                          ocrResult,
-                        }, ...previous]);
-
-                        // Sync with backend Document Agent & Neo4j Aura
-                        void (async () => {
-                          const backendRes = await uploadDocumentToBackend(selectedFile, uploadCategory);
-                          if (backendRes && backendRes.extractedFields) {
-                            setRecords((prev) => [...backendRes.extractedFields, ...prev]);
-                          }
-                          if (backendRes && backendRes.document) {
-                            setDocuments((prev) => [backendRes.document, ...prev]);
-                          }
-                        })();
-
-                        setIsUploadDocOpen(false);
-                        setUploadError(null);
-                        setSelectedFile(null);
-                        setOcrResult(null);
-                      }}
-                      className="px-4 py-1.5 rounded-full bg-[#5a25eb] text-white text-xs font-medium cursor-pointer"
-                    >
-                      Save to Memory
-                    </button>
-                  )}
-                </div>
+                <p className="text-[11px] text-zinc-500 max-w-xs mx-auto">
+                  Extracting structured claims using Hugging Face Qwen 2.5 Coder 32B model with SHA-256 evidence hashing.
+                </p>
               </div>
             )}
           </div>
         </div>
+      </Modal>
+
+      {/* Hugging Face Proposal Review & User Confirmation Modal */}
+      <Modal
+        isOpen={isProposalModalOpen && !!currentProposal}
+        onClose={() => {
+          if (isSavingConfirmedClaims) return;
+          setIsProposalModalOpen(false);
+          setCurrentProposal(null);
+        }}
+        title="Document Intelligence: Review Proposed Claims"
+        subtitle="AI proposes → You review & approve → SYNDEO writes to secure memory."
+        maxWidth="max-w-2xl"
+      >
+        {currentProposal && (
+          <div className="space-y-4 text-xs">
+            {/* Header info badge */}
+            <div className="p-3 rounded-2xl bg-zinc-50 dark:bg-[#0e0e14] border border-zinc-200 dark:border-[#222230] space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-[#5a25eb]" />
+                  <span className="font-bold text-zinc-900 dark:text-white text-xs">{currentProposal.fileName}</span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300">
+                    {currentProposal.documentType.replace('_', ' ').toUpperCase()}
+                  </span>
+                </div>
+                <span className="text-[10px] font-mono text-zinc-400">
+                  {currentProposal.fileSize}
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 text-[10px] text-zinc-500 dark:text-zinc-400 font-mono">
+                <span>Model: <strong className="text-zinc-800 dark:text-zinc-200">{currentProposal.model}</strong></span>
+                <span>•</span>
+                <span>Provider: <strong className="text-zinc-800 dark:text-zinc-200">{currentProposal.provider}</strong></span>
+              </div>
+              <div className="text-[9px] font-mono text-zinc-400 break-all bg-white dark:bg-[#14141e] p-1.5 rounded border border-zinc-200 dark:border-[#222230]">
+                SHA-256: {currentProposal.sha256Hash}
+              </div>
+            </div>
+
+            {/* Claims Table / List */}
+            <div className="space-y-2.5 max-h-96 overflow-y-auto pr-1">
+              <div className="flex items-center justify-between px-1 text-[11px] font-semibold text-zinc-600 dark:text-zinc-300">
+                <span>Proposed Claims ({currentProposal.claims.length})</span>
+                <span className="text-[10px] font-normal text-zinc-400">Uncheck or edit any field before confirming</span>
+              </div>
+
+              {currentProposal.claims.map((claim, idx) => (
+                <div
+                  key={idx}
+                  className={`p-3 rounded-2xl border transition-all space-y-2 ${
+                    claim.accepted
+                      ? claim.status === 'CONFLICT'
+                        ? 'border-amber-400/60 bg-amber-50/50 dark:bg-amber-950/10'
+                        : 'border-[#5a25eb]/30 bg-white dark:bg-[#07070a]'
+                      : 'border-zinc-200 dark:border-[#1c1c28] opacity-50 bg-zinc-50 dark:bg-[#12121c]'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <label className="flex items-center gap-2 cursor-pointer min-w-0">
+                      <input
+                        type="checkbox"
+                        checked={claim.accepted}
+                        onChange={(e) => {
+                          const updated = [...currentProposal.claims];
+                          updated[idx].accepted = e.target.checked;
+                          setCurrentProposal({ ...currentProposal, claims: updated });
+                        }}
+                        className="rounded border-zinc-300 text-[#5a25eb] focus:ring-[#5a25eb] cursor-pointer"
+                      />
+                      <span className="text-xs font-bold text-zinc-800 dark:text-zinc-100 truncate">
+                        {claim.field}
+                      </span>
+                    </label>
+
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {claim.status === 'CONFLICT' ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+                          <AlertTriangle className="w-3 h-3" /> Conflict
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+                          Proposed
+                        </span>
+                      )}
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                        {Math.round(claim.confidence * 100)}% conf
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Conflict Notice if any */}
+                  {claim.conflictInfo && (
+                    <div className="p-2 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/40 text-[11px] text-amber-800 dark:text-amber-300 space-y-1">
+                      <p className="font-semibold flex items-center gap-1">
+                        <AlertTriangle className="w-3.5 h-3.5" /> Singular Fact Discrepancy:
+                      </p>
+                      <p>Current Active: <strong>{claim.conflictInfo.existingValue}</strong></p>
+                      <p>Extracted from New Doc: <strong>{claim.conflictInfo.conflictingValue}</strong></p>
+                    </div>
+                  )}
+
+                  {/* Value input (editable) */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between text-[10px] text-zinc-400">
+                      <span>Value (editable)</span>
+                      <span>Assurance: <strong className="text-zinc-600 dark:text-zinc-300">EVIDENCE_ATTACHED</strong></span>
+                    </div>
+                    <input
+                      type="text"
+                      value={claim.value}
+                      disabled={!claim.accepted}
+                      onChange={(e) => {
+                        const updated = [...currentProposal.claims];
+                        updated[idx].value = e.target.value;
+                        setCurrentProposal({ ...currentProposal, claims: updated });
+                      }}
+                      className="w-full px-3 py-1.5 rounded-xl bg-zinc-50 dark:bg-[#12121a] border border-zinc-200 dark:border-[#222230] text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-[#5a25eb]"
+                    />
+                  </div>
+
+                  {/* Provenance Footer */}
+                  <div className="pt-1.5 border-t border-zinc-100 dark:border-[#181824] flex flex-wrap items-center justify-between text-[10px] text-zinc-400">
+                    <span className="capitalize">{claim.category} • Page {claim.sourceRegion?.page || 1}</span>
+                    <span className="italic">Extraction confidence signal only • Needs your approval</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex items-center justify-between pt-3 border-t border-zinc-200 dark:border-[#222230]">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsProposalModalOpen(false);
+                  setCurrentProposal(null);
+                }}
+                disabled={isSavingConfirmedClaims}
+                className="px-3.5 py-1.5 rounded-full bg-zinc-100 dark:bg-[#14141e] text-xs font-medium cursor-pointer"
+              >
+                Reject & Close
+              </button>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!currentProposal) return;
+                  const acceptedItems = currentProposal.claims.filter((c) => c.accepted);
+                  const rejectedFields = currentProposal.claims.filter((c) => !c.accepted).map((c) => c.field);
+
+                  if (acceptedItems.length === 0) {
+                    alert('Please select at least one claim to confirm.');
+                    return;
+                  }
+
+                  setIsSavingConfirmedClaims(true);
+                  try {
+                    const res = await confirmDocumentClaims(
+                      currentProposal.documentId,
+                      acceptedItems.map((c) => ({
+                        field: c.field,
+                        value: c.value,
+                        category: c.category,
+                        is_singular: c.isSingular,
+                        is_sensitive: c.isSensitive,
+                        raw_numeric_value: c.rawNumericValue,
+                      })),
+                      rejectedFields
+                    );
+
+                    if (res && res.records) {
+                      setRecords((prev) => {
+                        const newRecIds = new Set(res.records.map((r: any) => r.id));
+                        const newFieldKeys = new Set(res.records.map((r: any) => `${r.category}:${r.fieldName.trim().toLowerCase()}`));
+                        const filteredOld = prev.filter((p) => !newRecIds.has(p.id) && !newFieldKeys.has(`${p.category}:${p.fieldName.trim().toLowerCase()}`));
+                        return [...res.records, ...filteredOld];
+                      });
+                    }
+
+                    if (res && res.document) {
+                      setDocuments((prev) => [res.document, ...prev.filter((d) => d.id !== res.document.id)]);
+                    } else {
+                      const refreshedDocs = await fetchDocumentsFromBackend();
+                      if (refreshedDocs && Array.isArray(refreshedDocs)) {
+                        setDocuments(refreshedDocs);
+                      }
+                    }
+
+                    setIsProposalModalOpen(false);
+                    setCurrentProposal(null);
+                    alert(`Successfully confirmed and activated ${res.confirmedCount || acceptedItems.length} claims with document evidence into memory!`);
+                  } catch (err: any) {
+                    alert(`Failed to save confirmed claims: ${err.message}`);
+                  } finally {
+                    setIsSavingConfirmedClaims(false);
+                  }
+                }}
+                disabled={isSavingConfirmedClaims || !currentProposal.claims.some((c) => c.accepted)}
+                className="px-4 py-1.5 rounded-full bg-[#5a25eb] hover:bg-[#6b37fa] text-white text-xs font-semibold cursor-pointer disabled:opacity-50 inline-flex items-center gap-1.5 shadow-sm"
+              >
+                {isSavingConfirmedClaims ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Committing to Memory...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Confirm & Commit to Memory ({currentProposal.claims.filter((c) => c.accepted).length})</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        )}
       </Modal>
 
       {/* Cryptographic Provenance & Evidence Modal */}

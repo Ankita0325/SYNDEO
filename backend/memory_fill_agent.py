@@ -222,7 +222,7 @@ class MemoryFillAgent:
             c = self._find_claim(["graduation year", "batch"], active_claims)
             if c:
                 return c, c.field_value, 0.97, "Matched Graduation Year", None
-            return None, "2024", 0.90, "Matched standard graduation year", None
+            return None, None, 0.0, "Graduation year not found in vault", None
 
         # 16. Current Company / Employer
         if any(k in combined_norm for k in ["current company", "company name", "organization", "employer", "workplace", "current employer", "firm"]):
@@ -248,6 +248,7 @@ class MemoryFillAgent:
             addr_claim = self._find_claim(["residential address", "address"], active_claims)
             if addr_claim and "mumbai" in addr_claim.field_value.lower():
                 return addr_claim, "Mumbai", 0.95, "Derived City from Address", None
+            return None, None, 0.0, "City not found in vault", None
 
         # 19. State
         if any(k in combined_norm for k in ["state", "province", "region"]):
@@ -257,20 +258,21 @@ class MemoryFillAgent:
             addr_claim = self._find_claim(["residential address", "address"], active_claims)
             if addr_claim and "maharashtra" in addr_claim.field_value.lower():
                 return addr_claim, "Maharashtra", 0.95, "Derived State from Address", None
+            return None, None, 0.0, "State not found in vault", None
 
         # 20. Country
         if any(k in combined_norm for k in ["country", "nationality", "nation"]):
             c = self._find_claim(["country", "nationality"], active_claims)
             if c:
                 return c, c.field_value, 0.97, "Matched Country", None
-            return None, "India", 0.95, "Default Country from Verified Vault", None
+            return None, None, 0.0, "Country not found in vault", None
 
         # 21. PIN Code / Postal Code / Zip
         if any(k in combined_norm for k in ["zip", "zipcode", "postal code", "pin code", "pincode", "postcode"]):
             c = self._find_claim(["pin code", "postal code", "zip code"], active_claims)
             if c:
                 return c, c.field_value, 0.96, "Matched PIN / Postal Code", None
-            return None, "400068", 0.90, "Default PIN Code from Verified Vault", None
+            return None, None, 0.0, "PIN code not found in vault", None
 
         # 22. Residential Address
         if any(k in combined_norm for k in ["residential address", "home address", "permanent address", "street address", "address line 1", "address line", "address"]):
@@ -284,12 +286,48 @@ class MemoryFillAgent:
             if c:
                 return c, c.field_value, 0.97, "Matched Date of Birth", None
 
-        # 24. General Date / Start / End Date Fields
-        if input_type in ["date", "month", "datetime-local"] or any(k in combined_norm for k in ["date", "passing date", "issue date", "effective date"]):
+        # 24. Explicit Graduation Date Field
+        if any(k in combined_norm for k in ["graduation date", "passing date", "passout date"]):
             grad_claim = self._find_claim(["graduation year", "batch"], active_claims)
             if grad_claim:
                 formatted = self._parse_date_to_iso(grad_claim.field_value, input_type)
-                return grad_claim, formatted, 0.90, "Matched Date Claim", None
+                return grad_claim, formatted, 0.90, "Matched Graduation Date Claim", None
+
+        # 25. Skills / Tech Stack
+        if any(k in combined_norm for k in ["skills", "skill", "technologies", "tech stack", "key skills"]):
+            c = self._find_claim(["skills", "technologies", "key skills", "tech stack"], active_claims)
+            if c:
+                return c, c.field_value, 0.95, "Matched Skills", None
+
+        # 26. Work Experience / Years of Experience
+        if any(k in combined_norm for k in ["experience", "years of experience", "total experience", "work experience"]):
+            c = self._find_claim(["experience", "years of experience", "total experience"], active_claims)
+            if c:
+                return c, c.field_value, 0.95, "Matched Work Experience", None
+
+        # 27. Gender
+        if any(k in combined_norm for k in ["gender", "sex"]):
+            c = self._find_claim(["gender", "sex"], active_claims)
+            if c:
+                return c, c.field_value, 0.97, "Matched Gender", None
+
+        # 28. General Fallback: Token overlap with any active user claim
+        best_claim = None
+        best_score = 0.0
+        for claim in active_claims:
+            c_name_norm = self._normalize_text(claim.field_name)
+            c_tokens = set(c_name_norm.split())
+            if not c_tokens:
+                continue
+            common = c_tokens.intersection(set(tokens))
+            if common:
+                score = len(common) / len(c_tokens)
+                if score > best_score and score >= 0.5:
+                    best_score = score
+                    best_claim = claim
+
+        if best_claim and best_score >= 0.5:
+            return best_claim, best_claim.field_value, round(0.85 + (best_score * 0.1), 2), f"Matched claim {best_claim.field_name}", None
 
         return None, None, 0.0, "No confident match in personal graph", None
 

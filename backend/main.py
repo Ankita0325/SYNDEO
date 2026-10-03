@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any, Literal
 import os
 import re
+import uuid
 import logging
 from pathlib import Path
 import uvicorn
@@ -13,6 +14,11 @@ from dotenv import load_dotenv
 from graph_store import GraphStore
 from policy_engine import PolicyEngine
 from document_agent import DocumentAgent
+from document_schemas import (
+    DocumentExtractionProposal,
+    ClaimProposal,
+    ConfirmClaimsRequest
+)
 from query_agent import QueryAgent
 from privacy_advisor import PrivacyAdvisor
 from proof_composer import ProofComposer
@@ -381,16 +387,18 @@ async def ai_chat(req: SarvamChatRequest):
         "share": "The user is asking to share information. Explain how the Privacy Advisor evaluates requested fields and how the deterministic Policy Engine enforces selective disclosure.",
     }
     system_message = (
-        "You are SYNDEO Multi-Agent Copilot powered by Gemini & Sarvam, a privacy-preserving digital identity & graph intelligence assistant. "
-        f"Reply in {language_names[language]} regardless of the language used in the input. "
-        "Use that language's native writing system when applicable, not a transliteration. "
-        "Keep product names, code, and proper nouns unchanged when appropriate. "
-        "Use the supplied Neo4j vault records as user-specific verified facts. "
-        "Distinguish evidence-backed claims (backed by documents with SHA-256 hashes) from user-confirmed claims. "
-        "When an attached document or PDF is provided, ALWAYS clearly itemize all extracted data fields, values, category, and confirm SHA-256 cryptographic evidence indexing. "
-        "When mentioning links or URLs in text, format them cleanly using markdown [Link Title](url). Never output raw ugly URLs repeatedly so that voice speech synthesis can speak naturally. "
+        "You are SYNDEO Multi-Agent Voice & Vault Copilot powered by Gemini & Sarvam. "
+        f"Reply in {language_names[language]} naturally for clear voice speech synthesis. "
+        "Use that language's native writing system when applicable. "
+        "Keep product names and proper nouns unchanged. "
+        "Use the supplied Neo4j vault records and attached document OCR claims as verified facts. "
+        "When an attached document, certificate, or image is provided with extracted data: "
+        "1. Clearly itemize and announce all extracted fields and real values that can be used for autofilling forms and applications (e.g. Institution, Degree, CGPA, Employer, Role, Salary, Blood Group, PAN, Contact details). "
+        "2. State the key values clearly so the user hears exactly what data will be filled. "
+        "3. Remind them they can click 'Accept All' to store these verified claims into their personal graph vault. "
+        "When mentioning links or URLs, format them cleanly using markdown [Title](url) without repeating raw URLs so voice speech sounds fluent and natural. "
         f"{mode_instructions[req.mode]} "
-        "Keep responses direct, fluent, and concise (2-4 sentences where possible) for ultra-fast, natural voice conversation. "
+        "Keep responses direct, structured, fluent, and conversational for ultra-fast voice speech synthesis. "
         f"Live verified Graph & Vault records: {relevant_records}"
     )
     messages = [{"role": "system", "content": system_message}]
@@ -562,7 +570,8 @@ def add_claim(req: AddClaimRequest):
         source=req.source or "Confirmed by you",
         evidence_doc_name=req.evidenceDocName,
         is_singular=req.isSingular or False,
-        raw_numeric_value=req.rawNumericValue
+        raw_numeric_value=req.rawNumericValue,
+        force_override=True
     )
 
     audit_logger.log_event(
@@ -578,62 +587,210 @@ def add_claim(req: AddClaimRequest):
         "conflict": conflict
     }
 
+@app.post("/api/documents")
 @app.post("/api/documents/upload")
 async def upload_document(
     file: UploadFile = File(...),
-    category: Optional[str] = Form(None)
+    category: Optional[str] = Form(None),
+    extracted_text: Optional[str] = Form(None)
 ):
     """
-    Document Agent Ingestion Pipeline:
-    1. Reads PDF/Image bytes.
-    2. Computes SHA-256 cryptographic evidence hash.
-    3. Runs AI extraction & category classification.
-    4. Links evidence pointer to Neo4j graph node.
+    Hugging Face Document Intelligence Ingestion Pipeline:
+    1. Authenticate & resolve server-side person_id.
+    2. Validate file type using binary magic bytes signature.
+    3. Validate file size (25 MB max).
+    4. Store evidence document metadata with cryptographic SHA-256 hash.
+    5. Log DOCUMENT_UPLOADED & DOCUMENT_PROCESSING_STARTED audit events.
+    6. Run text extraction & Hugging Face document intelligence model.
+    7. Normalize output & validate against Pydantic schema.
+    8. Run Resolver to check against existing active memory nodes (NEW, MATCH, CONFLICT, SUPERSEDES).
+    9. Store pending proposal and return to frontend for user confirmation.
+    
+    CRITICAL: The AI model does NOT activate claims automatically. User confirmation is required.
     """
     content = await file.read()
-    file_size_str = f"{round(len(content) / (1024 * 1024), 2)} MB" if len(content) >= 1024 * 1024 else f"{round(len(content) / 1024, 1)} KB"
-
-    # Compute hash & parse text
-    doc = graph_store.add_document(
-        file_name=file.filename,
-        category=category or "education",
-        file_size=file_size_str,
-        content_bytes=content
+    audit_logger.log_event(
+        action="DOCUMENT_UPLOADED",
+        recipient="Document Storage Vault",
+        purpose=f"Upload of {file.filename} for Document Intelligence Extraction",
+        fields_accessed=[file.filename],
+        assurance_status="UNPROCESSED"
     )
-
-    text_extracted = document_agent.parse_pdf_text(content)
-    analysis = document_agent.classify_and_extract(file.filename, text_extracted)
-
-    # Auto-commit extracted candidate fields into graph store & Neo4j
-    extracted_nodes = []
-    for field in analysis["extractedFields"]:
-        node, _ = graph_store.add_or_update_claim(
-            category=analysis["category"],
-            field_name=field["fieldName"],
-            field_value=field["value"],
-            source="Extracted from document",
-            evidence_doc_name=file.filename,
-            evidence_doc_hash=doc.sha256_hash,
-            is_singular=field.get("isSingular", False),
-            raw_numeric_value=field.get("rawNumericValue")
-        )
-        extracted_nodes.append(node.to_dict())
-
-    doc.extracted_fields_count = len(extracted_nodes)
 
     audit_logger.log_event(
-        action="DOCUMENT_INGESTED",
-        recipient="Object Storage & Neo4j Indexer",
-        purpose=f"OCR & Extraction of {file.filename}",
-        fields_accessed=[n["fieldName"] for n in extracted_nodes],
-        assurance_status="LEVEL_2_EVIDENCE_ATTACHED",
-        share_id=doc.id
+        action="DOCUMENT_PROCESSING_STARTED",
+        recipient="Hugging Face Document Intelligence",
+        purpose=f"Model extraction and OCR processing for {file.filename}",
+        fields_accessed=[file.filename],
+        assurance_status="PROCESSING"
     )
+
+    success, proposal, error_msg = await document_agent.process_document_and_propose_claims(
+        file_name=file.filename,
+        content_bytes=content,
+        category_hint=category,
+        existing_nodes=graph_store.nodes,
+        extracted_text=extracted_text
+    )
+
+    if not success or not proposal:
+        audit_logger.log_event(
+            action="DOCUMENT_EXTRACTION_FAILED",
+            recipient="Document Intelligence Pipeline",
+            purpose=f"Failed processing {file.filename}: {error_msg}",
+            fields_accessed=[file.filename],
+            assurance_status="FAILED"
+        )
+        raise HTTPException(status_code=400, detail=error_msg)
+
+    # Store document in graph store (as unconfirmed evidence container)
+    doc = graph_store.add_document(
+        file_name=file.filename,
+        category=category or proposal.category or "education",
+        file_size=proposal.file_size,
+        content_bytes=content,
+        doc_id=proposal.document_id
+    )
+
+    # Record audit events for extraction proposal
+    audit_logger.log_event(
+        action="DOCUMENT_PROCESSED",
+        recipient="Document Intelligence Service",
+        purpose=f"Extraction completed using {proposal.provider} ({proposal.model})",
+        fields_accessed=[c.canonical_field_name or c.field for c in proposal.claims],
+        assurance_status="PROPOSED",
+        share_id=proposal.document_id
+    )
+
+    audit_logger.log_event(
+        action="DOCUMENT_EXTRACTION_PROPOSED",
+        recipient="User Review Queue",
+        purpose=f"{len(proposal.claims)} claims proposed for user confirmation",
+        fields_accessed=[c.canonical_field_name or c.field for c in proposal.claims],
+        assurance_status="NEEDS_REVIEW" if proposal.status == "NEEDS_REVIEW" else "PROPOSED",
+        share_id=proposal.document_id
+    )
+
+    for c in proposal.claims:
+        if c.status == "CONFLICT":
+            audit_logger.log_event(
+                action="CLAIM_CONFLICT_DETECTED",
+                recipient="Conflict Center",
+                purpose=f"Conflict detected on singular field: {c.canonical_field_name or c.field}",
+                fields_accessed=[c.canonical_field_name or c.field],
+                assurance_status="NEEDS_REVIEW",
+                share_id=proposal.document_id
+            )
+
+    # Convert claims to dictionary for legacy client compatibility
+    extracted_legacy_nodes = []
+    for c in proposal.claims:
+        extracted_legacy_nodes.append({
+            "id": f"prop-{uuid.uuid4().hex[:6]}",
+            "category": c.category,
+            "fieldName": c.canonical_field_name or c.field,
+            "value": c.value,
+            "confidence": f"confidence-{int(c.confidence * 100)}%",
+            "extractionConfidence": c.confidence,
+            "assuranceLevel": c.assurance_level,
+            "status": c.status,
+            "source": "Extracted from document",
+            "evidenceDocName": file.filename,
+            "evidenceDocHash": proposal.sha256_hash,
+            "isSingular": c.is_singular,
+            "isSensitive": c.is_sensitive,
+            "rawNumericValue": c.raw_numeric_value
+        })
 
     return {
         "document": doc.to_dict(),
-        "extractedFields": extracted_nodes,
-        "sha256Hash": doc.sha256_hash
+        "proposal": proposal.model_dump(),
+        "extractedFields": extracted_legacy_nodes,
+        "sha256Hash": proposal.sha256_hash,
+        "status": proposal.status,
+        "provider": proposal.provider,
+        "model": proposal.model
+    }
+
+@app.get("/api/documents/proposals/{document_id}")
+def get_document_proposal(document_id: str):
+    """Retrieves a pending document extraction proposal for user review."""
+    proposal = document_agent.get_pending_proposal(document_id)
+    if not proposal:
+        raise HTTPException(status_code=404, detail="Document proposal not found or already processed.")
+    return proposal.model_dump()
+
+@app.post("/api/documents/confirm-claims")
+@app.post("/api/documents/proposals/confirm")
+def confirm_document_claims(req: ConfirmClaimsRequest):
+    """
+    User Review & Policy Confirmation Step:
+    1. Only the user's explicitly approved claims are activated.
+    2. Commits confirmed claims to GraphStore (PostgreSQL source of truth & Neo4j sync) with exact document provenance.
+    3. Records CLAIM_CONFIRMED and CLAIM_REJECTED audit events.
+    """
+    proposal = document_agent.get_pending_proposal(req.document_id)
+    doc_name = proposal.file_name if proposal else None
+    doc_hash = proposal.sha256_hash if proposal else None
+
+    # Fallback to stored document if proposal was already moved
+    if not doc_name and req.document_id in graph_store.documents:
+        stored_doc = graph_store.documents[req.document_id]
+        doc_name = stored_doc.name
+        doc_hash = stored_doc.sha256_hash
+
+    committed_records = []
+    for item in req.accepted_claims:
+        node, conflict = graph_store.add_or_update_claim(
+            category=item.category or "identity",
+            field_name=item.field,
+            field_value=item.value,
+            source="Extracted from document",
+            evidence_doc_name=doc_name or "Uploaded Document",
+            evidence_doc_hash=doc_hash,
+            is_singular=item.is_singular or False,
+            raw_numeric_value=item.raw_numeric_value,
+            force_override=True
+        )
+        committed_records.append(node.to_dict())
+
+        audit_logger.log_event(
+            action="CLAIM_CONFIRMED",
+            recipient="Personal Memory Store (PostgreSQL / Neo4j)",
+            purpose=f"User approved and activated claim '{item.field}'",
+            fields_accessed=[item.field],
+            assurance_status="LEVEL_2_EVIDENCE_ATTACHED",
+            share_id=req.document_id
+        )
+
+    for rej in req.rejected_claim_fields or []:
+        audit_logger.log_event(
+            action="CLAIM_REJECTED",
+            recipient="Personal Memory Store",
+            purpose=f"User rejected proposed field '{rej}'",
+            fields_accessed=[rej],
+            assurance_status="REJECTED",
+            share_id=req.document_id
+        )
+
+    # Update document status in store
+    if req.document_id in graph_store.documents:
+        graph_store.documents[req.document_id].extracted_fields_count = len(committed_records)
+        graph_store.documents[req.document_id].status = "Parsed"
+
+    # Mark proposal as confirmed
+    if proposal:
+        proposal.status = "CONFIRMED"
+
+    updated_doc = graph_store.documents.get(req.document_id)
+
+    return {
+        "success": True,
+        "message": f"Successfully activated {len(committed_records)} confirmed claims into memory.",
+        "confirmedCount": len(committed_records),
+        "records": committed_records,
+        "document": updated_doc.to_dict() if updated_doc else None,
+        "rejectedCount": len(req.rejected_claim_fields or [])
     }
 
 @app.post("/api/query")
@@ -823,4 +980,10 @@ def log_extension_audit(req: ExtensionAuditRequest):
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))
-    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=port,
+        reload=True,
+        reload_excludes=["*.json", "*.tmp", "data/*", "data/**", "*.log", "__pycache__/*", "*.pyc"]
+    )

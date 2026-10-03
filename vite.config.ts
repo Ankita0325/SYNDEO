@@ -10,9 +10,19 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react(), tailwindcss()],
     server: {
+      watch: {
+        ignored: [
+          '**/backend/**',
+          '**/data/**',
+          '**/uploads/**',
+          '**/.pytest_cache/**',
+          '**/__pycache__/**',
+          '**/*.tmp',
+        ],
+      },
       proxy: {
         '/api': {
-          target: env.VITE_API_URL || 'https://syndeo-backend-wks3.onrender.com',
+          target: env.VITE_API_URL || 'http://127.0.0.1:8000',
           changeOrigin: true,
           secure: false,
         },
